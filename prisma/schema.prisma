@@ -1,0 +1,115 @@
+// Mini CRM de Prospecção com IA — modelagem do domínio.
+// MVP usa `prisma db push`; migrations versionadas ficam como nota de produção.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  NOVO
+  CONTATADO
+  EM_CONVERSA
+  QUALIFICADO
+  REUNIAO_AGENDADA
+  DESCARTADO
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  COMPLETED
+}
+
+enum MeetingStatus {
+  PROPOSED
+  CONFIRMED
+  CANCELLED
+}
+
+model Lead {
+  id            String         @id @default(cuid())
+  name          String
+  phone         String         @unique // E.164 normalizado
+  status        LeadStatus     @default(NOVO)
+  score         Int            @default(0)
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id])
+  campaignId    String?
+  messages      Message[]
+  qualification Qualification?
+  meeting       Meeting?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([status])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  lead              Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId            String
+  direction         MessageDirection
+  content           String
+  providerMessageId String?          @unique // dedupe de webhook
+  status            MessageStatus?
+  createdAt         DateTime         @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  name            String
+  messageTemplate String // contém {{nome}}
+  status          CampaignStatus @default(DRAFT)
+  leads           Lead[]
+  createdAt       DateTime       @default(now())
+}
+
+model Qualification {
+  // 1:1 com Lead
+  id                   String   @id @default(cuid())
+  lead                 Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId               String   @unique
+  interestLevel        String?
+  painPoint            String?
+  segment              String?
+  isDecisionMaker      Boolean?
+  urgency              String?
+  budget               String?
+  preferredMeetingTime String?
+  score                Int      @default(0) // espelhado em Lead.score (desnormalizado p/ listagem)
+  summary              String?
+  nextAction           String? // "ask_question" | "schedule_meeting" | "discard"
+  raw                  Json // JSON bruto da IA (auditoria)
+  updatedAt            DateTime @updatedAt
+}
+
+model Meeting {
+  // 1:1 com Lead
+  id              String        @id @default(cuid())
+  lead            Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId          String        @unique
+  status          MeetingStatus @default(PROPOSED)
+  proposedSlots   Json // ISO datetimes propostos
+  scheduledAt     DateTime?
+  calendarEventId String?
+  meetingLink     String?
+  createdAt       DateTime      @default(now())
+}
