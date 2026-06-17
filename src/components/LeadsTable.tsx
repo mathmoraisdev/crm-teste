@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Table, Th, Td } from "@/components/ui/Table";
+import { Badge } from "@/components/ui/Badge";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { formatPhone } from "@/lib/phone";
@@ -43,7 +44,10 @@ export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
               </Link>
             </Td>
             <Td>
-              <LeadStatusBadge status={l.status} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <LeadStatusBadge status={l.status} />
+                {l.optOut && <Badge tone="red">Opt-out</Badge>}
+              </div>
             </Td>
             <Td className="text-center">
               <ScoreBadge score={l.score} />

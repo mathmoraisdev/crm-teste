@@ -8,6 +8,7 @@ export interface CampaignListItem {
   status: string;
   leadCount: number;
   pendingCount: number; // leads ainda NOVO (não disparados)
+  jobs: { pending: number; sent: number; failed: number; total: number };
   createdAt: Date;
 }
 
@@ -21,17 +22,29 @@ export async function listCampaigns(): Promise<CampaignListItem[]> {
     orderBy: { createdAt: "desc" },
     include: {
       leads: { select: { status: true } },
+      outboundJobs: { select: { status: true } },
     },
   });
-  return campaigns.map((c) => ({
-    id: c.id,
-    name: c.name,
-    messageTemplate: c.messageTemplate,
-    status: c.status,
-    leadCount: c.leads.length,
-    pendingCount: c.leads.filter((l) => l.status === "NOVO").length,
-    createdAt: c.createdAt,
-  }));
+  return campaigns.map((c) => {
+    const jobs = c.outboundJobs;
+    return {
+      id: c.id,
+      name: c.name,
+      messageTemplate: c.messageTemplate,
+      status: c.status,
+      leadCount: c.leads.length,
+      pendingCount: c.leads.filter((l) => l.status === "NOVO").length,
+      jobs: {
+        pending: jobs.filter(
+          (j) => j.status === "PENDING" || j.status === "SENDING",
+        ).length,
+        sent: jobs.filter((j) => j.status === "SENT").length,
+        failed: jobs.filter((j) => j.status === "FAILED").length,
+        total: jobs.length,
+      },
+      createdAt: c.createdAt,
+    };
+  });
 }
 
 /**

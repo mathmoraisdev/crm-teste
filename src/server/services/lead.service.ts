@@ -9,6 +9,7 @@ export interface LeadListItem {
   phone: string;
   status: LeadStatus;
   score: number;
+  optOut: boolean;
   campaignName: string | null;
   lastMessage: string | null;
   lastMessageAt: Date | null;
@@ -38,6 +39,7 @@ export async function listLeads(): Promise<LeadListItem[]> {
     phone: l.phone,
     status: l.status,
     score: l.score,
+    optOut: l.optOut,
     campaignName: l.campaign?.name ?? null,
     lastMessage: l.messages[0]?.content ?? null,
     lastMessageAt: l.messages[0]?.createdAt ?? null,

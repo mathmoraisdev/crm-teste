@@ -14,12 +14,14 @@ import type { CampaignListItem } from "@/server/services/campaign.service";
 const STATUS_TONE = {
   DRAFT: "slate",
   RUNNING: "amber",
+  PAUSED: "red",
   COMPLETED: "green",
 } as const;
 
 const STATUS_LABEL = {
   DRAFT: "Rascunho",
   RUNNING: "Disparando",
+  PAUSED: "Pausada",
   COMPLETED: "Concluída",
 } as const;
 
@@ -106,39 +108,65 @@ export function CampaignsView() {
                 <Th>Status</Th>
                 <Th className="text-center">Leads</Th>
                 <Th className="text-center">Pendentes</Th>
+                <Th className="text-center">Fila</Th>
                 <Th className="text-right">Ação</Th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <Td>
-                    <span className="font-medium text-slate-800">{c.name}</span>
-                    <span className="block max-w-md truncate text-xs text-slate-400">
-                      {c.messageTemplate}
-                    </span>
-                  </Td>
-                  <Td>
-                    <Badge tone={STATUS_TONE[c.status as keyof typeof STATUS_TONE]}>
-                      {STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ??
-                        c.status}
-                    </Badge>
-                  </Td>
-                  <Td className="text-center tabular-nums">{c.leadCount}</Td>
-                  <Td className="text-center tabular-nums">{c.pendingCount}</Td>
-                  <Td className="text-right">
-                    <Button
-                      size="sm"
-                      onClick={() => start(c.id)}
-                      loading={startingId === c.id}
-                      disabled={c.pendingCount === 0}
-                    >
-                      <Play size={13} />
-                      {c.pendingCount === 0 ? "Disparada" : "Iniciar"}
-                    </Button>
-                  </Td>
-                </tr>
-              ))}
+              {campaigns.map((c) => {
+                const started = c.status === "RUNNING" || c.status === "PAUSED";
+                const canStart = !started && c.pendingCount > 0;
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <Td>
+                      <span className="font-medium text-slate-800">{c.name}</span>
+                      <span className="block max-w-md truncate text-xs text-slate-400">
+                        {c.messageTemplate}
+                      </span>
+                    </Td>
+                    <Td>
+                      <Badge tone={STATUS_TONE[c.status as keyof typeof STATUS_TONE]}>
+                        {STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ??
+                          c.status}
+                      </Badge>
+                    </Td>
+                    <Td className="text-center tabular-nums">{c.leadCount}</Td>
+                    <Td className="text-center tabular-nums">{c.pendingCount}</Td>
+                    <Td className="text-center">
+                      {c.jobs.total === 0 ? (
+                        <span className="text-slate-300">—</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 text-xs tabular-nums">
+                          <span className="text-green-700">
+                            {c.jobs.sent} enviados
+                          </span>
+                          {c.jobs.pending > 0 && (
+                            <span className="text-amber-700">
+                              {c.jobs.pending} na fila
+                            </span>
+                          )}
+                          {c.jobs.failed > 0 && (
+                            <span className="text-red-700">
+                              {c.jobs.failed} falhas
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </Td>
+                    <Td className="text-right">
+                      <Button
+                        size="sm"
+                        onClick={() => start(c.id)}
+                        loading={startingId === c.id}
+                        disabled={!canStart}
+                      >
+                        <Play size={13} />
+                        {canStart ? "Iniciar" : "Disparada"}
+                      </Button>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         </Card>
