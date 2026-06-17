@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import { sendWhatsAppMessage } from "./messaging";
+import { env } from "@/lib/env";
 
 export interface CampaignListItem {
   id: string;
@@ -65,47 +65,39 @@ export async function createCampaign(opts: {
 }
 
 /**
- * Dispara as mensagens iniciais da campanha: para cada lead `NOVO` associado,
- * renderiza o template, envia via WhatsApp (mock/real), persiste OUTBOUND e
- * move o lead para `CONTATADO`. Marca a campanha como COMPLETED ao final.
+ * Inicia a campanha ENFILEIRANDO um OutboundJob por lead `NOVO` (não em opt-out)
+ * e marcando a campanha como `RUNNING`. O disparo em si é feito pelo worker,
+ * respeitando rate limit, janela comercial e cap diário — não há mais loop
+ * síncrono aqui.
  */
 export async function startCampaign(
   campaignId: string,
-): Promise<{ sent: number; skipped: number }> {
+): Promise<{ enqueued: number }> {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: {
-      leads: { where: { status: "NOVO" }, select: { id: true, name: true, phone: true } },
+      leads: {
+        where: { status: "NOVO", optOut: false },
+        select: { id: true, name: true },
+      },
     },
   });
   if (!campaign) throw new Error("Campanha não encontrada");
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { status: "RUNNING" },
-  });
+  const useTemplate = !!env.WHATSAPP_TEMPLATE_NAME && env.WHATSAPP_MODE === "cloud-api";
 
-  let sent = 0;
-  let skipped = 0;
-  for (const lead of campaign.leads) {
-    try {
-      const text = renderTemplate(campaign.messageTemplate, lead.name);
-      await sendWhatsAppMessage(lead, text);
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { status: "CONTATADO" },
-      });
-      sent++;
-    } catch (e) {
-      console.error(`Falha ao disparar para ${lead.name}:`, e);
-      skipped++;
-    }
-  }
+  await prisma.$transaction([
+    prisma.campaign.update({ where: { id: campaignId }, data: { status: "RUNNING" } }),
+    prisma.outboundJob.createMany({
+      data: campaign.leads.map((lead) => ({
+        leadId: lead.id,
+        campaignId,
+        kind: useTemplate ? "template" : "freeform",
+        content: renderTemplate(campaign.messageTemplate, lead.name),
+        templateName: useTemplate ? env.WHATSAPP_TEMPLATE_NAME : null,
+      })),
+    }),
+  ]);
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { status: "COMPLETED" },
-  });
-
-  return { sent, skipped };
+  return { enqueued: campaign.leads.length };
 }

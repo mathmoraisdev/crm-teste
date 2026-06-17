@@ -52,7 +52,7 @@ export function CampaignsView() {
       const res = await fetch(`/api/campaigns/${id}/start`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Falha ao iniciar");
-      setFlash(`Campanha iniciada: ${data.sent} mensagens enviadas.`);
+      setFlash(`Campanha iniciada: ${data.enqueued} mensagens na fila de envio.`);
       await load();
     } catch (e) {
       setFlash(e instanceof Error ? e.message : "Erro ao iniciar campanha");
