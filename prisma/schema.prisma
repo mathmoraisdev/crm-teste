@@ -34,7 +34,16 @@ enum MessageStatus {
 enum CampaignStatus {
   DRAFT
   RUNNING
+  PAUSED        // pausada pelo gate de qualidade
   COMPLETED
+}
+
+enum OutboundJobStatus {
+  PENDING       // aguardando o worker
+  SENDING       // travado por um worker (evita envio duplo)
+  SENT          // enviado com sucesso
+  FAILED        // falhou após retries
+  CANCELLED     // lead deu opt-out / campanha cancelada
 }
 
 enum MeetingStatus {
@@ -54,6 +63,10 @@ model Lead {
   messages      Message[]
   qualification Qualification?
   meeting       Meeting?
+  optOut        Boolean        @default(false)
+  optOutAt      DateTime?
+  consentSource String? // origem do opt-in (LGPD)
+  outboundJobs  OutboundJob[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -78,7 +91,9 @@ model Campaign {
   name            String
   messageTemplate String // contém {{nome}}
   status          CampaignStatus @default(DRAFT)
+  dailyCap        Int? // teto diário p/ warm-up (null = usa default do env)
   leads           Lead[]
+  outboundJobs    OutboundJob[]
   createdAt       DateTime       @default(now())
 }
 
@@ -112,4 +127,26 @@ model Meeting {
   calendarEventId String?
   meetingLink     String?
   createdAt       DateTime      @default(now())
+}
+
+model OutboundJob {
+  id           String            @id @default(cuid())
+  lead         Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId       String
+  campaign     Campaign?         @relation(fields: [campaignId], references: [id])
+  campaignId   String?
+  kind         String // "template" | "freeform"
+  content      String // texto renderizado (auditoria / freeform)
+  templateName String? // nome do template aprovado (quando kind=template)
+  status       OutboundJobStatus @default(PENDING)
+  attempts     Int               @default(0)
+  lastError    String?
+  scheduledFor DateTime          @default(now())
+  sentAt       DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([leadId])
+  @@index([campaignId])
 }
