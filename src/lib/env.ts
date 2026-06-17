@@ -27,6 +27,17 @@ const schema = z.object({
   GOOGLE_CALENDAR_ID: z.string().optional().default("primary"),
 
   SCHEDULING_TIMEZONE: z.string().default("America/Sao_Paulo"),
+
+  // Deliverability / disparo seguro
+  WHATSAPP_DAILY_CAP: z.coerce.number().int().positive().default(1000),
+  WHATSAPP_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(8000), // ~7,5/min
+  WHATSAPP_JITTER_MS: z.coerce.number().int().nonnegative().default(4000),
+  WHATSAPP_SEND_START_HOUR: z.coerce.number().int().min(0).max(23).default(9),
+  WHATSAPP_SEND_END_HOUR: z.coerce.number().int().min(1).max(24).default(18),
+  WHATSAPP_TEMPLATE_NAME: z.string().optional().default(""),
+  WHATSAPP_TEMPLATE_LANG: z.string().default("pt_BR"),
+  WHATSAPP_APP_SECRET: z.string().optional().default(""), // validação de assinatura do webhook
+  WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
 });
 
 const parsed = schema.safeParse(process.env);
