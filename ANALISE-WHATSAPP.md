@@ -119,34 +119,39 @@ campaign/start
 
 ### Componentes
 
-1. **Fila de disparo** — `campaign/start` não envia direto; enfileira 1 job por lead.
-   - MVP simples: tabela `OutboundJob` no próprio Postgres + worker com polling.
-   - Produção: BullMQ + Redis (retry, backoff, concorrência controlada nativos).
+> **Status** (após a camada de deliverability):
+> ✅ implementado · ⚠️ parcial · ⬜ futuro.
 
-2. **Rate limiter + jitter** — espaçar envios. Sugestão inicial: 1 msg a cada **5–10 s
-   com jitter aleatório**, respeitando **horário comercial** (ex.: 9h–18h, dias úteis,
-   fuso do lead) e **cap diário** configurável por número. 1.000/dia em ~8h úteis ≈
-   1 msg a cada ~29 s — bem confortável.
+1. **Fila de disparo** ✅ — `campaign/start` não envia direto; enfileira 1 job por lead.
+   - MVP simples: tabela `OutboundJob` no próprio Postgres + worker com polling. ✅
+     (`startCampaign` enfileira; `src/server/worker/` consome com lock atômico).
+   - Produção: BullMQ + Redis (retry, backoff, concorrência controlada nativos). ⬜
 
-3. **Warm-up** — rampa para número novo. Ex.: semana 1 ~20–50/dia, dobrando a cada
-   poucos dias até o alvo, sempre observando a qualidade. Campo `dailyCap` por número
-   que o operador sobe gradualmente.
+2. **Rate limiter + jitter** ✅ — espaçar envios. Implementado no worker: intervalo
+   mínimo + **jitter aleatório** (`WHATSAPP_MIN_INTERVAL_MS`/`WHATSAPP_JITTER_MS`),
+   **horário comercial** (`WHATSAPP_SEND_START_HOUR`–`END_HOUR`, fuso
+   `SCHEDULING_TIMEZONE`) e **cap diário**. 1.000/dia em ~8h úteis ≈ 1 msg a cada
+   ~29 s — bem confortável.
 
-4. **Opt-in (LGPD)** — registrar a base de consentimento da origem dos leads. Sem
-   opt-in, denúncias sobem e a qualidade despenca. É também requisito legal
-   (LGPD art. 7º/8º).
+3. **Warm-up** ⚠️ — rampa para número novo. Cap diário implementado via
+   `WHATSAPP_DAILY_CAP` (env) + `Campaign.dailyCap`; o operador sobe gradualmente.
+   `WhatsAppNumber.dailyCap` por número (multi-número) fica como futuro.
 
-5. **Opt-out automático** — no inbound, detectar "PARAR / SAIR / STOP / CANCELAR" →
-   marcar lead como `DESCARTADO`/opt-out e **nunca mais disparar**. É a defesa nº 1
-   contra denúncia (denúncia é o que mais derruba número).
+4. **Opt-in (LGPD)** ⚠️ — campo `Lead.consentSource` existe no schema, mas registrar
+   a base de consentimento da origem dos leads ainda não está cabeado. Sem opt-in,
+   denúncias sobem e a qualidade despenca. Requisito legal (LGPD art. 7º/8º).
 
-6. **Quality gate / monitoramento** — consumir o webhook de **quality rating** e os
-   **status de mensagem** (o schema já tem `MessageStatus`). Se qualidade cair p/
-   amarelo/vermelho ou a taxa de `FAILED` subir, **pausar a campanha automaticamente**
-   e alertar.
+5. **Opt-out automático** ✅ — no inbound, `isOptOut` detecta "PARAR / SAIR / STOP /
+   CANCELAR" (palavra inteira, normalizado) → lead `DESCARTADO`/opt-out, cancela os
+   jobs pendentes e **nunca mais dispara**. Defesa nº 1 contra denúncia.
 
-7. **Templates** — gestão dos templates aprovados (Marketing/Utility), com variáveis
-   (`{{nome}}` já existe). Idealmente 2–3 variações para reduzir padrão de spam.
+6. **Quality gate / monitoramento** ✅ — `applyStatuses` atualiza `Message.status`
+   (SENT/DELIVERED/READ/FAILED) e `applyQualityUpdate` **pausa campanhas RUNNING**
+   quando a qualidade cai (RED/YELLOW/FLAGGED). Alerta dedicado fica como futuro.
+
+7. **Templates** ✅ — `sendTemplate` na Cloud API + `WHATSAPP_TEMPLATE_NAME`/`_LANG`,
+   com a variável `{{nome}}`. Gestão de 2–3 variações para reduzir padrão de spam
+   fica como futuro.
 
 ### Impacto no schema (Prisma)
 

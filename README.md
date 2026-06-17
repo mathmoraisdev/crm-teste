@@ -117,7 +117,12 @@ nota de produção (abaixo).
 | `AI_MODEL_STRONG` | `claude-sonnet-4-6` | Qualificação estruturada / decisões. |
 | `WHATSAPP_MODE` | `mock` | `cloud-api` exige `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`. |
 | `CALENDAR_MODE` | `mock` | `google-calendar` exige `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`. |
-| `SCHEDULING_TIMEZONE` | `America/Sao_Paulo` | Fuso para propor horários. |
+| `SCHEDULING_TIMEZONE` | `America/Sao_Paulo` | Fuso para propor horários e para a janela de envio. |
+| `WHATSAPP_DAILY_CAP` / `WHATSAPP_MIN_INTERVAL_MS` / `WHATSAPP_JITTER_MS` | `1000` / `8000` / `4000` | Cap diário (warm-up), intervalo e jitter do worker. |
+| `WHATSAPP_SEND_START_HOUR` / `WHATSAPP_SEND_END_HOUR` | `9` / `18` | Janela comercial de envio (fim exclusivo). |
+| `WHATSAPP_TEMPLATE_NAME` / `WHATSAPP_TEMPLATE_LANG` | `""` / `pt_BR` | Template aprovado p/ cold outbound. |
+| `WHATSAPP_APP_SECRET` | `""` | Valida a assinatura `X-Hub-Signature-256` do webhook. |
+| `WORKER_POLL_MS` | `2000` | Frequência de polling do worker quando a fila está vazia. |
 
 ### Mock ↔ real
 
@@ -134,10 +139,14 @@ nota de produção (abaixo).
 
 O MVP foi desenhado pensando no caminho de produção. O que mudaria:
 
-- **Filas & assíncrono.** O disparo de campanha e o loop de IA hoje são
-  síncronos no request. Em produção: fila (SQS/BullMQ) com workers, para
-  paralelizar disparos e isolar a latência da IA do request HTTP.
-- **Rate limit do WhatsApp.** A Cloud API tem limites por número/tier — um
+- **Filas & assíncrono.** O disparo de campanha já é **assíncrono**: `startCampaign`
+  enfileira um `OutboundJob` por lead (tabela Postgres) e um **worker** separado
+  (`npm run worker`) consome a fila — ver [Camada de deliverability](#camada-de-deliverability-disparo-seguro).
+  O loop de IA do inbound segue síncrono no request; em escala maior, isolar
+  também isso atrás de fila (SQS/BullMQ). Trocar a fila Postgres por BullMQ+Redis
+  quando o volume justificar concorrência/retry mais sofisticados.
+- **Rate limit do WhatsApp.** Já implementado no worker: intervalo mínimo +
+  jitter, janela de horário comercial e cap diário (warm-up). Em escala:
   token-bucket por número e backoff respeitando os erros 429/4xx da Graph API.
 - **Retry & idempotência.** Reentrega de webhook já é tratada por dedupe
   (`providerMessageId @unique`); somar retry com backoff nos envios e DLQ para
@@ -147,12 +156,63 @@ O MVP foi desenhado pensando no caminho de produção. O que mudaria:
   preço por tier).
 - **Human handoff.** Sinalizar quando a IA não deve decidir sozinha (objeções
   complexas, alto ticket) e passar a conversa para um humano.
-- **LGPD / opt-in.** Registrar consentimento, honrar opt-out (“pare”) e ter
-  política de retenção/anonimização dos dados de conversa.
+- **LGPD / opt-in.** Opt-out automático já implementado (inbound “PARAR/SAIR/STOP”
+  → lead `DESCARTADO` + jobs pendentes cancelados); falta registrar a base de
+  consentimento (`consentSource`) e a política de retenção/anonimização.
 - **IA barata × forte.** Já implementado (Haiku × Sonnet). Em escala: caching de
   prompt, batching de classificações e fallback de modelo.
 - **Migrations versionadas.** Trocar `db push` por `prisma migrate` com histórico
   versionado e revisão em PR.
+
+---
+
+## Camada de deliverability (disparo seguro)
+
+Disparo de ~1.000 mensagens/dia via Cloud API oficial sem o número cair. O
+`startCampaign` **não envia mais em loop**: enfileira um `OutboundJob` por lead e
+um worker dedicado consome a fila respeitando rate limit, janela e cap.
+
+### Worker de disparo
+
+```bash
+npm run worker     # consome a fila OutboundJob (funciona em mock também)
+```
+
+O worker é um **processo separado e persistente** (loop com polling) — por isso
+**não roda em Vercel serverless**, que não segura um loop de fila longo. Em
+produção, hospede-o num serviço de processo persistente (**Railway/Render/Fly**),
+ou troque o loop por **cron/QStash** chamando uma rota de processamento.
+
+A cada ciclo o worker: pula leads em opt-out, respeita o **intervalo mínimo +
+jitter** (`WHATSAPP_MIN_INTERVAL_MS`/`WHATSAPP_JITTER_MS`), só envia dentro da
+**janela comercial** (`WHATSAPP_SEND_START_HOUR`–`WHATSAPP_SEND_END_HOUR`, fuso
+`SCHEDULING_TIMEZONE`), para ao atingir o **cap diário** (`WHATSAPP_DAILY_CAP`) e
+ignora campanhas `PAUSED` (gate de qualidade). O cold outbound usa **template
+aprovado** (`WHATSAPP_TEMPLATE_NAME`); respostas dentro da janela de 24h seguem
+em texto livre pelo caminho reativo.
+
+### Warm-up
+
+Número novo começa no tier 250. Comece com `WHATSAPP_DAILY_CAP` **baixo** (ex.:
+`50`) e suba gradualmente até `1000` ao longo de ~2–3 semanas, observando o
+**quality rating**. O webhook de qualidade pausa campanhas `RUNNING`
+automaticamente se a Meta sinalizar queda (RED/YELLOW/FLAGGED).
+
+### Checklist de go-live (Meta)
+
+- [ ] Conta **Meta Business** com negócio **verificado**.
+- [ ] **Número dedicado** que não esteja registrado no app WhatsApp comum.
+- [ ] **Display name** aprovado.
+- [ ] **Template(s)** de mensagem aprovado(s) (`WHATSAPP_TEMPLATE_NAME`).
+- [ ] **Token de sistema permanente** (não o temporário de 24h do painel).
+- [ ] Forma de pagamento configurada na WABA (cobrança por conversa).
+- [ ] `WHATSAPP_APP_SECRET` setado para validar a assinatura do webhook.
+
+### Banco gerenciado
+
+Para hospedar, trocar `DATABASE_URL` para um **Postgres gerenciado** (Supabase /
+Neon / Railway) e migrar de `prisma db push` para **`prisma migrate`** versionado
+(com connection pooling para o ambiente serverless).
 
 ---
 
