@@ -5,6 +5,7 @@ import { qualifyLead } from "./qualification.service";
 import { decidePipeline } from "./pipeline";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import { sendWhatsAppMessage } from "./messaging";
+import { isOptOut } from "@/lib/optout";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -64,6 +65,21 @@ export async function handleInbound(
       providerMessageId: input.providerMessageId ?? undefined,
     },
   });
+
+  // Opt-out: encerra o lead, cancela jobs pendentes, não qualifica nem responde.
+  if (isOptOut(input.text)) {
+    await prisma.$transaction([
+      prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: "DESCARTADO", optOut: true, optOutAt: new Date() },
+      }),
+      prisma.outboundJob.updateMany({
+        where: { leadId: lead.id, status: { in: ["PENDING", "SENDING"] } },
+        data: { status: "CANCELLED", lastError: "opt-out do lead" },
+      }),
+    ]);
+    return { leadId: lead.id };
+  }
 
   // 2. NOVO/CONTATADO → EM_CONVERSA
   let status = lead.status;
