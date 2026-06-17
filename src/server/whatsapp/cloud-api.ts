@@ -48,5 +48,41 @@ export function createCloudWhatsApp(): WhatsAppService {
         providerMessageId: data.messages?.[0]?.id ?? `cloud-${Date.now()}`,
       };
     },
+
+    async sendTemplate(to, templateName, lang, variables) {
+      const components =
+        variables.length > 0
+          ? [
+              {
+                type: "body",
+                parameters: variables.map((text) => ({ type: "text", text })),
+              },
+            ]
+          : [];
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: to.replace(/^\+/, ""),
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: lang },
+            components,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`WhatsApp Cloud API (template) ${res.status}: ${detail}`);
+      }
+      const data = (await res.json()) as { messages?: { id: string }[] };
+      return { providerMessageId: data.messages?.[0]?.id ?? `cloud-tpl-${Date.now()}` };
+    },
   };
 }
