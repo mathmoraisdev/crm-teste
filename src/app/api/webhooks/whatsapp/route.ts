@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { env } from "@/lib/env";
 import { handleInbound } from "@/server/services/conversation.service";
+import { applyStatuses, applyQualityUpdate } from "@/server/services/webhook.service";
 
 export const dynamic = "force-dynamic";
 
@@ -20,16 +22,54 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST — inbound real. Extrai as mensagens do payload do Graph API e
- * delega cada uma à orquestração (que faz dedupe por providerMessageId).
+ * Valida a assinatura `X-Hub-Signature-256` (HMAC SHA-256 do corpo bruto com o
+ * App Secret). Só roda quando `WHATSAPP_APP_SECRET` está setado — em mock/dev
+ * sem secret a validação é pulada para não atrapalhar o desenvolvimento.
+ */
+function isValidSignature(raw: string, signature: string | null): boolean {
+  if (!env.WHATSAPP_APP_SECRET) return true;
+  if (!signature) return false;
+  const expected =
+    "sha256=" +
+    crypto
+      .createHmac("sha256", env.WHATSAPP_APP_SECRET)
+      .update(raw)
+      .digest("hex");
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * POST — inbound real. Valida a assinatura, então processa do payload do Graph
+ * API: status de entrega (`statuses`), atualização de qualidade do número e as
+ * mensagens inbound (que passam pela orquestração com dedupe por id).
  */
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
+  const raw = await req.text();
+  if (!isValidSignature(raw, req.headers.get("x-hub-signature-256"))) {
+    return new Response("Invalid signature", { status: 401 });
+  }
+
+  let body: any = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
 
   try {
     const entries = body?.entry ?? [];
     for (const entry of entries) {
       for (const change of entry.changes ?? []) {
+        await applyStatuses(change.value?.statuses ?? []);
+        if (
+          change.field === "phone_number_quality_update" ||
+          change.value?.quality_rating
+        ) {
+          await applyQualityUpdate(change.value ?? {});
+        }
+
         const messages = change.value?.messages ?? [];
         for (const msg of messages) {
           if (msg.type !== "text") continue;
