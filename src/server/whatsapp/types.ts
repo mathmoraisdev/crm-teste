@@ -5,10 +5,12 @@
 export interface WhatsAppSendResult {
   /** ID da mensagem no provedor (usado para dedupe de webhook). */
   providerMessageId: string;
+  /** Qual número enviou (só Baileys multi-número preenche). */
+  whatsAppNumberId?: string;
 }
 
 export interface WhatsAppService {
-  readonly mode: "mock" | "cloud-api";
+  readonly mode: "mock" | "cloud-api" | "baileys";
   /** Envia uma mensagem de texto para um número em E.164. */
   sendMessage(to: string, text: string): Promise<WhatsAppSendResult>;
 

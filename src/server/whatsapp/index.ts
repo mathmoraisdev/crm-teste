@@ -2,6 +2,7 @@ import { env } from "@/lib/env";
 import type { WhatsAppService } from "./types";
 import { createMockWhatsApp } from "./mock";
 import { createCloudWhatsApp } from "./cloud-api";
+import { createBaileysWhatsApp } from "./baileys/service";
 
 /**
  * Factory + singleton da camada WhatsApp. Resolve a implementação por
@@ -14,7 +15,9 @@ export function getWhatsApp(): WhatsAppService {
   instance =
     env.WHATSAPP_MODE === "cloud-api"
       ? createCloudWhatsApp()
-      : createMockWhatsApp();
+      : env.WHATSAPP_MODE === "baileys"
+        ? createBaileysWhatsApp()
+        : createMockWhatsApp();
   return instance;
 }
 
