@@ -3,24 +3,28 @@ import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
 import { processNextJob, sentToday, sentTodayByNumber } from "./dispatcher";
 import { selectNumber } from "@/server/whatsapp/baileys/selection";
 import { sleep } from "@/lib/humanize";
+import { prisma } from "@/server/db/client";
 
-/** Boot do modo Baileys: sobe o pool e liga inbound/ack ao domínio. */
-async function bootBaileys() {
-  const { connectAll, registerHandlers } = await import("@/server/whatsapp/baileys/pool");
+type Pool = typeof import("@/server/whatsapp/baileys/pool");
+let pool: Pool | null = null;
+
+/** Boot do modo Baileys: importa o pool, liga inbound/ack ao domínio e conecta. */
+async function bootBaileys(): Promise<Pool> {
+  const p = await import("@/server/whatsapp/baileys/pool");
   const { handleInbound } = await import("@/server/services/conversation.service");
   const { applyAck } = await import("@/server/services/webhook.service");
-  registerHandlers({
+  p.registerHandlers({
     onInbound: (e) =>
       handleInbound({ phone: e.fromPhone, text: e.text, providerMessageId: e.providerMessageId }).then(() => {}),
     onAck: (id, status) => applyAck(id, status),
   });
-  await connectAll();
+  await p.ensureConnections();
+  return p;
 }
 
 /** Escolhe o chip menos carregado e elegível para a próxima iteração. */
 async function pickNumberId(now: Date): Promise<string | null> {
   const counts = await sentTodayByNumber(now);
-  const { prisma } = await import("@/server/db/client");
   const nums = await prisma.whatsAppNumber.findMany({
     select: { id: true, status: true, dailyCap: true },
   });
@@ -32,10 +36,14 @@ async function pickNumberId(now: Date): Promise<string | null> {
 
 async function main() {
   console.log("[worker] iniciado. modo=%s cap/dia=%d", env.WHATSAPP_MODE, env.WHATSAPP_DAILY_CAP);
-  if (env.WHATSAPP_MODE === "baileys") await bootBaileys();
+  if (env.WHATSAPP_MODE === "baileys") pool = await bootBaileys();
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // mantém sockets vivos e conecta chips recém-pareados pela UI (gera o QR),
+    // mesmo fora da janela comercial — pareamento não depende de horário.
+    if (env.WHATSAPP_MODE === "baileys" && pool) await pool.ensureConnections();
+
     const now = new Date();
     const hour = hourInTz(now, env.SCHEDULING_TIMEZONE);
     if (

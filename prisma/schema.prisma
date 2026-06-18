@@ -177,6 +177,7 @@ model WhatsAppNumber {
   sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR
   status       WhatsAppNumberStatus @default(CONNECTING)
   dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up)
+  pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
   lastError    String?
   connectedAt  DateTime?
   bannedAt     DateTime?

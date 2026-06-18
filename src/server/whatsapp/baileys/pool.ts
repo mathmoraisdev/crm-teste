@@ -29,6 +29,7 @@ type Handlers = {
 };
 
 const sockets = new Map<string, WASocket>();
+const connecting = new Set<string>(); // lock síncrono contra conexão duplicada (race reconnect × ensure)
 let handlers: Handlers | null = null;
 
 const jidOf = (phone: string) => `${phone.replace(/^\+/, "")}@s.whatsapp.net`;
@@ -39,13 +40,17 @@ export function registerHandlers(h: Handlers) {
 
 /** Sobe (ou ressuscita) o socket de UM número e persiste estado/eventos. */
 export async function connectNumber(numberId: string): Promise<void> {
-  const rec = await prisma.whatsAppNumber.findUnique({ where: { id: numberId } });
-  if (!rec || rec.status === "DISABLED" || rec.status === "BANNED") return;
+  // lock contra conexão duplicada (já conectado ou conectando agora).
+  if (sockets.has(numberId) || connecting.has(numberId)) return;
+  connecting.add(numberId);
+  try {
+    const rec = await prisma.whatsAppNumber.findUnique({ where: { id: numberId } });
+    if (!rec || rec.status === "DISABLED" || rec.status === "BANNED") return;
 
-  const dir = path.join(env.BAILEYS_AUTH_DIR, rec.sessionDir);
-  const { state, saveCreds } = await useMultiFileAuthState(dir);
-  const sock = makeWASocket({ auth: state, logger, browser: ["MiniCRM", "Chrome", "1.0"] });
-  sockets.set(numberId, sock);
+    const dir = path.join(env.BAILEYS_AUTH_DIR, rec.sessionDir);
+    const { state, saveCreds } = await useMultiFileAuthState(dir);
+    const sock = makeWASocket({ auth: state, logger, browser: ["MiniCRM", "Chrome", "1.0"] });
+    sockets.set(numberId, sock);
 
   sock.ev.on("creds.update", saveCreds);
 
@@ -53,11 +58,15 @@ export async function connectNumber(numberId: string): Promise<void> {
     if (u.qr) {
       console.log(`\n[baileys] escaneie o QR do número "${rec.label}":\n`);
       qrcode.generate(u.qr, { small: true });
+      // grava o QR no banco p/ a UI renderizar (pareamento por QR no app)
+      await prisma.whatsAppNumber
+        .update({ where: { id: numberId }, data: { pairingQr: u.qr } })
+        .catch(() => {});
     }
     if (u.connection === "open") {
       await prisma.whatsAppNumber.update({
         where: { id: numberId },
-        data: { status: "CONNECTED", connectedAt: new Date(), lastError: null },
+        data: { status: "CONNECTED", connectedAt: new Date(), lastError: null, pairingQr: null },
       });
       console.log(`[baileys] "${rec.label}" conectado.`);
     }
@@ -110,6 +119,9 @@ export async function connectNumber(numberId: string): Promise<void> {
       else if (s === 4 /* READ */) await handlers.onAck(up.key.id, "READ");
     }
   });
+  } finally {
+    connecting.delete(numberId);
+  }
 }
 
 /** Verifica se o número existe no WhatsApp (sinal anti-spam). */
@@ -157,6 +169,19 @@ export async function connectAll(): Promise<void> {
     select: { id: true },
   });
   for (const n of nums) await connectNumber(n.id);
+}
+
+/**
+ * Conecta números elegíveis que AINDA não têm socket vivo neste processo —
+ * inclui chips recém-criados pela UI (pareamento por QR) sem precisar reiniciar
+ * o worker. Idempotente: pula quem já tem socket (evita conexão duplicada).
+ */
+export async function ensureConnections(): Promise<void> {
+  const nums = await prisma.whatsAppNumber.findMany({
+    where: { status: { notIn: ["BANNED", "DISABLED"] } },
+    select: { id: true },
+  });
+  for (const n of nums) if (!sockets.has(n.id)) await connectNumber(n.id);
 }
 
 export function hasLiveSocket(numberId: string): boolean {
