@@ -1,9 +1,64 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import QRCode from "qrcode";
+import { env } from "@/lib/env";
+import { prisma } from "@/server/db/client";
+import { normalizePhone } from "@/lib/phone";
 import { listWhatsAppNumbers } from "@/server/services/numbers.service";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
   const numbers = await listWhatsAppNumbers();
-  return NextResponse.json({ numbers });
+  // converte o QR cru em data URL p/ a UI renderizar como <img>
+  const withQr = await Promise.all(
+    numbers.map(async ({ pairingQr, ...n }) => ({
+      ...n,
+      qrDataUrl: pairingQr ? await QRCode.toDataURL(pairingQr, { margin: 1, width: 240 }) : null,
+    })),
+  );
+  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE });
+}
+
+const createSchema = z.object({
+  label: z.string().min(1, "Informe um apelido (ex.: chip-01)"),
+  phone: z.string().min(1, "Informe o número do chip"),
+});
+
+export async function POST(req: NextRequest) {
+  if (env.WHATSAPP_MODE !== "baileys") {
+    return NextResponse.json(
+      { error: "Pareamento por QR só está disponível com WHATSAPP_MODE=baileys." },
+      { status: 400 },
+    );
+  }
+  const body = await req.json().catch(() => null);
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+      { status: 400 },
+    );
+  }
+  const phone = normalizePhone(parsed.data.phone);
+  if (!phone) {
+    return NextResponse.json({ error: "Número inválido (use E.164, ex.: +5511...)" }, { status: 400 });
+  }
+  const label = parsed.data.label.trim();
+  const sessionDir = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();
+
+  // CONNECTING + limpa QR antigo → o worker gera um novo QR e grava em pairingQr.
+  const rec = await prisma.whatsAppNumber.upsert({
+    where: { phone },
+    update: { label, sessionDir, status: "CONNECTING", pairingQr: null, lastError: null },
+    create: {
+      label,
+      phone,
+      sessionDir,
+      status: "CONNECTING",
+      dailyCap: env.BAILEYS_PER_NUMBER_DAILY_CAP,
+    },
+  });
+  return NextResponse.json({ id: rec.id }, { status: 201 });
 }

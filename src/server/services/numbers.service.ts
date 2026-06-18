@@ -8,6 +8,7 @@ export interface WhatsAppNumberListItem {
   status: string;
   dailyCap: number;
   sentToday: number;
+  pairingQr: string | null; // QR cru p/ pareamento (a UI converte em imagem)
 }
 
 /**
@@ -18,7 +19,14 @@ export async function listWhatsAppNumbers(): Promise<WhatsAppNumberListItem[]> {
   const [numbers, counts] = await Promise.all([
     prisma.whatsAppNumber.findMany({
       orderBy: { createdAt: "asc" },
-      select: { id: true, label: true, phone: true, status: true, dailyCap: true },
+      select: {
+        id: true,
+        label: true,
+        phone: true,
+        status: true,
+        dailyCap: true,
+        pairingQr: true,
+      },
     }),
     sentTodayByNumber(new Date()),
   ]);
