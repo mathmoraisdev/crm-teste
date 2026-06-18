@@ -19,13 +19,13 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
     "@hapi/boom": "^10.0.1",
     "@prisma/client": "^6.16.0",
     "@whiskeysockets/baileys": "^6.17.16",
     "googleapis": "^144.0.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.0",
+    "openai": "^6.44.0",
     "papaparse": "^5.4.1",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0",

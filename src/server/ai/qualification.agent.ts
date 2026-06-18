@@ -1,4 +1,4 @@
-import { getAnthropic, MODELS } from "./provider";
+import { getOpenAI, MODELS } from "./provider";
 import { QUALIFICATION_SYSTEM } from "./prompts";
 import {
   qualificationJsonSchema,
@@ -18,28 +18,20 @@ function transcript(turns: ConversationTurn[]): string {
 }
 
 /**
- * Agente de qualificação (Sonnet, tool-use forçado → JSON estruturado).
+ * Agente de qualificação (gpt-4o, function calling forçado → JSON estruturado).
  * Analisa a conversa inteira e devolve a qualificação validada por zod.
  */
 export async function runQualification(opts: {
   leadName: string;
   conversation: ConversationTurn[];
 }): Promise<QualificationResult> {
-  const client = getAnthropic();
+  const client = getOpenAI();
 
-  const res = await client.messages.create({
+  const res = await client.chat.completions.create({
     model: MODELS.strong,
-    max_tokens: 1024,
-    system: QUALIFICATION_SYSTEM,
-    tools: [
-      {
-        name: "registrar_qualificacao",
-        description: "Registra a qualificação estruturada do lead.",
-        input_schema: qualificationJsonSchema as never,
-      },
-    ],
-    tool_choice: { type: "tool", name: "registrar_qualificacao" },
+    max_completion_tokens: 1024,
     messages: [
+      { role: "system", content: QUALIFICATION_SYSTEM },
       {
         role: "user",
         content: `Lead: ${opts.leadName}\n\nConversa até agora:\n${transcript(
@@ -47,14 +39,32 @@ export async function runQualification(opts: {
         )}`,
       },
     ],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "registrar_qualificacao",
+          description: "Registra a qualificação estruturada do lead.",
+          parameters: qualificationJsonSchema as unknown as Record<string, unknown>,
+        },
+      },
+    ],
+    tool_choice: { type: "function", function: { name: "registrar_qualificacao" } },
   });
 
-  const toolUse = res.content.find((b) => b.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
-    throw new Error("Agente de qualificação não retornou tool_use.");
+  const call = res.choices[0]?.message?.tool_calls?.[0];
+  if (!call || call.type !== "function") {
+    throw new Error("Agente de qualificação não retornou tool_call.");
   }
 
-  const parsed = qualificationSchema.safeParse(toolUse.input);
+  let input: unknown;
+  try {
+    input = JSON.parse(call.function.arguments);
+  } catch {
+    throw new Error("Agente de qualificação retornou JSON inválido.");
+  }
+
+  const parsed = qualificationSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error(
       `Saída de qualificação inválida: ${parsed.error.issues
