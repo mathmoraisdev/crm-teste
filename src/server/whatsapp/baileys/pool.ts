@@ -1,6 +1,7 @@
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
@@ -49,7 +50,10 @@ export async function connectNumber(numberId: string): Promise<void> {
 
     const dir = path.join(env.BAILEYS_AUTH_DIR, rec.sessionDir);
     const { state, saveCreds } = await useMultiFileAuthState(dir);
-    const sock = makeWASocket({ auth: state, logger, browser: ["MiniCRM", "Chrome", "1.0"] });
+    // usa a versão ATUAL do WhatsApp Web — versão chumbada/velha causa rejeição
+    // (Connection Failure 405) no pareamento. Cai no default do Baileys se falhar.
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
+    const sock = makeWASocket({ version, auth: state, logger, browser: ["MiniCRM", "Chrome", "1.0"] });
     sockets.set(numberId, sock);
 
   sock.ev.on("creds.update", saveCreds);
