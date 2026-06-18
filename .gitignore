@@ -28,6 +28,14 @@ tsconfig.tsbuildinfo
 .DS_Store
 *.pem
 npm-debug.log*
+
+# Credenciais Google / service account — NUNCA commitar (use env vars)
+*.key
+*-service-account*.json
+service-account*.json
+gcp-*.json
+conexao-*.json
+*credentials*.json
 .vscode/*
 !.vscode/extensions.json
 /coverage
