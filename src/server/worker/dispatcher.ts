@@ -24,16 +24,61 @@ export async function sentTodayByNumber(now: Date): Promise<Record<string, numbe
   return map;
 }
 
+/** Quantos jobs cada campanha já enviou hoje (p/ cap diário por campanha). */
+export async function sentTodayByCampaign(now: Date): Promise<Record<string, number>> {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const rows = await prisma.outboundJob.groupBy({
+    by: ["campaignId"],
+    where: { status: "SENT", sentAt: { gte: start }, campaignId: { not: null } },
+    _count: { _all: true },
+  });
+  const map: Record<string, number> = {};
+  for (const r of rows) if (r.campaignId) map[r.campaignId] = r._count._all;
+  return map;
+}
+
+/**
+ * Lógica pura: dado o cap de cada campanha e o total já enviado hoje, devolve os
+ * ids das campanhas que JÁ atingiram o próprio teto diário (saem do disparo no
+ * dia). `dailyCap` null = campanha sem teto próprio (vale só o cap global).
+ */
+export function cappedCampaignIds(
+  campaigns: { id: string; dailyCap: number | null }[],
+  sentByCampaign: Record<string, number>,
+): string[] {
+  return campaigns
+    .filter((c) => c.dailyCap != null && (sentByCampaign[c.id] ?? 0) >= c.dailyCap)
+    .map((c) => c.id);
+}
+
 /**
  * Reserva atomicamente 1 job PENDING (status → SENDING via updateMany com guarda)
  * de uma campanha que NÃO esteja pausada, e o processa. Retorna true se enviou.
  */
 export async function processNextJob(now: Date, numberId?: string): Promise<boolean> {
+  // Campanhas que já bateram o próprio cap diário ficam de fora da seleção de hoje.
+  const [capCampaigns, sentByCampaign] = await Promise.all([
+    prisma.campaign.findMany({
+      where: { dailyCap: { not: null } },
+      select: { id: true, dailyCap: true },
+    }),
+    sentTodayByCampaign(now),
+  ]);
+  const capped = cappedCampaignIds(capCampaigns, sentByCampaign);
+
   const candidate = await prisma.outboundJob.findFirst({
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      OR: [{ campaignId: null }, { campaign: { status: { not: "PAUSED" } } }],
+      OR: [
+        { campaignId: null },
+        {
+          campaign: { status: { not: "PAUSED" } },
+          // exclui jobs de campanhas no teto diário (notIn vazio = sem exclusão)
+          ...(capped.length > 0 ? { campaignId: { notIn: capped } } : {}),
+        },
+      ],
     },
     orderBy: { scheduledFor: "asc" },
     select: { id: true },

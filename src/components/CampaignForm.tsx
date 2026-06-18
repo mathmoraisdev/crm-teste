@@ -6,13 +6,30 @@ import { Button } from "@/components/ui/Button";
 const DEFAULT_TEMPLATE =
   "Olá {{nome}}! Aqui é da Acme. Vi que sua empresa pode se beneficiar da nossa solução. Posso te fazer algumas perguntas rápidas?";
 
+export interface CampaignFormValues {
+  id: string;
+  name: string;
+  messageTemplate: string;
+  dailyCap: number | null;
+}
+
 /**
- * Formulário de criação de campanha. Ao salvar, associa todos os leads `NOVO`
- * à campanha (o disparo é um passo separado, na lista).
+ * Formulário de campanha. Sem `campaign` cria uma nova (associando os leads
+ * `NOVO`); com `campaign` edita a existente. O disparo é um passo separado.
  */
-export function CampaignForm({ onCreated }: { onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+export function CampaignForm({
+  campaign,
+  onSaved,
+}: {
+  campaign?: CampaignFormValues;
+  onSaved: () => void;
+}) {
+  const editing = !!campaign;
+  const [name, setName] = useState(campaign?.name ?? "");
+  const [template, setTemplate] = useState(campaign?.messageTemplate ?? DEFAULT_TEMPLATE);
+  const [dailyCap, setDailyCap] = useState(
+    campaign?.dailyCap != null ? String(campaign.dailyCap) : "",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,18 +43,35 @@ export function CampaignForm({ onCreated }: { onCreated: () => void }) {
       setError("O template deve conter {{nome}}.");
       return;
     }
+    let capValue: number | null = null;
+    if (dailyCap.trim() !== "") {
+      const n = Number(dailyCap);
+      if (!Number.isInteger(n) || n <= 0) {
+        setError("Cap diário deve ser um número inteiro positivo (ou vazio).");
+        return;
+      }
+      capValue = n;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/campaigns", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), messageTemplate: template }),
-      });
+      const res = await fetch(
+        editing ? `/api/campaigns/${campaign!.id}` : "/api/campaigns",
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            messageTemplate: template,
+            dailyCap: capValue,
+          }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Falha ao criar campanha");
-      onCreated();
+      if (!res.ok) throw new Error(data.error ?? "Falha ao salvar campanha");
+      onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao criar campanha");
+      setError(e instanceof Error ? e.message : "Erro ao salvar campanha");
     } finally {
       setLoading(false);
     }
@@ -72,11 +106,37 @@ export function CampaignForm({ onCreated }: { onCreated: () => void }) {
         </p>
       </div>
 
-      <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-        Ao criar, todos os leads com status <strong>Novo</strong> serão
-        associados a esta campanha. O disparo é feito depois, pelo botão
-        “Iniciar”.
-      </p>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          Cap diário (opcional)
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={dailyCap}
+          onChange={(e) => setDailyCap(e.target.value)}
+          placeholder="vazio = sem teto próprio"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        />
+        <p className="mt-1 text-xs text-slate-400">
+          Máximo de mensagens iniciais <strong>desta campanha</strong> por dia
+          (warm-up). Vazio = sem teto próprio. O limite global do sistema e o cap
+          por chip continuam valendo por cima.
+        </p>
+      </div>
+
+      {editing ? (
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          Alterar a mensagem só afeta <strong>envios futuros</strong>; o que já
+          foi enfileirado mantém o texto anterior.
+        </p>
+      ) : (
+        <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          Ao criar, todos os leads com status <strong>Novo</strong> serão
+          associados a esta campanha. O disparo é feito depois, pelo botão
+          “Iniciar”.
+        </p>
+      )}
 
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -86,7 +146,7 @@ export function CampaignForm({ onCreated }: { onCreated: () => void }) {
 
       <div className="flex justify-end">
         <Button onClick={submit} loading={loading}>
-          Criar campanha
+          {editing ? "Salvar alterações" : "Criar campanha"}
         </Button>
       </div>
     </div>

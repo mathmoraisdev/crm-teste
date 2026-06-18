@@ -7,7 +7,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // url = conexão de runtime (na Vercel: pooler de transação 6543, com pgbouncer).
+  url       = env("DATABASE_URL")
+  // directUrl = conexão direta (5432) usada por `db push`/migrations/introspect,
+  // que não funcionam pelo pgbouncer. Em dev local aponte para o mesmo Postgres.
+  directUrl = env("DIRECT_URL")
 }
 
 enum LeadStatus {

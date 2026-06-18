@@ -2,18 +2,26 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
+import { LeadForm } from "@/components/LeadForm";
 import { ConversationView } from "@/components/ConversationView";
 import { QualificationPanel } from "@/components/QualificationPanel";
 import { formatPhone } from "@/lib/phone";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 export function LeadDetailView({ leadId }: { leadId: string }) {
+  const router = useRouter();
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -74,7 +82,20 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             {lead.campaign && <> · {lead.campaign.name}</>}
           </p>
         </div>
-        <LeadStatusBadge status={lead.status} />
+        <div className="flex items-center gap-2">
+          <LeadStatusBadge status={lead.status} />
+          <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil size={14} /> Editar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            className="text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={14} /> Apagar
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -96,6 +117,44 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           />
         </div>
       </div>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Editar — ${lead.name}`}>
+        <LeadForm
+          lead={{
+            id: lead.id,
+            name: lead.name,
+            phone: lead.phone,
+            status: lead.status,
+            optOut: lead.optOut,
+          }}
+          onSaved={() => {
+            load();
+            setEditOpen(false);
+          }}
+        />
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Apagar lead"
+        confirmLabel="Apagar"
+        message={
+          <>
+            Apagar <strong>{lead.name}</strong>? Toda a conversa, qualificação e
+            agendamento desse lead serão removidos. Esta ação não pode ser
+            desfeita.
+          </>
+        }
+        onConfirm={async () => {
+          const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error ?? "Falha ao apagar lead");
+          }
+          router.push("/leads");
+        }}
+        onClose={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

@@ -1,19 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import { Pencil, Trash2 } from "lucide-react";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { formatPhone } from "@/lib/phone";
 import { timeAgo } from "@/lib/utils";
 import type { LeadListItem } from "@/server/services/lead.service";
 
-export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
+export function LeadsTable({
+  leads,
+  onEdit,
+  onDelete,
+}: {
+  leads: LeadListItem[];
+  onEdit: (lead: LeadListItem) => void;
+  onDelete: (lead: LeadListItem) => void;
+}) {
   if (leads.length === 0) {
     return (
       <div className="py-10 text-center text-sm text-slate-500">
-        Nenhum lead ainda. Importe um CSV para começar.
+        Nenhum lead corresponde aos filtros.
       </div>
     );
   }
@@ -28,6 +38,7 @@ export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
           <Th>Última mensagem</Th>
           <Th>Campanha</Th>
           <Th className="text-right">Atividade</Th>
+          <Th className="text-right">Ações</Th>
         </tr>
       </thead>
       <tbody>
@@ -64,6 +75,29 @@ export function LeadsTable({ leads }: { leads: LeadListItem[] }) {
             </Td>
             <Td className="text-right text-xs text-slate-400">
               {timeAgo(l.updatedAt)}
+            </Td>
+            <Td className="text-right">
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onEdit(l)}
+                  aria-label="Editar lead"
+                  title="Editar"
+                >
+                  <Pencil size={14} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDelete(l)}
+                  aria-label="Apagar lead"
+                  title="Apagar"
+                  className="text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
             </Td>
           </tr>
         ))}

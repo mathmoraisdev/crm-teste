@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import type { WhatsAppNumberStatus } from "@prisma/client";
 import { sentTodayByNumber } from "@/server/worker/dispatcher";
 
 export interface WhatsAppNumberListItem {
@@ -31,4 +32,38 @@ export async function listWhatsAppNumbers(): Promise<WhatsAppNumberListItem[]> {
     sentTodayByNumber(new Date()),
   ]);
   return numbers.map((n) => ({ ...n, sentToday: counts[n.id] ?? 0 }));
+}
+
+// Status que o operador pode setar manualmente pela UI (sem mexer no pareamento).
+const MANUAL_STATUSES = new Set<WhatsAppNumberStatus>(["CONNECTED", "PAUSED", "DISABLED"]);
+
+/**
+ * Edita um chip: apelido, cap diário e/ou status operacional. O status é
+ * limitado a transições manuais seguras (pausar/reativar/desativar) — pareamento
+ * e ban continuam a cargo do worker.
+ */
+export async function updateWhatsAppNumber(
+  id: string,
+  data: { label?: string; dailyCap?: number; status?: WhatsAppNumberStatus },
+): Promise<void> {
+  const exists = await prisma.whatsAppNumber.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new Error("Número não encontrado");
+  if (data.status !== undefined && !MANUAL_STATUSES.has(data.status)) {
+    throw new Error("Status não permitido por aqui (use pausar/reativar/desativar).");
+  }
+  await prisma.whatsAppNumber.update({
+    where: { id },
+    data: {
+      ...(data.label !== undefined ? { label: data.label } : {}),
+      ...(data.dailyCap !== undefined ? { dailyCap: data.dailyCap } : {}),
+      ...(data.status !== undefined ? { status: data.status } : {}),
+    },
+  });
+}
+
+/** Remove um chip do CRM. Jobs/mensagens/leads ligados ficam órfãos (SetNull). */
+export async function deleteWhatsAppNumber(id: string): Promise<void> {
+  const exists = await prisma.whatsAppNumber.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new Error("Número não encontrado");
+  await prisma.whatsAppNumber.delete({ where: { id } });
 }

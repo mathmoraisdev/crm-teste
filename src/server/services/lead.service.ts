@@ -75,6 +75,44 @@ export async function createLead(name: string, rawPhone: string): Promise<Lead> 
   });
 }
 
+/**
+ * Edita um lead. Telefone, se informado, é normalizado para E.164; conflito de
+ * telefone (já usado por outro lead) vira erro amigável.
+ */
+export async function updateLead(
+  id: string,
+  data: { name?: string; phone?: string; status?: LeadStatus; optOut?: boolean },
+): Promise<Lead> {
+  const exists = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new Error("Lead não encontrado");
+
+  const patch: Prisma.LeadUpdateInput = {};
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.status !== undefined) patch.status = data.status;
+  if (data.optOut !== undefined) {
+    patch.optOut = data.optOut;
+    patch.optOutAt = data.optOut ? new Date() : null;
+  }
+  if (data.phone !== undefined) {
+    const phone = normalizePhone(data.phone);
+    if (!phone) throw new Error(`Telefone inválido: ${data.phone}`);
+    const clash = await prisma.lead.findUnique({ where: { phone }, select: { id: true } });
+    if (clash && clash.id !== id) {
+      throw new Error("Já existe outro lead com este telefone.");
+    }
+    patch.phone = phone;
+  }
+
+  return prisma.lead.update({ where: { id }, data: patch });
+}
+
+/** Apaga um lead e tudo associado (mensagens, qualificação, reunião, jobs — cascade). */
+export async function deleteLead(id: string): Promise<void> {
+  const exists = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new Error("Lead não encontrado");
+  await prisma.lead.delete({ where: { id } });
+}
+
 export interface ImportResult {
   created: number;
   skippedDuplicates: number;

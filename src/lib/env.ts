@@ -39,6 +39,10 @@ const schema = z.object({
   WHATSAPP_APP_SECRET: z.string().optional().default(""), // validação de assinatura do webhook
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
 
+  // Cron de disparo (alternativa serverless ao worker; protege a rota /api/cron/dispatch).
+  // A Vercel Cron envia este valor como `Authorization: Bearer <CRON_SECRET>`.
+  CRON_SECRET: z.string().optional().default(""),
+
   // Baileys (transporte não-oficial, multi-número)
   BAILEYS_AUTH_DIR: z.string().default(".baileys-auth"),
   BAILEYS_PER_NUMBER_DAILY_CAP: z.coerce.number().int().positive().default(30), // warm-up conservador por chip

@@ -1,28 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { LeadStatus } from "@prisma/client";
-import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
+import { deleteCampaign, updateCampaign } from "@/server/services/campaign.service";
 
 export const dynamic = "force-dynamic";
-
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const lead = await getLeadDetail(id);
-  if (!lead) {
-    return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
-  }
-  return NextResponse.json({ lead });
-}
 
 const updateSchema = z
   .object({
     name: z.string().min(1, "Nome obrigatório").optional(),
-    phone: z.string().min(1, "Telefone obrigatório").optional(),
-    status: z.nativeEnum(LeadStatus).optional(),
-    optOut: z.boolean().optional(),
+    messageTemplate: z
+      .string()
+      .min(1, "Template obrigatório")
+      .refine((t) => /\{\{\s*nome\s*\}\}/i.test(t), {
+        message: "O template deve conter {{nome}}",
+      })
+      .optional(),
+    // null = volta ao default do env; número positivo = teto diário
+    dailyCap: z.number().int().positive().nullable().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 
@@ -40,11 +33,11 @@ export async function PATCH(
     );
   }
   try {
-    const lead = await updateLead(id, parsed.data);
-    return NextResponse.json({ lead });
+    await updateCampaign(id, parsed.data);
+    return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao atualizar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao atualizar campanha" },
       { status: 400 },
     );
   }
@@ -56,11 +49,11 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    await deleteLead(id);
+    await deleteCampaign(id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao apagar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao apagar campanha" },
       { status: 400 },
     );
   }
