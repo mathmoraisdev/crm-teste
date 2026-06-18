@@ -10,11 +10,25 @@ export async function sentToday(now: Date): Promise<number> {
   });
 }
 
+/** Quantos jobs cada número já enviou hoje (p/ cap por chip — Baileys). */
+export async function sentTodayByNumber(now: Date): Promise<Record<string, number>> {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const rows = await prisma.outboundJob.groupBy({
+    by: ["whatsAppNumberId"],
+    where: { status: "SENT", sentAt: { gte: start }, whatsAppNumberId: { not: null } },
+    _count: { _all: true },
+  });
+  const map: Record<string, number> = {};
+  for (const r of rows) if (r.whatsAppNumberId) map[r.whatsAppNumberId] = r._count._all;
+  return map;
+}
+
 /**
  * Reserva atomicamente 1 job PENDING (status → SENDING via updateMany com guarda)
  * de uma campanha que NÃO esteja pausada, e o processa. Retorna true se enviou.
  */
-export async function processNextJob(now: Date): Promise<boolean> {
+export async function processNextJob(now: Date, numberId?: string): Promise<boolean> {
   const candidate = await prisma.outboundJob.findFirst({
     where: {
       status: "PENDING",
@@ -34,7 +48,7 @@ export async function processNextJob(now: Date): Promise<boolean> {
   if (claim.count === 0) return false; // outro worker pegou
 
   try {
-    await dispatchOutboundJob(candidate.id);
+    await dispatchOutboundJob(candidate.id, { numberId });
     return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -1,20 +1,43 @@
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
-import { processNextJob, sentToday } from "./dispatcher";
+import { processNextJob, sentToday, sentTodayByNumber } from "./dispatcher";
+import { selectNumber } from "@/server/whatsapp/baileys/selection";
+import { sleep } from "@/lib/humanize";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Boot do modo Baileys: sobe o pool e liga inbound/ack ao domínio. */
+async function bootBaileys() {
+  const { connectAll, registerHandlers } = await import("@/server/whatsapp/baileys/pool");
+  const { handleInbound } = await import("@/server/services/conversation.service");
+  const { applyAck } = await import("@/server/services/webhook.service");
+  registerHandlers({
+    onInbound: (e) =>
+      handleInbound({ phone: e.fromPhone, text: e.text, providerMessageId: e.providerMessageId }).then(() => {}),
+    onAck: (id, status) => applyAck(id, status),
+  });
+  await connectAll();
+}
+
+/** Escolhe o chip menos carregado e elegível para a próxima iteração. */
+async function pickNumberId(now: Date): Promise<string | null> {
+  const counts = await sentTodayByNumber(now);
+  const { prisma } = await import("@/server/db/client");
+  const nums = await prisma.whatsAppNumber.findMany({
+    select: { id: true, status: true, dailyCap: true },
+  });
+  const chosen = selectNumber(
+    nums.map((n) => ({ id: n.id, status: n.status, dailyCap: n.dailyCap, sentToday: counts[n.id] ?? 0 })),
+  );
+  return chosen?.id ?? null;
+}
 
 async function main() {
-  console.log(
-    "[worker] iniciado. cap/dia=%d intervalo=%dms",
-    env.WHATSAPP_DAILY_CAP,
-    env.WHATSAPP_MIN_INTERVAL_MS,
-  );
+  console.log("[worker] iniciado. modo=%s cap/dia=%d", env.WHATSAPP_MODE, env.WHATSAPP_DAILY_CAP);
+  if (env.WHATSAPP_MODE === "baileys") await bootBaileys();
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = new Date();
     const hour = hourInTz(now, env.SCHEDULING_TIMEZONE);
-
     if (
       !isWithinWindow(hour, {
         startHour: env.WHATSAPP_SEND_START_HOUR,
@@ -25,16 +48,24 @@ async function main() {
       continue;
     }
     if ((await sentToday(now)) >= env.WHATSAPP_DAILY_CAP) {
-      await sleep(60_000); // cap diário atingido
+      await sleep(60_000); // cap diário global atingido
       continue;
     }
 
-    const sent = await processNextJob(now);
-    if (sent) {
-      await sleep(env.WHATSAPP_MIN_INTERVAL_MS + jitterMs(env.WHATSAPP_JITTER_MS));
-    } else {
-      await sleep(env.WORKER_POLL_MS); // fila vazia / nada elegível
+    let numberId: string | undefined;
+    if (env.WHATSAPP_MODE === "baileys") {
+      const id = await pickNumberId(now);
+      if (!id) {
+        await sleep(30_000); // todos no cap / sem chip saudável
+        continue;
+      }
+      numberId = id;
     }
+
+    const sent = await processNextJob(now, numberId);
+    await sleep(
+      sent ? env.WHATSAPP_MIN_INTERVAL_MS + jitterMs(env.WHATSAPP_JITTER_MS) : env.WORKER_POLL_MS,
+    );
   }
 }
 
