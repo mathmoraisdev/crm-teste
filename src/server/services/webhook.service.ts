@@ -7,15 +7,23 @@ const STATUS_MAP: Record<string, "DELIVERED" | "READ" | "FAILED" | "SENT"> = {
   failed: "FAILED",
 };
 
+/** Atualiza UMA mensagem pelo providerMessageId (usado por webhook E Baileys). */
+export async function applyAck(
+  providerMessageId: string,
+  status: "DELIVERED" | "READ" | "FAILED" | "SENT",
+): Promise<void> {
+  await prisma.message.updateMany({
+    where: { providerMessageId },
+    data: { status },
+  });
+}
+
 /** Atualiza Message.status a partir dos eventos `statuses` do Graph API. */
 export async function applyStatuses(statuses: any[]): Promise<void> {
   for (const s of statuses ?? []) {
     const mapped = STATUS_MAP[s.status];
     if (!mapped || !s.id) continue;
-    await prisma.message.updateMany({
-      where: { providerMessageId: s.id },
-      data: { status: mapped },
-    });
+    await applyAck(s.id, mapped);
   }
 }
 
