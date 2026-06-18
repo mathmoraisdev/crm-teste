@@ -12,7 +12,8 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "test": "vitest run",
-    "worker": "tsx src/server/worker/run.ts"
+    "worker": "tsx --env-file-if-exists=.env src/server/worker/run.ts",
+    "wa:link": "tsx --env-file-if-exists=.env scripts/wa-link.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
