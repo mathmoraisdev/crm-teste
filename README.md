@@ -224,9 +224,12 @@ cola de socket exige um chip real (smoke manual).
   `cloud-api` (oficial, fallback). O `cloud-api.ts` permanece **intacto** — em
   campanha crítica ou se todos os chips caírem, troca-se a env var (zero mudança
   de código de negócio).
-- **Parear chip:** `npm run wa:link -- "<label>" "<+E164>"` e escaneie o QR em
-  *WhatsApp > Aparelhos conectados*. As sessões ficam em `BAILEYS_AUTH_DIR`
-  (uma subpasta por chip) e **não devem ser commitadas** (já no `.gitignore`).
+- **Parear chip:** no app, em *Campanhas › Números WhatsApp*, clique **Adicionar
+  número** e escaneie o QR (o **worker precisa estar rodando** — é ele que gera o
+  QR e o grava em `WhatsAppNumber.pairingQr`, lido pela UI). Alternativa via
+  terminal: `npm run wa:link -- "<label>" "<+E164>"`. As sessões ficam em
+  `BAILEYS_AUTH_DIR` (uma subpasta por chip) e **não devem ser commitadas** (já
+  no `.gitignore`).
 - **Rotação + warm-up:** o worker escolhe o chip **conectado menos carregado**
   (espalha a carga) que ainda esteja abaixo do próprio `dailyCap`. Comece cada
   chip baixo (~20–30/dia) e suba ao longo de 2–4 semanas observando quedas/bans.
