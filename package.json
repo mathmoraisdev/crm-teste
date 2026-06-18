@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "test": "vitest run",
     "worker": "tsx --env-file-if-exists=.env src/server/worker/run.ts",
-    "wa:link": "tsx --env-file-if-exists=.env scripts/wa-link.ts"
+    "wa:link": "tsx --env-file-if-exists=.env scripts/wa-link.ts",
+    "ai:smoke": "tsx --env-file-if-exists=.env scripts/ai-smoke.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
