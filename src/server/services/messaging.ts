@@ -1,16 +1,46 @@
 import { prisma } from "@/server/db/client";
 import { getWhatsApp } from "@/server/whatsapp";
 import { env } from "@/lib/env";
+import { typingDelayMs, sleep } from "@/lib/humanize";
+import { send as poolSend, isOnWhatsApp } from "@/server/whatsapp/baileys/pool";
 
 /**
- * Envia uma mensagem via WhatsApp (mock ou real) e persiste como OUTBOUND.
- * Fonte única de verdade para envio — usada pela conversa e pelo agendamento,
- * evitando duplicar a lógica de persistência em cada lugar.
+ * Envia uma mensagem via WhatsApp (mock, cloud-api ou baileys) e persiste como
+ * OUTBOUND. Fonte única de verdade para envio reativo — usada pela conversa e
+ * pelo agendamento, evitando duplicar a lógica de persistência em cada lugar.
  */
 export async function sendWhatsAppMessage(
-  lead: { id: string; phone: string },
+  lead: { id: string; phone: string; whatsAppNumberId?: string | null },
   text: string,
 ): Promise<void> {
+  if (env.WHATSAPP_MODE === "baileys") {
+    // responde pelo chip que iniciou a conversa; senão, qualquer um conectado
+    let numberId = lead.whatsAppNumberId ?? null;
+    if (!numberId) {
+      const healthy = await prisma.whatsAppNumber.findFirst({
+        where: { status: { in: ["CONNECTED", "WARMING"] } },
+        select: { id: true },
+      });
+      numberId = healthy?.id ?? null;
+    }
+    if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
+    const out = await poolSend(numberId, lead.phone, text);
+    if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
+    await prisma.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "OUTBOUND",
+        content: text,
+        providerMessageId: out.providerMessageId,
+        status: "SENT",
+        whatsAppNumberId: numberId,
+      },
+    });
+    await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
+    return;
+  }
+
+  // caminho original (mock/cloud-api):
   const wa = getWhatsApp();
   const { providerMessageId } = await wa.sendMessage(lead.phone, text);
   await prisma.message.create({
@@ -33,14 +63,22 @@ export async function sendWhatsAppMessage(
  * Executa um OutboundJob: respeita opt-out, escolhe template (cold) vs texto
  * (freeform/janela 24h), envia, persiste OUTBOUND e move o lead p/ CONTATADO.
  * Lança em falha (o worker trata retry/erro).
+ *
+ * No modo `baileys` o envio é roteado pelo chip escolhido na rotação (numberId
+ * vindo do worker): verifica `onWhatsApp`, aplica o delay humano e grava o
+ * `whatsAppNumberId` em job/message/lead (auditoria + cap por chip).
  */
-export async function dispatchOutboundJob(jobId: string): Promise<void> {
+export async function dispatchOutboundJob(
+  jobId: string,
+  opts: { numberId?: string } = {},
+): Promise<void> {
   const job = await prisma.outboundJob.findUnique({
     where: { id: jobId },
     include: { lead: { select: { id: true, name: true, phone: true, optOut: true } } },
   });
   if (!job || !job.lead) return;
-  if (job.lead.optOut) {
+  const { lead } = job;
+  if (lead.optOut) {
     await prisma.outboundJob.update({
       where: { id: jobId },
       data: { status: "CANCELLED", lastError: "lead em opt-out" },
@@ -48,10 +86,56 @@ export async function dispatchOutboundJob(jobId: string): Promise<void> {
     return;
   }
 
-  const wa = getWhatsApp();
-  const { lead } = job;
-  let providerMessageId: string;
+  // ── Baileys (multi-número) ──────────────────────────────────────────────
+  if (env.WHATSAPP_MODE === "baileys") {
+    const numberId = opts.numberId;
+    if (!numberId) throw new Error("Baileys exige numberId (rotação no worker)");
 
+    if (env.BAILEYS_ONWHATSAPP_CHECK && !(await isOnWhatsApp(numberId, lead.phone))) {
+      await prisma.outboundJob.update({
+        where: { id: jobId },
+        data: { status: "CANCELLED", lastError: "número não está no WhatsApp" },
+      });
+      return;
+    }
+
+    // simula digitação proporcional ANTES de enviar
+    await sleep(
+      typingDelayMs(job.content.length, {
+        msPerChar: env.BAILEYS_TYPING_MS_PER_CHAR,
+        maxMs: env.BAILEYS_TYPING_MAX_MS,
+      }),
+    );
+
+    const out = await poolSend(numberId, lead.phone, job.content);
+    if (!out.ok) throw new Error(`baileys send falhou: ${out.reason}`);
+
+    await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          leadId: lead.id,
+          direction: "OUTBOUND",
+          content: job.content,
+          providerMessageId: out.providerMessageId,
+          status: "SENT",
+          whatsAppNumberId: numberId,
+        },
+      }),
+      prisma.outboundJob.update({
+        where: { id: jobId },
+        data: { status: "SENT", sentAt: new Date(), whatsAppNumberId: numberId },
+      }),
+      prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: "CONTATADO", updatedAt: new Date(), whatsAppNumberId: numberId },
+      }),
+    ]);
+    return;
+  }
+
+  // ── mock / cloud-api (caminho original, inalterado) ─────────────────────
+  const wa = getWhatsApp();
+  let providerMessageId: string;
   if (job.kind === "template" && env.WHATSAPP_TEMPLATE_NAME && wa.mode === "cloud-api") {
     const res = await wa.sendTemplate(
       lead.phone,
