@@ -247,6 +247,7 @@ export function LeadsDashboard() {
               id: editing.id,
               name: editing.name,
               phone: editing.phone,
+              email: editing.email,
               status: editing.status,
               optOut: editing.optOut,
             }}

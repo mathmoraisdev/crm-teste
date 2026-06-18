@@ -79,6 +79,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           <h1 className="text-xl font-semibold tracking-tight">{lead.name}</h1>
           <p className="text-sm text-slate-500">
             {formatPhone(lead.phone)}
+            {lead.email && <> · {lead.email}</>}
             {lead.campaign && <> · {lead.campaign.name}</>}
           </p>
         </div>
@@ -124,6 +125,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             id: lead.id,
             name: lead.name,
             phone: lead.phone,
+            email: lead.email,
             status: lead.status,
             optOut: lead.optOut,
           }}

@@ -23,6 +23,7 @@ export const qualificationSchema = z.object({
   urgency: z.enum(["baixa", "media", "alta"]).nullable(),
   budget: z.string().nullable(),
   preferredMeetingTime: z.string().nullable(),
+  email: z.string().nullable(),
   score: z.number().min(0).max(100),
   summary: z.string(),
   nextAction: z.enum(NEXT_ACTIONS),
@@ -63,6 +64,11 @@ export const qualificationJsonSchema = {
       type: ["string", "null"],
       description: "Preferência de horário citada em texto livre, se houver.",
     },
+    email: {
+      type: ["string", "null"],
+      description:
+        "E-mail do lead, SE ele informou em algum momento da conversa. null se não mencionado. Nunca invente.",
+    },
     score: {
       type: "integer",
       minimum: 0,
@@ -89,6 +95,7 @@ export const qualificationJsonSchema = {
     "urgency",
     "budget",
     "preferredMeetingTime",
+    "email",
     "score",
     "summary",
     "nextAction",

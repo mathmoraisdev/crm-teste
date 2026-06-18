@@ -2,11 +2,13 @@ import { prisma } from "@/server/db/client";
 import type { Lead, LeadStatus, Prisma } from "@prisma/client";
 import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
+import { normalizeEmail } from "@/lib/email";
 
 export interface LeadListItem {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
   status: LeadStatus;
   score: number;
   optOut: boolean;
@@ -37,6 +39,7 @@ export async function listLeads(): Promise<LeadListItem[]> {
     id: l.id,
     name: l.name,
     phone: l.phone,
+    email: l.email,
     status: l.status,
     score: l.score,
     optOut: l.optOut,
@@ -62,16 +65,22 @@ export async function getLeadDetail(id: string) {
 
 export type LeadDetail = NonNullable<Awaited<ReturnType<typeof getLeadDetail>>>;
 
-/** Cria um lead avulso (NOVO). Idempotente por telefone (upsert do nome). */
-export async function createLead(name: string, rawPhone: string): Promise<Lead> {
+/** Cria um lead avulso (NOVO). Idempotente por telefone (upsert do nome/e-mail). */
+export async function createLead(
+  name: string,
+  rawPhone: string,
+  rawEmail?: string,
+): Promise<Lead> {
   const phone = normalizePhone(rawPhone);
   if (!phone) {
     throw new Error(`Telefone inválido: ${rawPhone}`);
   }
+  const email = normalizeEmail(rawEmail);
+  if (rawEmail?.trim() && !email) throw new Error(`E-mail inválido: ${rawEmail}`);
   return prisma.lead.upsert({
     where: { phone },
-    update: { name },
-    create: { name, phone, status: "NOVO" },
+    update: { name, ...(email ? { email } : {}) },
+    create: { name, phone, email, status: "NOVO" },
   });
 }
 
@@ -81,7 +90,7 @@ export async function createLead(name: string, rawPhone: string): Promise<Lead> 
  */
 export async function updateLead(
   id: string,
-  data: { name?: string; phone?: string; status?: LeadStatus; optOut?: boolean },
+  data: { name?: string; phone?: string; email?: string; status?: LeadStatus; optOut?: boolean },
 ): Promise<Lead> {
   const exists = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
   if (!exists) throw new Error("Lead não encontrado");
@@ -89,6 +98,12 @@ export async function updateLead(
   const patch: Prisma.LeadUpdateInput = {};
   if (data.name !== undefined) patch.name = data.name;
   if (data.status !== undefined) patch.status = data.status;
+  if (data.email !== undefined) {
+    // string vazia limpa o e-mail; valor preenchido precisa ser válido.
+    const email = data.email.trim() ? normalizeEmail(data.email) : null;
+    if (data.email.trim() && !email) throw new Error("E-mail inválido.");
+    patch.email = email;
+  }
   if (data.optOut !== undefined) {
     patch.optOut = data.optOut;
     patch.optOutAt = data.optOut ? new Date() : null;

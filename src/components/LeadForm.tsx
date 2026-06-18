@@ -9,6 +9,7 @@ export interface LeadFormValues {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
   status: LeadStatus;
   optOut: boolean;
 }
@@ -27,6 +28,7 @@ export function LeadForm({
   const editing = !!lead;
   const [name, setName] = useState(lead?.name ?? "");
   const [phone, setPhone] = useState(lead?.phone ?? "");
+  const [email, setEmail] = useState(lead?.email ?? "");
   const [status, setStatus] = useState<LeadStatus>(lead?.status ?? "NOVO");
   const [optOut, setOptOut] = useState(lead?.optOut ?? false);
   const [loading, setLoading] = useState(false);
@@ -45,8 +47,8 @@ export function LeadForm({
     setLoading(true);
     try {
       const body = editing
-        ? { name: name.trim(), phone: phone.trim(), status, optOut }
-        : { name: name.trim(), phone: phone.trim() };
+        ? { name: name.trim(), phone: phone.trim(), email: email.trim(), status, optOut }
+        : { name: name.trim(), phone: phone.trim(), email: email.trim() };
       const res = await fetch(editing ? `/api/leads/${lead!.id}` : "/api/leads", {
         method: editing ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -84,6 +86,22 @@ export function LeadForm({
         />
         <p className="mt-1 text-xs text-slate-400">
           Aceita formato livre — é normalizado para E.164 (assume Brasil sem DDI).
+        </p>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          E-mail <span className="text-slate-400">(opcional)</span>
+        </label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="maria@empresa.com"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        />
+        <p className="mt-1 text-xs text-slate-400">
+          A IA também captura sozinha quando o lead informa na conversa.
         </p>
       </div>
 

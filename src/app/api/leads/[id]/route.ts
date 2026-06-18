@@ -21,6 +21,7 @@ const updateSchema = z
   .object({
     name: z.string().min(1, "Nome obrigatório").optional(),
     phone: z.string().min(1, "Telefone obrigatório").optional(),
+    email: z.string().optional(),
     status: z.nativeEnum(LeadStatus).optional(),
     optOut: z.boolean().optional(),
   })

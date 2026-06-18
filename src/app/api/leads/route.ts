@@ -12,6 +12,7 @@ export async function GET() {
 const createSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   phone: z.string().min(1, "Telefone obrigatório"),
+  email: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const lead = await createLead(parsed.data.name, parsed.data.phone);
+    const lead = await createLead(parsed.data.name, parsed.data.phone, parsed.data.email);
     return NextResponse.json({ lead }, { status: 201 });
   } catch (e) {
     return NextResponse.json(

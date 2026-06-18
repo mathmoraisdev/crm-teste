@@ -69,6 +69,7 @@ model Lead {
   id            String         @id @default(cuid())
   name          String
   phone         String         @unique // E.164 normalizado
+  email         String? // capturado pela IA na conversa (ou informado manualmente)
   status        LeadStatus     @default(NOVO)
   score         Int            @default(0)
   campaign      Campaign?      @relation(fields: [campaignId], references: [id])

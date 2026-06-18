@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { runQualification, type ConversationTurn } from "@/server/ai/qualification.agent";
 import type { QualificationResult } from "@/server/ai/schemas";
+import { normalizeEmail } from "@/lib/email";
 
 /**
  * Roda o agente de qualificação sobre a conversa e persiste o resultado:
@@ -18,6 +19,9 @@ export async function qualifyLead(opts: {
   });
 
   const score = Math.round(result.score);
+  // e-mail capturado pela IA: só grava se for válido (não sobrescreve com null
+  // num turno em que o lead não repetiu o e-mail).
+  const email = normalizeEmail(result.email);
 
   await prisma.$transaction([
     prisma.qualification.upsert({
@@ -52,7 +56,7 @@ export async function qualifyLead(opts: {
     }),
     prisma.lead.update({
       where: { id: opts.leadId },
-      data: { score },
+      data: { score, ...(email ? { email } : {}) },
     }),
   ]);
 
