@@ -202,7 +202,7 @@ Acréscimos sugeridos (não-destrutivos):
       `hub.challenge` (rota já existe) + validação de assinatura do payload.
 
 ### Segurança / config
-- [ ] Segredos (`WHATSAPP_TOKEN`, `ANTHROPIC_API_KEY`) em secret manager da plataforma,
+- [ ] Segredos (`WHATSAPP_TOKEN`, `OPENAI_API_KEY`) em secret manager da plataforma,
       nunca no repo.
 - [ ] Token do WhatsApp: usar **token de sistema permanente** (não o temporário de 24h
       do painel de testes).

@@ -6,7 +6,7 @@ automaticamente com IA**, move o lead num pipeline comercial e **agenda reunião
 quando qualificado — tudo de forma conversacional.
 
 > **Roda 100% local.** WhatsApp e Google Calendar têm modo **mock** (sem conta
-> Meta/Google). A única credencial obrigatória é a `ANTHROPIC_API_KEY` — a IA é
+> Meta/Google). A única credencial obrigatória é a `OPENAI_API_KEY` — a IA é
 > o núcleo do produto e é sempre real.
 
 ---
@@ -14,11 +14,11 @@ quando qualificado — tudo de forma conversacional.
 ## Como rodar
 
 Pré-requisitos: **Node 20.12+** (o worker carrega o `.env` via
-`--env-file-if-exists`), **Docker** (para o Postgres) e uma `ANTHROPIC_API_KEY`.
+`--env-file-if-exists`), **Docker** (para o Postgres) e uma `OPENAI_API_KEY`.
 
 ```bash
 # 1. Variáveis de ambiente
-cp .env.example .env        # preencha ANTHROPIC_API_KEY
+cp .env.example .env        # preencha OPENAI_API_KEY
 
 # 2. Banco (Postgres 16 via Docker)
 docker compose up -d
@@ -65,15 +65,15 @@ Cada mensagem inbound passa pela orquestração em
 1. **Dedupe** por `providerMessageId` → salva `Message(INBOUND)`.
 2. Lead `NOVO`/`CONTATADO` → `EM_CONVERSA`.
 3. Se há reunião **proposta**, a IA interpreta a **escolha de horário** e agenda.
-4. Senão: **agente de qualificação** (Sonnet, JSON estruturado via tool-use) →
-   `Qualification` + score.
+4. Senão: **agente de qualificação** (gpt-4o, JSON estruturado via function
+   calling) → `Qualification` + score.
 5. **Regras de pipeline** ([`pipeline.ts`](src/server/services/pipeline.ts),
    função pura): `score ≥ 70` ou `schedule_meeting` → **Qualificado** (propõe
    horários); `score < 40` **e** desinteresse explícito → **Descartado**; senão
-   **agente de conversa** (Haiku) gera a próxima pergunta.
+   **agente de conversa** (gpt-4o-mini) gera a próxima pergunta.
 
-**Tiering de modelos** (requisito atendido): Haiku (`AI_MODEL_CHEAP`) para
-classificação/próxima pergunta; Sonnet (`AI_MODEL_STRONG`) para a qualificação
+**Tiering de modelos** (requisito atendido): gpt-4o-mini (`AI_MODEL_CHEAP`) para
+classificação/próxima pergunta; gpt-4o (`AI_MODEL_STRONG`) para a qualificação
 estruturada e decisões.
 
 ---
@@ -88,7 +88,7 @@ UI (app/ + components/)
    └─ Route Handlers (app/api/*)  — validação zod + delegação
         └─ server/services         — orquestração de domínio
              ├─ pipeline.ts (state machine pura, testada)
-             ├─ server/ai          — Anthropic, 2 tiers (Haiku/Sonnet)
+             ├─ server/ai          — OpenAI, 2 tiers (gpt-4o-mini/gpt-4o)
              ├─ server/whatsapp     — interface · mock | cloud-api | baileys  (factory por env)
              └─ server/calendar     — interface · mock | google-calendar (factory por env)
 ```
@@ -112,9 +112,9 @@ nota de produção (abaixo).
 
 | Variável | Default | Observação |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Obrigatória.** Núcleo do produto. |
-| `AI_MODEL_CHEAP` | `claude-haiku-4-5` | Classificação / próxima pergunta. |
-| `AI_MODEL_STRONG` | `claude-sonnet-4-6` | Qualificação estruturada / decisões. |
+| `OPENAI_API_KEY` | — | **Obrigatória.** Núcleo do produto. |
+| `AI_MODEL_CHEAP` | `gpt-4o-mini` | Classificação / próxima pergunta. |
+| `AI_MODEL_STRONG` | `gpt-4o` | Qualificação estruturada / decisões. |
 | `WHATSAPP_MODE` | `mock` | `cloud-api` exige `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`; `baileys` = transporte não-oficial multi-número (ver [Caminho B](#caminho-b--baileys-multi-número-não-oficial)). |
 | `CALENDAR_MODE` | `mock` | `google-calendar` exige `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`. |
 | `SCHEDULING_TIMEZONE` | `America/Sao_Paulo` | Fuso para propor horários e para a janela de envio. |
@@ -163,7 +163,7 @@ O MVP foi desenhado pensando no caminho de produção. O que mudaria:
 - **LGPD / opt-in.** Opt-out automático já implementado (inbound “PARAR/SAIR/STOP”
   → lead `DESCARTADO` + jobs pendentes cancelados); falta registrar a base de
   consentimento (`consentSource`) e a política de retenção/anonimização.
-- **IA barata × forte.** Já implementado (Haiku × Sonnet). Em escala: caching de
+- **IA barata × forte.** Já implementado (gpt-4o-mini × gpt-4o). Em escala: caching de
   prompt, batching de classificações e fallback de modelo.
 - **Migrations versionadas.** Trocar `db push` por `prisma migrate` com histórico
   versionado e revisão em PR.
@@ -267,7 +267,7 @@ src/
 │   └── api/                  # leads, campaigns, webhooks/whatsapp, dev/simulate-reply
 ├── components/               # UI (tabela, kanban, conversa, qualificação, formulários)
 ├── server/
-│   ├── ai/                   # provider (Anthropic) + agentes + schemas + prompts
+│   ├── ai/                   # provider (OpenAI) + agentes + schemas + prompts
 │   ├── whatsapp/             # types · mock · cloud-api · index (factory)
 │   ├── calendar/             # types · mock · google-calendar · index (factory)
 │   ├── services/             # lead · campaign · conversation · qualification · scheduling · pipeline
