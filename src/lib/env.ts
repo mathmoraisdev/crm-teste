@@ -16,7 +16,7 @@ const schema = z.object({
   AI_MODEL_CHEAP: z.string().default("claude-haiku-4-5"),
   AI_MODEL_STRONG: z.string().default("claude-sonnet-4-6"),
 
-  WHATSAPP_MODE: z.enum(["mock", "cloud-api"]).default("mock"),
+  WHATSAPP_MODE: z.enum(["mock", "cloud-api", "baileys"]).default("mock"),
   WHATSAPP_TOKEN: z.string().optional().default(""),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
   WHATSAPP_VERIFY_TOKEN: z.string().optional().default("meu-verify-token"),
@@ -38,6 +38,13 @@ const schema = z.object({
   WHATSAPP_TEMPLATE_LANG: z.string().default("pt_BR"),
   WHATSAPP_APP_SECRET: z.string().optional().default(""), // validação de assinatura do webhook
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
+
+  // Baileys (transporte não-oficial, multi-número)
+  BAILEYS_AUTH_DIR: z.string().default(".baileys-auth"),
+  BAILEYS_PER_NUMBER_DAILY_CAP: z.coerce.number().int().positive().default(30), // warm-up conservador por chip
+  BAILEYS_ONWHATSAPP_CHECK: z.coerce.boolean().default(true), // pula número sem WhatsApp
+  BAILEYS_TYPING_MS_PER_CHAR: z.coerce.number().int().nonnegative().default(55), // simula digitação
+  BAILEYS_TYPING_MAX_MS: z.coerce.number().int().positive().default(9000), // teto do "digitando..."
 });
 
 const parsed = schema.safeParse(process.env);
