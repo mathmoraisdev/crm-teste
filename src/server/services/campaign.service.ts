@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
+import { renderSpintax } from "@/lib/spintax";
 
 export interface CampaignListItem {
   id: string;
@@ -106,7 +107,8 @@ export async function startCampaign(
         leadId: lead.id,
         campaignId,
         kind: useTemplate ? "template" : "freeform",
-        content: renderTemplate(campaign.messageTemplate, lead.name),
+        // spin primeiro ({a|b} aleatório por lead), nome depois ({{nome}})
+        content: renderTemplate(renderSpintax(campaign.messageTemplate), lead.name),
         templateName: useTemplate ? env.WHATSAPP_TEMPLATE_NAME : null,
       })),
     }),
