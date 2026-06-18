@@ -2,7 +2,13 @@ import { prisma } from "@/server/db/client";
 import { getWhatsApp } from "@/server/whatsapp";
 import { env } from "@/lib/env";
 import { typingDelayMs, sleep } from "@/lib/humanize";
-import { send as poolSend, isOnWhatsApp } from "@/server/whatsapp/baileys/pool";
+
+/**
+ * O pool Baileys é importado de forma PREGUIÇOSA (só quando WHATSAPP_MODE=baileys).
+ * Assim os modos mock/cloud-api — e o bundle do Next que importa este módulo —
+ * nunca carregam a lib não-oficial (pesada, só-Node).
+ */
+const loadPool = () => import("@/server/whatsapp/baileys/pool");
 
 /**
  * Envia uma mensagem via WhatsApp (mock, cloud-api ou baileys) e persiste como
@@ -24,6 +30,7 @@ export async function sendWhatsAppMessage(
       numberId = healthy?.id ?? null;
     }
     if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
+    const { send: poolSend } = await loadPool();
     const out = await poolSend(numberId, lead.phone, text);
     if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
     await prisma.message.create({
@@ -91,6 +98,7 @@ export async function dispatchOutboundJob(
     const numberId = opts.numberId;
     if (!numberId) throw new Error("Baileys exige numberId (rotação no worker)");
 
+    const { send: poolSend, isOnWhatsApp } = await loadPool();
     if (env.BAILEYS_ONWHATSAPP_CHECK && !(await isOnWhatsApp(numberId, lead.phone))) {
       await prisma.outboundJob.update({
         where: { id: jobId },
