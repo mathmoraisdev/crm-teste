@@ -52,6 +52,15 @@ enum MeetingStatus {
   CANCELLED
 }
 
+enum WhatsAppNumberStatus {
+  CONNECTING    // pareando / subindo socket
+  CONNECTED     // saudável, pode enviar
+  WARMING       // conectado, mas em warm-up (cap reduzido)
+  PAUSED        // pausado manualmente
+  BANNED        // logout/403 detectado — fora da rotação
+  DISABLED      // desativado pelo operador
+}
+
 model Lead {
   id            String         @id @default(cuid())
   name          String
@@ -67,6 +76,9 @@ model Lead {
   optOutAt      DateTime?
   consentSource String? // origem do opt-in (LGPD)
   outboundJobs  OutboundJob[]
+  // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
+  whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
+  whatsAppNumberId String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -81,6 +93,9 @@ model Message {
   content           String
   providerMessageId String?          @unique // dedupe de webhook
   status            MessageStatus?
+  // qual chip enviou/recebeu — auditoria (Baileys multi-número)
+  whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])
+  whatsAppNumberId  String?
   createdAt         DateTime         @default(now())
 
   @@index([leadId, createdAt])
@@ -143,10 +158,34 @@ model OutboundJob {
   lastError    String?
   scheduledFor DateTime          @default(now())
   sentAt       DateTime?
+  // qual chip enviou (auditoria + cap por número + roteamento de resposta)
+  whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
+  whatsAppNumberId String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   @@index([status, scheduledFor])
   @@index([leadId])
   @@index([campaignId])
+  @@index([whatsAppNumberId, status, sentAt])
+}
+
+model WhatsAppNumber {
+  id           String               @id @default(cuid())
+  label        String               // apelido operacional ("chip-01")
+  phone        String               @unique // número do próprio chip, E.164
+  sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR
+  status       WhatsAppNumberStatus @default(CONNECTING)
+  dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up)
+  lastError    String?
+  connectedAt  DateTime?
+  bannedAt     DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  outboundJobs OutboundJob[]
+  messages     Message[]
+  leads        Lead[]
+
+  @@index([status])
 }
