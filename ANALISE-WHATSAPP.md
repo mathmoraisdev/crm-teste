@@ -18,6 +18,12 @@
   **sem fila, sem throttle, sem template, sem monitoramento de qualidade**. Essa é a
   lacuna real a fechar antes de produção.
 - **Recomendação: Caminho A (Cloud API oficial).**
+- **Atualização:** o **Caminho B (Baileys multi-número)** agora está **implementado e
+  selecionável** por `WHATSAPP_MODE=baileys`, com uma camada anti-ban (warm-up por
+  chip, spintax, simulação humana, `onWhatsApp`, detecção de ban + rotação). A Cloud
+  API continua como **fallback** (`cloud-api`). Isso **não muda a recomendação**: B
+  reduz a probabilidade de queda, não a elimina — a qualidade do opt-in segue sendo
+  responsabilidade operacional. Ver [README → Caminho B](README.md#caminho-b--baileys-multi-número-não-oficial).
 
 ---
 
@@ -61,6 +67,16 @@ anti-spam, mas sem nenhum dos sinais de legitimidade do caminho oficial (negóci
 verificado, opt-in registrado, template). Técnicas de mitigação (warm-up agressivo,
 delays grandes, rotação de números) reduzem a taxa de queda, mas a literatura prática
 do mercado reporta quedas frequentes em operação de cold outreach a volume.
+
+> **Status de implementação (Caminho B):** ✅ disponível via `WHATSAPP_MODE=baileys`.
+> O socket Baileys é stateful e vive no **worker** (pool keyed por `WhatsAppNumber`);
+> o Next.js continua só enfileirando. Reaproveita a fila `OutboundJob`, o worker
+> (rate-limit/jitter/janela/cap) e o opt-out. Mitigações implementadas: **rotação
+> least-loaded + cap por chip** (`WhatsAppNumber.dailyCap`), **spintax** por lead,
+> **delay humano** de digitação, verificação **`onWhatsApp`**, e **health gate por
+> número** (logout/403 → `BANNED`, sai da rotação; os demais seguem). Pareamento via
+> `npm run wa:link`. Não substitui a recomendação: é alternativa para quando o
+> custo/burocracia da Cloud API não cabe, com o risco assumido.
 
 ---
 
@@ -133,9 +149,10 @@ campaign/start
    `SCHEDULING_TIMEZONE`) e **cap diário**. 1.000/dia em ~8h úteis ≈ 1 msg a cada
    ~29 s — bem confortável.
 
-3. **Warm-up** ⚠️ — rampa para número novo. Cap diário implementado via
-   `WHATSAPP_DAILY_CAP` (env) + `Campaign.dailyCap`; o operador sobe gradualmente.
-   `WhatsAppNumber.dailyCap` por número (multi-número) fica como futuro.
+3. **Warm-up** ✅ (no modo baileys) / ⚠️ (cloud-api) — rampa para número novo. Cap
+   diário global via `WHATSAPP_DAILY_CAP` (env) + `Campaign.dailyCap`. No **modo
+   baileys** há cap **por chip** (`WhatsAppNumber.dailyCap`) com rotação least-loaded;
+   no cloud-api (número único) o operador sobe o cap global gradualmente.
 
 4. **Opt-in (LGPD)** ⚠️ — campo `Lead.consentSource` existe no schema, mas registrar
    a base de consentimento da origem dos leads ainda não está cabeado. Sem opt-in,
@@ -150,8 +167,8 @@ campaign/start
    quando a qualidade cai (RED/YELLOW/FLAGGED). Alerta dedicado fica como futuro.
 
 7. **Templates** ✅ — `sendTemplate` na Cloud API + `WHATSAPP_TEMPLATE_NAME`/`_LANG`,
-   com a variável `{{nome}}`. Gestão de 2–3 variações para reduzir padrão de spam
-   fica como futuro.
+   com a variável `{{nome}}`. Variação de conteúdo p/ reduzir padrão de spam já existe
+   no modo baileys via **spintax** (`{a|b|c}` sorteado por lead, em `src/lib/spintax.ts`).
 
 ### Impacto no schema (Prisma)
 

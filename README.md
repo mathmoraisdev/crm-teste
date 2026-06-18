@@ -13,8 +13,8 @@ quando qualificado — tudo de forma conversacional.
 
 ## Como rodar
 
-Pré-requisitos: **Node 18+**, **Docker** (para o Postgres) e uma
-`ANTHROPIC_API_KEY`.
+Pré-requisitos: **Node 20.12+** (o worker carrega o `.env` via
+`--env-file-if-exists`), **Docker** (para o Postgres) e uma `ANTHROPIC_API_KEY`.
 
 ```bash
 # 1. Variáveis de ambiente
@@ -89,7 +89,7 @@ UI (app/ + components/)
         └─ server/services         — orquestração de domínio
              ├─ pipeline.ts (state machine pura, testada)
              ├─ server/ai          — Anthropic, 2 tiers (Haiku/Sonnet)
-             ├─ server/whatsapp     — interface · mock | cloud-api  (factory por env)
+             ├─ server/whatsapp     — interface · mock | cloud-api | baileys  (factory por env)
              └─ server/calendar     — interface · mock | google-calendar (factory por env)
 ```
 
@@ -115,7 +115,7 @@ nota de produção (abaixo).
 | `ANTHROPIC_API_KEY` | — | **Obrigatória.** Núcleo do produto. |
 | `AI_MODEL_CHEAP` | `claude-haiku-4-5` | Classificação / próxima pergunta. |
 | `AI_MODEL_STRONG` | `claude-sonnet-4-6` | Qualificação estruturada / decisões. |
-| `WHATSAPP_MODE` | `mock` | `cloud-api` exige `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`. |
+| `WHATSAPP_MODE` | `mock` | `cloud-api` exige `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID`; `baileys` = transporte não-oficial multi-número (ver [Caminho B](#caminho-b--baileys-multi-número-não-oficial)). |
 | `CALENDAR_MODE` | `mock` | `google-calendar` exige `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`. |
 | `SCHEDULING_TIMEZONE` | `America/Sao_Paulo` | Fuso para propor horários e para a janela de envio. |
 | `WHATSAPP_DAILY_CAP` / `WHATSAPP_MIN_INTERVAL_MS` / `WHATSAPP_JITTER_MS` | `1000` / `8000` / `4000` | Cap diário (warm-up), intervalo e jitter do worker. |
@@ -123,6 +123,10 @@ nota de produção (abaixo).
 | `WHATSAPP_TEMPLATE_NAME` / `WHATSAPP_TEMPLATE_LANG` | `""` / `pt_BR` | Template aprovado p/ cold outbound. |
 | `WHATSAPP_APP_SECRET` | `""` | Valida a assinatura `X-Hub-Signature-256` do webhook. |
 | `WORKER_POLL_MS` | `2000` | Frequência de polling do worker quando a fila está vazia. |
+| `BAILEYS_AUTH_DIR` | `.baileys-auth` | Pasta-base das sessões (1 subpasta por chip). **Nunca commitar.** |
+| `BAILEYS_PER_NUMBER_DAILY_CAP` | `30` | Teto diário **por chip** no warm-up (suba devagar). |
+| `BAILEYS_ONWHATSAPP_CHECK` | `true` | Verifica `onWhatsApp` antes de enviar (pula número inexistente). |
+| `BAILEYS_TYPING_MS_PER_CHAR` / `BAILEYS_TYPING_MAX_MS` | `55` / `9000` | Simulação humana de digitação (proporcional + teto). |
 
 ### Mock ↔ real
 
@@ -207,6 +211,44 @@ automaticamente se a Meta sinalizar queda (RED/YELLOW/FLAGGED).
 - [ ] **Token de sistema permanente** (não o temporário de 24h do painel).
 - [ ] Forma de pagamento configurada na WABA (cobrança por conversa).
 - [ ] `WHATSAPP_APP_SECRET` setado para validar a assinatura do webhook.
+
+### Caminho B — Baileys multi-número (não-oficial)
+
+Alternativa selecionável por env quando o custo/burocracia da Cloud API não cabe.
+**Reaproveita integralmente** a fila `OutboundJob`, o worker (rate-limit/jitter/
+janela/cap) e o opt-out — muda só o **transporte**. Toda a lógica pura (spintax,
+delay humano, classificação de ban, rotação de número) é testada por unidade; a
+cola de socket exige um chip real (smoke manual).
+
+- **Trocar de transporte:** `WHATSAPP_MODE=baileys` (não-oficial, multi-número) ↔
+  `cloud-api` (oficial, fallback). O `cloud-api.ts` permanece **intacto** — em
+  campanha crítica ou se todos os chips caírem, troca-se a env var (zero mudança
+  de código de negócio).
+- **Parear chip:** `npm run wa:link -- "<label>" "<+E164>"` e escaneie o QR em
+  *WhatsApp > Aparelhos conectados*. As sessões ficam em `BAILEYS_AUTH_DIR`
+  (uma subpasta por chip) e **não devem ser commitadas** (já no `.gitignore`).
+- **Rotação + warm-up:** o worker escolhe o chip **conectado menos carregado**
+  (espalha a carga) que ainda esteja abaixo do próprio `dailyCap`. Comece cada
+  chip baixo (~20–30/dia) e suba ao longo de 2–4 semanas observando quedas/bans.
+  **1.000/dia exige múltiplos chips** — o total/dia ≈ soma dos caps, ainda
+  limitado pelo `WHATSAPP_DAILY_CAP` global.
+- **Anti-spam:** `spintax` (`{oi|olá}`) varia a mensagem por lead; `onWhatsApp`
+  pula número inexistente; presença "digitando" + delay proporcional simulam
+  comportamento humano.
+- **Inbound & acks:** chegam por **evento de socket** (`messages.upsert`) → mesmo
+  `handleInbound`; a resposta sai **pelo mesmo chip** que iniciou a conversa
+  (`Lead.whatsAppNumberId`). Os acks (`messages.update`) atualizam `Message.status`
+  (DELIVERED/READ) — o webhook HTTP só é usado no modo `cloud-api`.
+- **Ban / health gate:** substitui o quality-gate da Meta. Logout/403 detectado
+  no `connection.update` (401/403) → o número vira `BANNED` e **sai da rotação**;
+  os demais seguem enviando. Reponha o chip com `wa:link`.
+- **Higiene:** IP estável (evitar datacenter volátil), não re-parear à toa, manter
+  o celular-mãe online, **opt-in real** — a taxa de denúncia da lista é o que mais
+  derruba número. Nenhuma estrutura garante 100% contra bloqueio.
+- **Worker persistente:** o socket Baileys é stateful e vive no processo do worker
+  (`npm run worker`) — precisa de processo vivo (**Railway/Render/Fly**); Vercel
+  serverless não segura o socket. A UI de *Campanhas* mostra um painel com o
+  **status de cada chip** e os **enviados hoje**.
 
 ### Banco gerenciado
 
