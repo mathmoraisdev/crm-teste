@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Mini CRM de prospecção com IA — qualificação automática de leads via WhatsApp",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
