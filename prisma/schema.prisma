@@ -188,6 +188,7 @@ model OutboundJob {
   templateName String? // nome do template aprovado (quando kind=template)
   status       OutboundJobStatus @default(PENDING)
   attempts     Int               @default(0)
+  claimedAt    DateTime?         // quando um worker travou em SENDING (p/ reaper de órfãos)
   lastError    String?
   scheduledFor DateTime          @default(now())
   sentAt       DateTime?
@@ -198,6 +199,7 @@ model OutboundJob {
   updatedAt    DateTime          @updatedAt
 
   @@index([status, scheduledFor])
+  @@index([status, claimedAt]) // reaper varre SENDING órfãos por idade do lease
   @@index([leadId])
   @@index([campaignId])
   @@index([whatsAppNumberId, status, sentAt])

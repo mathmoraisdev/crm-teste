@@ -120,7 +120,7 @@ export async function processNextJob(now: Date): Promise<boolean> {
   // Lock otimista: só "ganha" o job quem conseguir mudar PENDING→SENDING.
   const claim = await prisma.outboundJob.updateMany({
     where: { id: candidate.id, status: "PENDING" },
-    data: { status: "SENDING", attempts: { increment: 1 } },
+    data: { status: "SENDING", attempts: { increment: 1 }, claimedAt: now },
   });
   if (claim.count === 0) return false; // outro worker pegou
 
