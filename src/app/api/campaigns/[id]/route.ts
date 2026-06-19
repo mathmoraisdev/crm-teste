@@ -36,8 +36,8 @@ export async function PATCH(
     );
   }
   try {
-    await updateCampaign(id, userId, parsed.data);
-    return NextResponse.json({ ok: true });
+    const { associated } = await updateCampaign(id, userId, parsed.data);
+    return NextResponse.json({ ok: true, associated });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar campanha" },

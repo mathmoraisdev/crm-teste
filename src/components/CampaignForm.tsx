@@ -128,7 +128,9 @@ export function CampaignForm({
       {editing ? (
         <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
           Alterar a mensagem só afeta <strong>envios futuros</strong>; o que já
-          foi enfileirado mantém o texto anterior.
+          foi enfileirado mantém o texto anterior. Ao salvar, os leads{" "}
+          <strong>Novo/Contatado sem campanha</strong> são associados a esta
+          campanha (inclusive os criados depois).
         </p>
       ) : (
         <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">

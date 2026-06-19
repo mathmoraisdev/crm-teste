@@ -168,12 +168,18 @@ export async function startCampaign(
  * Edita os dados da campanha. A mensagem nova só afeta envios FUTUROS — os
  * jobs já enfileirados mantêm o texto renderizado na hora do disparo.
  * `dailyCap: null` volta a usar o default do env.
+ *
+ * Além de editar, **puxa para a campanha os leads elegíveis que ainda não têm
+ * campanha** (status disparável + `campaignId` nulo). Isso resolve o caso de
+ * leads criados DEPOIS da campanha: salvar a edição reassocia-os. Só pega leads
+ * órfãos — nunca rouba leads já vinculados a outra campanha. Retorna quantos
+ * foram associados nesta chamada.
  */
 export async function updateCampaign(
   id: string,
   userId: string,
   data: { name?: string; messageTemplate?: string; dailyCap?: number | null },
-): Promise<void> {
+): Promise<{ associated: number }> {
   const exists = await prisma.campaign.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Campanha não encontrada");
   await prisma.campaign.update({
@@ -184,6 +190,13 @@ export async function updateCampaign(
       ...(data.dailyCap !== undefined ? { dailyCap: data.dailyCap } : {}),
     },
   });
+
+  const { count } = await prisma.lead.updateMany({
+    where: { userId, campaignId: null, status: { in: DISPATCHABLE_LEAD_STATUSES } },
+    data: { campaignId: id },
+  });
+
+  return { associated: count };
 }
 
 /**
