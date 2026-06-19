@@ -37,6 +37,10 @@ const schema = z.object({
   WHATSAPP_TEMPLATE_NAME: z.string().optional().default(""),
   WHATSAPP_TEMPLATE_LANG: z.string().default("pt_BR"),
   WHATSAPP_APP_SECRET: z.string().optional().default(""), // validação de assinatura do webhook
+  // LGPD: rodapé de descadastro anexado ao outbound frio (campanhas). A palavra
+  // "SAIR" casa com o detector de opt-out inbound. Desligável p/ template aprovado.
+  OUTBOUND_OPTOUT_FOOTER: z.coerce.boolean().default(true),
+  OUTBOUND_OPTOUT_FOOTER_TEXT: z.string().default("Responda SAIR para não receber mais mensagens."),
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
   WORKER_LEASE_MS: z.coerce.number().int().positive().default(120_000), // job SENDING órfão > isto volta à fila
   WORKER_REAP_EVERY_MS: z.coerce.number().int().positive().default(30_000), // frequência do reaper

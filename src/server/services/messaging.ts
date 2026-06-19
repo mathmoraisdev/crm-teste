@@ -11,6 +11,22 @@ import { typingDelayMs, sleep } from "@/lib/humanize";
 const loadPool = () => import("@/server/whatsapp/baileys/pool");
 
 /**
+ * Pura: anexa o rodapé de descadastro (LGPD) ao conteúdo. No-op se o texto
+ * estiver vazio ou se a mensagem já o contém (evita duplicar em re-toques).
+ */
+export function appendOptOutFooter(content: string, footer: string): string {
+  const f = footer.trim();
+  if (!f || content.includes(f)) return content;
+  return `${content}\n\n${f}`;
+}
+
+/** Aplica o rodapé conforme a config de ambiente (efeito → lê env). */
+function withOptOutFooter(content: string): string {
+  if (!env.OUTBOUND_OPTOUT_FOOTER) return content;
+  return appendOptOutFooter(content, env.OUTBOUND_OPTOUT_FOOTER_TEXT);
+}
+
+/**
  * Envia uma mensagem via WhatsApp (mock, cloud-api ou baileys) e persiste como
  * OUTBOUND. Fonte única de verdade para envio reativo — usada pela conversa e
  * pelo agendamento, evitando duplicar a lógica de persistência em cada lugar.
@@ -93,6 +109,10 @@ export async function dispatchOutboundJob(
     return;
   }
 
+  // Corpo enviado = conteúdo renderizado + rodapé de descadastro (LGPD). O texto
+  // gravado em Message reflete exatamente o que saiu (auditoria).
+  const body = withOptOutFooter(job.content);
+
   // ── Baileys (multi-número) ──────────────────────────────────────────────
   if (env.WHATSAPP_MODE === "baileys") {
     const numberId = opts.numberId;
@@ -102,7 +122,7 @@ export async function dispatchOutboundJob(
 
     // simula digitação proporcional ANTES de enviar
     await sleep(
-      typingDelayMs(job.content.length, {
+      typingDelayMs(body.length, {
         msPerChar: env.BAILEYS_TYPING_MS_PER_CHAR,
         maxMs: env.BAILEYS_TYPING_MAX_MS,
       }),
@@ -110,7 +130,7 @@ export async function dispatchOutboundJob(
 
     // O send() resolve o JID canônico (corrige o 9º dígito BR) e já aplica o
     // gate anti-spam (BAILEYS_ONWHATSAPP_CHECK). Número fora do WhatsApp → cancela.
-    const out = await poolSend(numberId, lead.phone, job.content);
+    const out = await poolSend(numberId, lead.phone, body);
     if (!out.ok) {
       if (out.reason === "not_on_whatsapp") {
         await prisma.outboundJob.update({
@@ -127,7 +147,7 @@ export async function dispatchOutboundJob(
         data: {
           leadId: lead.id,
           direction: "OUTBOUND",
-          content: job.content,
+          content: body,
           providerMessageId: out.providerMessageId,
           status: "SENT",
           whatsAppNumberId: numberId,
@@ -145,9 +165,10 @@ export async function dispatchOutboundJob(
     return;
   }
 
-  // ── mock / cloud-api (caminho original, inalterado) ─────────────────────
+  // ── mock / cloud-api (caminho original) ─────────────────────────────────
   const wa = getWhatsApp();
   let providerMessageId: string;
+  let sentContent = job.content; // template aprovado não recebe rodapé
   if (job.kind === "template" && env.WHATSAPP_TEMPLATE_NAME && wa.mode === "cloud-api") {
     const res = await wa.sendTemplate(
       lead.phone,
@@ -157,8 +178,9 @@ export async function dispatchOutboundJob(
     );
     providerMessageId = res.providerMessageId;
   } else {
-    // mock OU freeform: usa o conteúdo já renderizado
-    const res = await wa.sendMessage(lead.phone, job.content);
+    // mock OU freeform: conteúdo renderizado + rodapé de descadastro
+    sentContent = body;
+    const res = await wa.sendMessage(lead.phone, sentContent);
     providerMessageId = res.providerMessageId;
   }
 
@@ -167,7 +189,7 @@ export async function dispatchOutboundJob(
       data: {
         leadId: lead.id,
         direction: "OUTBOUND",
-        content: job.content,
+        content: sentContent,
         providerMessageId,
         status: "SENT",
       },

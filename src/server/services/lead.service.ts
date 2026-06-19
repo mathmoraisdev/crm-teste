@@ -82,7 +82,8 @@ export async function createLead(
   return prisma.lead.upsert({
     where: { userId_phone: { userId, phone } },
     update: { name, ...(email ? { email } : {}) },
-    create: { userId, name, phone, email, status: "NOVO" },
+    // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
+    create: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
   });
 }
 
@@ -168,7 +169,7 @@ export async function importLeadsFromCsv(
       skipped++;
       continue;
     }
-    toCreate.push({ userId, name, phone, status: "NOVO" });
+    toCreate.push({ userId, name, phone, status: "NOVO", consentSource: "csv_import" });
   }
 
   if (toCreate.length > 0) {
