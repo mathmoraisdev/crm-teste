@@ -1,7 +1,9 @@
+import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
 import { processNextJob } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
+import { runChip } from "./chipRunner";
 import { sleep } from "@/lib/humanize";
 
 type Pool = typeof import("@/server/whatsapp/baileys/pool");
@@ -34,6 +36,9 @@ async function main() {
   const reclaimedOnBoot = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
   if (reclaimedOnBoot > 0) console.log("[worker] reaper boot: %d jobs recuperados", reclaimedOnBoot);
 
+  // Baileys: 1 runner (laço de envio) por chip enviável, supervisionado abaixo.
+  const runners = new Map<string, { stopped: boolean }>();
+
   let lastReap = Date.now();
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -47,6 +52,28 @@ async function main() {
       lastReap = Date.now();
     }
 
+    if (env.WHATSAPP_MODE === "baileys") {
+      // Reconcilia: sobe um runner por chip vivo, derruba o de chip que saiu.
+      const chips = await prisma.whatsAppNumber.findMany({
+        where: { status: { in: ["CONNECTED", "WARMING"] } },
+        select: { id: true, userId: true },
+      });
+      const live = new Set(chips.map((c) => c.id));
+      for (const c of chips) {
+        if (!runners.has(c.id)) {
+          const sig = { stopped: false };
+          runners.set(c.id, sig);
+          void runChip(c, sig).finally(() => runners.delete(c.id));
+        }
+      }
+      // sinaliza parada p/ chips que saíram (banido/pausado/desconectado)
+      for (const [id, sig] of runners) if (!live.has(id)) sig.stopped = true;
+
+      await sleep(env.WORKER_POLL_MS);
+      continue;
+    }
+
+    // mock / cloud-api: sem chips por número — mantém o loop serial original.
     const now = new Date();
     const hour = hourInTz(now, env.SCHEDULING_TIMEZONE);
     if (
@@ -58,9 +85,6 @@ async function main() {
       await sleep(60_000); // fora do horário comercial
       continue;
     }
-    // (gate global removido — cap agora é por conta, aplicado no claim — Fase 2)
-
-    // O chip de envio (Baileys) é escolhido por conta dentro de processNextJob.
     const sent = await processNextJob(now);
     await sleep(
       sent ? env.WHATSAPP_MIN_INTERVAL_MS + jitterMs(env.WHATSAPP_JITTER_MS) : env.WORKER_POLL_MS,
