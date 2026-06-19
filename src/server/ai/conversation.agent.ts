@@ -6,13 +6,7 @@ import {
   type QualificationResult,
   type SlotChoice,
 } from "./schemas";
-import type { ConversationTurn } from "./qualification.agent";
-
-function transcript(turns: ConversationTurn[]): string {
-  return turns
-    .map((t) => `${t.direction === "INBOUND" ? "Lead" : "Vendedor"}: ${t.content}`)
-    .join("\n");
-}
+import { formatTranscript, type ConversationTurn } from "./transcript";
 
 /**
  * Agente de conversa (gpt-4o-mini) — gera a PRÓXIMA pergunta de qualificação.
@@ -35,7 +29,7 @@ export async function generateNextQuestion(opts: {
         content:
           `Lead: ${opts.leadName}\n` +
           `Leitura atual da IA: ${opts.qualification.summary} (score ${opts.qualification.score})\n\n` +
-          `Conversa:\n${transcript(opts.conversation)}\n\n` +
+          `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
           `Escreva a próxima mensagem.`,
       },
     ],

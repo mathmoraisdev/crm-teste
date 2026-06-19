@@ -52,8 +52,26 @@ O dashboard atualiza sozinho (polling leve) em **tabela** ou **kanban**.
 ### Testes
 
 ```bash
-npm test    # teste unitário da state machine de pipeline (função pura)
+npm test                 # suíte determinística (sem rede, sem custo)
 ```
+
+A suíte cobre as funções puras de cada camada: state machine de pipeline,
+validação das saídas da IA + **espelho zod ↔ JSON Schema**, formatação de
+transcript, opt-out, pacing/cap/reaper do worker, seleção de chip e sinais de
+ban do Baileys.
+
+**Evals dos agentes de IA** (chamam a OpenAI de verdade, então são opt-in):
+
+```bash
+RUN_AI_EVALS=1 npm test -- src/server/ai/agents.eval.test.ts
+```
+
+Avaliam comportamento por *faixa* (não valor exato, já que LLM não é
+determinístico): lead quente não é descartado e pontua alto; lead que pede para
+parar vira `discard`; lead novo continua em qualificação; e-mail é capturado
+quando dado e nunca inventado; e a interpretação de horário acerta número,
+descrição e recusa ambíguos. Sem `RUN_AI_EVALS`/`OPENAI_API_KEY` o bloco é
+pulado e o `npm test` segue verde.
 
 ---
 
@@ -75,6 +93,15 @@ Cada mensagem inbound passa pela orquestração em
 **Tiering de modelos** (requisito atendido): gpt-4o-mini (`AI_MODEL_CHEAP`) para
 classificação/próxima pergunta; gpt-4o (`AI_MODEL_STRONG`) para a qualificação
 estruturada e decisões.
+
+**Saída estruturada confiável.** A qualificação e a escolha de horário usam
+*function calling forçado* (`tool_choice`) — o modelo só pode responder chamando
+a tool, no formato certo. O contrato é mantido em **dois espelhos** em
+[`schemas.ts`](src/server/ai/schemas.ts): o JSON Schema (vai na tool, restringe a
+geração) e o zod (valida em runtime o que voltou). Um teste de consistência
+garante que os dois não derivem. A IA propõe; quem **decide** é a state machine
+pura ([`pipeline.ts`](src/server/services/pipeline.ts)) — limiares de negócio
+ficam em código testável, não no prompt.
 
 ---
 

@@ -1,21 +1,14 @@
 import { getOpenAI, MODELS } from "./provider";
 import { QUALIFICATION_SYSTEM } from "./prompts";
+import { formatTranscript, type ConversationTurn } from "./transcript";
 import {
   qualificationJsonSchema,
   qualificationSchema,
   type QualificationResult,
 } from "./schemas";
 
-export interface ConversationTurn {
-  direction: "INBOUND" | "OUTBOUND";
-  content: string;
-}
-
-function transcript(turns: ConversationTurn[]): string {
-  return turns
-    .map((t) => `${t.direction === "INBOUND" ? "Lead" : "Vendedor"}: ${t.content}`)
-    .join("\n");
-}
+// Re-export p/ compatibilidade com quem importava ConversationTurn daqui.
+export type { ConversationTurn };
 
 /**
  * Agente de qualificação (gpt-4o, function calling forçado → JSON estruturado).
@@ -34,7 +27,7 @@ export async function runQualification(opts: {
       { role: "system", content: QUALIFICATION_SYSTEM },
       {
         role: "user",
-        content: `Lead: ${opts.leadName}\n\nConversa até agora:\n${transcript(
+        content: `Lead: ${opts.leadName}\n\nConversa até agora:\n${formatTranscript(
           opts.conversation,
         )}`,
       },

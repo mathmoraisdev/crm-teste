@@ -14,7 +14,7 @@ export const NEXT_ACTIONS = [
 ] as const;
 export type NextAction = (typeof NEXT_ACTIONS)[number];
 
-// ── Qualificação (Sonnet) ────────────────────────────────────────────────
+// ── Qualificação (modelo "strong": gpt-4o) ───────────────────────────────
 export const qualificationSchema = z.object({
   interestLevel: z.enum(["baixo", "medio", "alto"]).nullable(),
   painPoint: z.string().nullable(),
@@ -102,7 +102,7 @@ export const qualificationJsonSchema = {
   ],
 } as const;
 
-// ── Interpretação da escolha de horário (Haiku) ──────────────────────────
+// ── Interpretação da escolha de horário (modelo "cheap": gpt-4o-mini) ─────
 export const slotChoiceSchema = z.object({
   chosenIndex: z.number().int().nullable(),
   confident: z.boolean(),
