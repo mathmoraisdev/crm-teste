@@ -96,6 +96,46 @@ async function pickNumberForUser(
 }
 
 /**
+ * Reserva atomicamente 1 job PENDING da CONTA (lead.userId), respeitando
+ * pausa/cap de campanha e janela. Retorna o id travado (SENDING) ou null.
+ * Reusa cappedCampaignIds. Pensado p/ ser chamado por VÁRIOS chips em paralelo.
+ */
+export async function claimNextJobForAccount(userId: string, now: Date): Promise<string | null> {
+  const [capCampaigns, sentByCampaign] = await Promise.all([
+    prisma.campaign.findMany({
+      where: { userId, dailyCap: { not: null } },
+      select: { id: true, dailyCap: true },
+    }),
+    sentTodayByCampaign(now),
+  ]);
+  const capped = cappedCampaignIds(capCampaigns, sentByCampaign);
+
+  const candidate = await prisma.outboundJob.findFirst({
+    where: {
+      status: "PENDING",
+      scheduledFor: { lte: now },
+      lead: { is: { userId } },
+      OR: [
+        { campaignId: null },
+        {
+          campaign: { status: { not: "PAUSED" } },
+          ...(capped.length ? { campaignId: { notIn: capped } } : {}),
+        },
+      ],
+    },
+    orderBy: { scheduledFor: "asc" },
+    select: { id: true },
+  });
+  if (!candidate) return null;
+
+  const claim = await prisma.outboundJob.updateMany({
+    where: { id: candidate.id, status: "PENDING" },
+    data: { status: "SENDING", attempts: { increment: 1 }, claimedAt: now },
+  });
+  return claim.count === 1 ? candidate.id : null;
+}
+
+/**
  * Reserva atomicamente 1 job PENDING (status → SENDING via updateMany com guarda)
  * de uma campanha que NÃO esteja pausada, e o processa. Retorna true se enviou.
  *
