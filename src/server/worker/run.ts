@@ -39,6 +39,14 @@ async function bootBaileys(): Promise<Pool> {
 
 async function main() {
   console.log("[worker] iniciado. modo=%s cap/dia=%d", env.WHATSAPP_MODE, env.WHATSAPP_DAILY_CAP);
+  // Diagnóstico: o agendamento roda AQUI (worker). Se calendar=google-calendar
+  // mas as credenciais estão AUSENTES, proposeSlots quebra e o lead fica sem
+  // resposta. Imprime no boot p/ flagrar variável faltando no serviço do worker.
+  console.log(
+    "[worker] calendar=%s googleCreds=%s",
+    env.CALENDAR_MODE,
+    env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY ? "presentes" : "AUSENTES",
+  );
   if (env.WHATSAPP_MODE === "baileys") pool = await bootBaileys();
 
   // Recupera jobs órfãos de execuções anteriores (deploy/crash deixou SENDING preso).
