@@ -64,9 +64,22 @@ const schema = z.object({
   SENTRY_DSN: z.string().optional().default(""), // DSN do Sentry (server-side)
 });
 
+/**
+ * Durante o `next build` (passo "Collecting page data") o Next executa o código
+ * de nível de módulo de cada rota — o que importa este arquivo e dispara a
+ * validação. Nesse momento as variáveis de runtime podem não existir (ex.: deploy
+ * de Preview na Vercel onde DATABASE_URL não foi exposta ao build). Não queremos
+ * derrubar o build por isso: nada conecta ao banco durante a coleta (o Prisma só
+ * conecta na primeira query, e nenhum handler roda aqui). A validação fail-fast
+ * continua valendo em runtime, onde NEXT_PHASE/npm_lifecycle_event não batem.
+ */
+const isBuildPhase =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.npm_lifecycle_event === "build";
+
 const parsed = schema.safeParse(process.env);
 
-if (!parsed.success) {
+if (!parsed.success && !isBuildPhase) {
   const issues = parsed.error.issues
     .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
     .join("\n");
@@ -75,7 +88,16 @@ if (!parsed.success) {
   );
 }
 
-export const env = parsed.data;
+// Em build sem as envs, usa um placeholder só para o módulo carregar — nada
+// conecta com essa URL porque nenhuma query roda durante o build.
+export const env = parsed.success
+  ? parsed.data
+  : schema.parse({
+      ...process.env,
+      DATABASE_URL:
+        process.env.DATABASE_URL ||
+        "postgresql://build:build@localhost:5432/build?schema=public",
+    });
 
 /** A IA é real sempre. Esta flag indica se a chave foi configurada. */
 export const isAiConfigured = env.OPENAI_API_KEY.length > 0;
