@@ -29,7 +29,7 @@ const schema = z.object({
   SCHEDULING_TIMEZONE: z.string().default("America/Sao_Paulo"),
 
   // Deliverability / disparo seguro
-  WHATSAPP_DAILY_CAP: z.coerce.number().int().positive().default(1000),
+  WHATSAPP_DAILY_CAP: z.coerce.number().int().nonnegative().default(0), // 0 = ilimitado (modo massa); cap agora é por conta
   WHATSAPP_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(8000), // ~7,5/min
   WHATSAPP_JITTER_MS: z.coerce.number().int().nonnegative().default(4000),
   WHATSAPP_SEND_START_HOUR: z.coerce.number().int().min(0).max(23).default(9),

@@ -1,6 +1,6 @@
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
-import { processNextJob, sentToday } from "./dispatcher";
+import { processNextJob } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { sleep } from "@/lib/humanize";
 
@@ -58,10 +58,7 @@ async function main() {
       await sleep(60_000); // fora do horário comercial
       continue;
     }
-    if ((await sentToday(now)) >= env.WHATSAPP_DAILY_CAP) {
-      await sleep(60_000); // cap diário global atingido
-      continue;
-    }
+    // (gate global removido — cap agora é por conta, aplicado no claim — Fase 2)
 
     // O chip de envio (Baileys) é escolhido por conta dentro de processNextJob.
     const sent = await processNextJob(now);

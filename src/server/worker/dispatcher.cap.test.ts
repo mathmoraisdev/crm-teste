@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cappedCampaignIds } from "./dispatcher";
+import { cappedCampaignIds, underAccountCap } from "./dispatcher";
 
 describe("cappedCampaignIds", () => {
   it("marca como no teto a campanha que já enviou >= dailyCap hoje", () => {
@@ -26,5 +26,15 @@ describe("cappedCampaignIds", () => {
 
   it("devolve vazio quando não há campanhas com teto", () => {
     expect(cappedCampaignIds([], { c1: 100 })).toEqual([]);
+  });
+});
+
+describe("underAccountCap", () => {
+  it("cap 0 = ilimitado (modo massa)", () => {
+    expect(underAccountCap(999_999, 0)).toBe(true);
+  });
+  it("respeita o teto quando positivo", () => {
+    expect(underAccountCap(999, 1000)).toBe(true);
+    expect(underAccountCap(1000, 1000)).toBe(false);
   });
 });

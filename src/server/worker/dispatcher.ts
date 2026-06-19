@@ -13,6 +13,20 @@ export async function sentToday(now: Date): Promise<number> {
   });
 }
 
+/** Quantos jobs uma CONTA já enviou hoje (cap diário por conta). */
+export async function sentTodayByUser(userId: string, now: Date): Promise<number> {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  return prisma.outboundJob.count({
+    where: { status: "SENT", sentAt: { gte: start }, lead: { is: { userId } } },
+  });
+}
+
+/** Decide se a conta pode enviar agora. cap<=0 = ilimitado (modo massa). */
+export function underAccountCap(sentToday: number, cap: number): boolean {
+  return cap <= 0 || sentToday < cap;
+}
+
 /** Quantos jobs cada número já enviou hoje (p/ cap por chip — Baileys). */
 export async function sentTodayByNumber(now: Date): Promise<Record<string, number>> {
   const start = new Date(now);
