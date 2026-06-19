@@ -30,6 +30,26 @@ import { prisma } from "@/server/db/client";
 // Mesma sanitização do useMultiFileAuthState (fixFileName): "/" → "__", ":" → "-".
 const fixKey = (key: string) => key?.replace(/\//g, "__")?.replace(/:/g, "-");
 
+/**
+ * Repete uma operação de I/O em falhas transitórias. O auth-state Signal é
+ * crítico: um write de chave perdido (ex.: timeout do pooler quando o banco
+ * está longe do worker) dessincroniza o ratchet e gera "Bad MAC" na próxima
+ * mensagem — a resposta do lead deixa de descriptografar. Melhor pagar alguns
+ * retries do que perder o estado de sessão.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 150 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export async function useDbAuthState(numberId: string): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
@@ -38,18 +58,22 @@ export async function useDbAuthState(numberId: string): Promise<{
   const writeData = async (data: unknown, key: string): Promise<void> => {
     const value = JSON.stringify(data, BufferJSON.replacer);
     const k = fixKey(key);
-    await prisma.whatsAppAuthState.upsert({
-      where: { numberId_key: { numberId, key: k } },
-      create: { numberId, key: k, value },
-      update: { value },
-    });
+    await withRetry(() =>
+      prisma.whatsAppAuthState.upsert({
+        where: { numberId_key: { numberId, key: k } },
+        create: { numberId, key: k, value },
+        update: { value },
+      }),
+    );
   };
 
   // Lê e desserializa (BufferJSON.reviver restaura os Buffers). null se não há.
   const readData = async (key: string): Promise<unknown> => {
-    const row = await prisma.whatsAppAuthState.findUnique({
-      where: { numberId_key: { numberId, key: fixKey(key) } },
-    });
+    const row = await withRetry(() =>
+      prisma.whatsAppAuthState.findUnique({
+        where: { numberId_key: { numberId, key: fixKey(key) } },
+      }),
+    );
     if (!row) return null;
     try {
       return JSON.parse(row.value, BufferJSON.reviver);
