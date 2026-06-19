@@ -1,5 +1,6 @@
 import makeWASocket, {
   useMultiFileAuthState,
+  makeCacheableSignalKeyStore,
   DisconnectReason,
   fetchLatestBaileysVersion,
   type WASocket,
@@ -61,7 +62,15 @@ export async function connectNumber(numberId: string): Promise<void> {
     const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
     const sock = makeWASocket({
       version,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        // Embrulha o key store no cache do Baileys: habilita keys.transaction
+        // (atomicidade + write-through em memória) que o repositório Signal usa
+        // a cada mensagem. Sem isso, get/set viram round-trips independentes no
+        // Postgres e o ratchet dessincroniza após o 1º inbound — a 2ª resposta
+        // sai cifrada com estado defasado e o lead vê "Aguardando mensagem".
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
       logger,
       browser: ["MiniCRM", "Chrome", "1.0"],
       // Quando o WhatsApp pede o reenvio de uma mensagem nossa (retry receipt),
