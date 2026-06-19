@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
 import { processNextJob, sentToday } from "./dispatcher";
+import { reclaimStuckJobs } from "./reaper";
 import { sleep } from "@/lib/humanize";
 
 type Pool = typeof import("@/server/whatsapp/baileys/pool");
@@ -29,11 +30,22 @@ async function main() {
   console.log("[worker] iniciado. modo=%s cap/dia=%d", env.WHATSAPP_MODE, env.WHATSAPP_DAILY_CAP);
   if (env.WHATSAPP_MODE === "baileys") pool = await bootBaileys();
 
+  // Recupera jobs órfãos de execuções anteriores (deploy/crash deixou SENDING preso).
+  const reclaimedOnBoot = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
+  if (reclaimedOnBoot > 0) console.log("[worker] reaper boot: %d jobs recuperados", reclaimedOnBoot);
+
+  let lastReap = Date.now();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     // mantém sockets vivos e conecta chips recém-pareados pela UI (gera o QR),
     // mesmo fora da janela comercial — pareamento não depende de horário.
     if (env.WHATSAPP_MODE === "baileys" && pool) await pool.ensureConnections();
+
+    if (Date.now() - lastReap >= env.WORKER_REAP_EVERY_MS) {
+      const n = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
+      if (n > 0) console.log("[worker] reaper: %d jobs recuperados", n);
+      lastReap = Date.now();
+    }
 
     const now = new Date();
     const hour = hourInTz(now, env.SCHEDULING_TIMEZONE);

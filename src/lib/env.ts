@@ -38,6 +38,8 @@ const schema = z.object({
   WHATSAPP_TEMPLATE_LANG: z.string().default("pt_BR"),
   WHATSAPP_APP_SECRET: z.string().optional().default(""), // validação de assinatura do webhook
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
+  WORKER_LEASE_MS: z.coerce.number().int().positive().default(120_000), // job SENDING órfão > isto volta à fila
+  WORKER_REAP_EVERY_MS: z.coerce.number().int().positive().default(30_000), // frequência do reaper
 
   // Cron de disparo (alternativa serverless ao worker; protege a rota /api/cron/dispatch).
   // A Vercel Cron envia este valor como `Authorization: Bearer <CRON_SECRET>`.
