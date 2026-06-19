@@ -14,6 +14,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -23,6 +28,12 @@ model User {
   emailVerified DateTime? // null = e-mail ainda não confirmado
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // BYOK: credencial de IA do usuário (null = usa a chave da plataforma).
+  aiProvider      AiProvider? // OPENAI | ANTHROPIC | null
+  aiKeyEnc        String? // chave cifrada (AES-256-GCM): "iv:tag:ciphertext"
+  aiKeyLast4      String? // 4 últimos dígitos p/ exibir na UI sem revelar
+  aiKeyVerifiedAt DateTime? // última validação bem-sucedida contra a API
 
   leads                     Lead[]
   campaigns                 Campaign[]
