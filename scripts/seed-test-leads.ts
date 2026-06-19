@@ -43,7 +43,7 @@ async function main() {
       name: "Teste Baileys",
       // spintax {a|b} (varia por lead) + {{nome}} (renderTemplate)
       messageTemplate:
-        "{Oi|Olá|E aí} {{nome}}! {Tudo bem|Como vai}? Aqui é da Acme — posso te mostrar em 5 min como automatizar o atendimento no WhatsApp?",
+        "{Oi|Olá|E aí} {{nome}}! {Tudo bem|Como vai}? Aqui é da Disparador.AI — posso te mostrar em 5 min como automatizar o atendimento no WhatsApp?",
       status: "DRAFT",
     },
   });

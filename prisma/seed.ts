@@ -37,7 +37,7 @@ async function main() {
       userId: user.id,
       name: "Prospecção — Software de Gestão",
       messageTemplate:
-        "Olá {{nome}}! Aqui é da Acme. Vi que sua empresa pode se beneficiar da nossa solução de gestão. Faz sentido a gente conversar 5 minutinhos sobre seus desafios atuais?",
+        "Olá {{nome}}! Aqui é da Disparador.AI. Vi que sua empresa pode se beneficiar da nossa solução de gestão. Faz sentido a gente conversar 5 minutinhos sobre seus desafios atuais?",
       status: "DRAFT",
     },
   });

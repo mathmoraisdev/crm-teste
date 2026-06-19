@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 const DEFAULT_TEMPLATE =
-  "Olá {{nome}}! Aqui é da Acme. Vi que sua empresa pode se beneficiar da nossa solução. Posso te fazer algumas perguntas rápidas?";
+  "Olá {{nome}}! Aqui é da Disparador.AI. Vi que sua empresa pode se beneficiar da nossa solução. Posso te fazer algumas perguntas rápidas?";
 
 export interface CampaignFormValues {
   id: string;
