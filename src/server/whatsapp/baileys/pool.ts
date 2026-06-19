@@ -59,7 +59,26 @@ export async function connectNumber(numberId: string): Promise<void> {
     // usa a versão ATUAL do WhatsApp Web — versão chumbada/velha causa rejeição
     // (Connection Failure 405) no pareamento. Cai no default do Baileys se falhar.
     const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
-    const sock = makeWASocket({ version, auth: state, logger, browser: ["MiniCRM", "Chrome", "1.0"] });
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      logger,
+      browser: ["MiniCRM", "Chrome", "1.0"],
+      // Quando o WhatsApp pede o reenvio de uma mensagem nossa (retry receipt),
+      // o Baileys chama getMessage. Sem isso ele não reenvia, e o cliente do
+      // outro lado acaba resetando a sessão Signal repetidas vezes ("Closing
+      // open session in favor of incoming prekey bundle") — o que corrompe a
+      // sessão e faz as respostas do lead falharem na descriptografia. Buscamos
+      // o conteúdo já persistido pelo providerMessageId.
+      getMessage: async (key) => {
+        if (!key.id) return undefined;
+        const msg = await prisma.message.findUnique({
+          where: { providerMessageId: key.id },
+          select: { content: true },
+        });
+        return msg ? { conversation: msg.content } : undefined;
+      },
+    });
     sockets.set(numberId, sock);
 
   sock.ev.on("creds.update", saveCreds);
