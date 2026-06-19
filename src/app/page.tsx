@@ -32,16 +32,16 @@ const STEPS = [
 
 const FEATURES = [
   {
+    title: "IA que qualifica e agenda",
+    desc: "A IA responde cada lead, faz as perguntas certas, dá um score de 0 a 100 e marca a reunião na sua agenda — sozinha.",
+  },
+  {
     title: "Disparo em massa",
     desc: "Envie para milhares de contatos com mensagens personalizadas por nome, intervalo inteligente e fila automática.",
   },
   {
     title: "CRM integrado",
     desc: "Cada resposta vira um lead com status, score e histórico. Simples de usar, do jeito que o WhatsApp pede.",
-  },
-  {
-    title: "Campanhas segmentadas",
-    desc: "Crie campanhas diferentes para cada público e compare resultados lado a lado com métricas claras.",
   },
   {
     title: "Agendamento",
@@ -163,13 +163,12 @@ export default function LandingPage() {
             </div>
 
             <h1 className="mt-6 font-display text-[42px] font-bold leading-[1.02] tracking-[-0.035em] text-ink sm:text-[54px] md:text-[62px]">
-              Disparos em massa no
-              <br className="hidden sm:block" /> WhatsApp que{" "}
-              <span className="text-brand-500">realmente vendem</span>
+              Dispare em massa.
+              <br className="hidden sm:block" /> A <span className="text-brand-500">IA qualifica e agenda</span> por você
             </h1>
             <p className="mt-5 max-w-[600px] text-[17px] leading-relaxed text-slate-600 md:text-[19px]">
-              Envie campanhas para milhares de clientes, acompanhe cada resposta num CRM
-              simples e transforme sua lista de contatos em faturamento. Sem complicação.
+              Envie campanhas para milhares de contatos no WhatsApp e deixe a IA responder cada
+              resposta, qualificar o lead com um score e marcar a reunião — tudo num CRM em tempo real.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
