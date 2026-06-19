@@ -89,7 +89,9 @@ export async function connectNumber(numberId: string): Promise<void> {
           where: { id: numberId },
           data: { status: "BANNED", bannedAt: new Date(), lastError: `code=${code}` },
         });
-        console.error(`[baileys] "${rec.label}" BANIDO/deslogado (code=${code}) — fora da rotação.`);
+        const { rerouteJobsFromNumber } = await import("@/server/worker/reroute");
+        const moved = await rerouteJobsFromNumber(numberId, new Date());
+        console.error(`[baileys] "${rec.label}" BANIDO/deslogado (code=${code}) — ${moved} jobs reroteados, fora da rotação.`);
       } else if (action === "RECONNECT" && code !== DisconnectReason.loggedOut) {
         console.warn(`[baileys] "${rec.label}" caiu (code=${code}) — reconectando…`);
         setTimeout(() => void connectNumber(numberId), 5000);
