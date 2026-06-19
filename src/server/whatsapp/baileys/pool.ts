@@ -134,16 +134,35 @@ export async function connectNumber(numberId: string): Promise<void> {
 
   // Inbound → handler de domínio (handleInbound)
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify" || !handlers) return;
+    if (!handlers) return;
     for (const m of messages) {
       if (m.key.fromMe || !m.key.remoteJid?.endsWith("@s.whatsapp.net")) continue;
+
+      // O conteúdo pode vir ANINHADO: conversa com mensagens temporárias
+      // (ephemeralMessage), view-once, ou doc-com-legenda. Sem desaninhar, o
+      // texto "some" e a IA nunca é acionada (silêncio sem erro). Desce um nível.
+      const msg = m.message;
+      const inner =
+        msg?.ephemeralMessage?.message ??
+        msg?.viewOnceMessage?.message ??
+        msg?.viewOnceMessageV2?.message ??
+        msg?.documentWithCaptionMessage?.message ??
+        msg ??
+        null;
       const text =
-        m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? "";
+        inner?.conversation ?? inner?.extendedTextMessage?.text ?? "";
+
+      // TRACE: mostra type, campos crus e texto extraído — pra flagrar mensagem
+      // descartada antes da IA (estrutura inesperada do Baileys, type != notify).
+      console.log(
+        `[inbound] type=${type} de=${m.key.remoteJid} ` +
+          `campos=${msg ? Object.keys(msg).join("|") : "SEM_MESSAGE"} ` +
+          `text="${text.slice(0, 40)}"`,
+      );
+
+      if (type !== "notify") continue; // history/append não aciona a IA
       if (!text) {
-        // Sem texto extraível: pode ser mídia (ok ignorar) OU uma mensagem que
-        // não descriptografou (m.message ausente) — esta é uma causa real de
-        // "a IA parou de responder". Logar p/ não sumir em silêncio.
-        if (!m.message) {
+        if (!msg) {
           console.warn(
             `[baileys] "${rec.label}" inbound NÃO descriptografado de ${m.key.remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );

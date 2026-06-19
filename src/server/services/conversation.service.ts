@@ -178,6 +178,14 @@ export async function handleInbound(
     nextAction: qual.nextAction,
   });
 
+  // TRACE: prova que o inbound chegou na IA e qual a decisão (responder/agendar/
+  // descartar). Some na fonte do "silêncio sem erro".
+  console.log(
+    `[inbound] lead=${lead.id} status=${status} score=${qual.score} ` +
+      `nextAction=${qual.nextAction} → schedule=${decision.shouldSchedule} ` +
+      `reply=${decision.shouldReply} discard=${decision.shouldDiscard}`,
+  );
+
   if (decision.status !== status) {
     await prisma.lead.update({
       where: { id: lead.id },
