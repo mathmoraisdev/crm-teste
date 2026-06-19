@@ -135,7 +135,7 @@ export async function dispatchOutboundJob(
       }),
       prisma.outboundJob.update({
         where: { id: jobId },
-        data: { status: "SENT", sentAt: new Date(), whatsAppNumberId: numberId },
+        data: { status: "SENT", sentAt: new Date(), whatsAppNumberId: numberId, deferCount: 0 },
       }),
       prisma.lead.update({
         where: { id: lead.id },
@@ -174,7 +174,7 @@ export async function dispatchOutboundJob(
     }),
     prisma.outboundJob.update({
       where: { id: jobId },
-      data: { status: "SENT", sentAt: new Date() },
+      data: { status: "SENT", sentAt: new Date(), deferCount: 0 },
     }),
     prisma.lead.update({
       where: { id: lead.id },

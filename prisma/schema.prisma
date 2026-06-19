@@ -188,6 +188,7 @@ model OutboundJob {
   templateName String? // nome do template aprovado (quando kind=template)
   status       OutboundJobStatus @default(PENDING)
   attempts     Int               @default(0)
+  deferCount   Int               @default(0) // deferimentos por falta de chip (anti-livelock)
   claimedAt    DateTime?         // quando um worker travou em SENDING (p/ reaper de órfãos)
   lastError    String?
   scheduledFor DateTime          @default(now())

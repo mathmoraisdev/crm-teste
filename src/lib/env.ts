@@ -40,6 +40,7 @@ const schema = z.object({
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
   WORKER_LEASE_MS: z.coerce.number().int().positive().default(120_000), // job SENDING órfão > isto volta à fila
   WORKER_REAP_EVERY_MS: z.coerce.number().int().positive().default(30_000), // frequência do reaper
+  WORKER_MAX_DEFERS: z.coerce.number().int().positive().default(5), // deferimentos sem chip antes de pausar campanha
 
   // Cron de disparo (alternativa serverless ao worker; protege a rota /api/cron/dispatch).
   // A Vercel Cron envia este valor como `Authorization: Bearer <CRON_SECRET>`.

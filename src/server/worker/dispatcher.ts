@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import { dispatchOutboundJob } from "@/server/services/messaging";
 import { selectNumber } from "@/server/whatsapp/baileys/selection";
+import { decideNoChipAction } from "./nochip";
 
 /** Conta quantos jobs já foram enviados hoje (cap diário / warm-up). */
 export async function sentToday(now: Date): Promise<number> {
@@ -129,15 +130,36 @@ export async function processNextJob(now: Date): Promise<boolean> {
   if (env.WHATSAPP_MODE === "baileys") {
     const picked = await pickNumberForUser(candidate.lead.userId, now);
     if (!picked) {
-      // Conta sem chip elegível agora: devolve à fila sem penalizar tentativa.
-      await prisma.outboundJob.update({
+      const job = await prisma.outboundJob.findUnique({
         where: { id: candidate.id },
-        data: {
-          status: "PENDING",
-          attempts: { decrement: 1 },
-          scheduledFor: new Date(now.getTime() + 30_000),
-        },
+        select: { deferCount: true, campaignId: true },
       });
+      const decision = decideNoChipAction((job?.deferCount ?? 0) + 1, env.WORKER_MAX_DEFERS);
+      if (decision.action === "pause_campaign" && job?.campaignId) {
+        await prisma.$transaction([
+          prisma.campaign.update({ where: { id: job.campaignId }, data: { status: "PAUSED" } }),
+          prisma.outboundJob.update({
+            where: { id: candidate.id },
+            data: {
+              status: "PENDING",
+              attempts: { decrement: 1 },
+              claimedAt: null,
+              lastError: "sem chip vivo — campanha pausada p/ reposição",
+            },
+          }),
+        ]);
+      } else {
+        await prisma.outboundJob.update({
+          where: { id: candidate.id },
+          data: {
+            status: "PENDING",
+            attempts: { decrement: 1 },
+            claimedAt: null,
+            deferCount: { increment: 1 },
+            scheduledFor: new Date(now.getTime() + 30_000),
+          },
+        });
+      }
       return false;
     }
     numberId = picked;
