@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import { isEncryptionConfigured } from "@/lib/env";
 import { encryptSecret } from "@/server/crypto";
 import { buildAiClient, type AiProviderName } from "@/server/ai/provider";
 
@@ -40,6 +41,12 @@ export async function saveAiCredential(
 ): Promise<AiCredentialStatus> {
   const key = apiKey.trim();
   if (key.length < 12) throw new Error("Chave de API inválida.");
+
+  // Falha cedo (antes de gastar uma chamada à API do provider) se a plataforma
+  // não tem a chave mestra p/ cifrar a credencial — sem vazar detalhe de config.
+  if (!isEncryptionConfigured) {
+    throw new Error("Recurso indisponível no momento. Tente novamente mais tarde.");
+  }
 
   try {
     await testKey(provider, key);
