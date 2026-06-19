@@ -41,6 +41,9 @@ const schema = z.object({
   WORKER_LEASE_MS: z.coerce.number().int().positive().default(120_000), // job SENDING órfão > isto volta à fila
   WORKER_REAP_EVERY_MS: z.coerce.number().int().positive().default(30_000), // frequência do reaper
   WORKER_MAX_DEFERS: z.coerce.number().int().positive().default(5), // deferimentos sem chip antes de pausar campanha
+  // Modo massa (risco assumido): ritmo por chip. min<=0 dispara sem pausa.
+  MASS_PER_CHIP_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(1500),
+  MASS_PER_CHIP_JITTER_MS: z.coerce.number().int().nonnegative().default(1500),
 
   // Cron de disparo (alternativa serverless ao worker; protege a rota /api/cron/dispatch).
   // A Vercel Cron envia este valor como `Authorization: Bearer <CRON_SECRET>`.
