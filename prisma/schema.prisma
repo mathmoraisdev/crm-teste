@@ -272,6 +272,13 @@ model ConsultantLead {
   @@index([status])
 }
 
+// Heartbeat do worker (linha única "singleton"): a rota de health compara
+// `now - beatAt` p/ detectar worker offline (deploy travado/crash).
+model WorkerHeartbeat {
+  id     String   @id
+  beatAt DateTime
+}
+
 // Estado de autenticação do Baileys persistido no banco (chave/valor por número).
 model WhatsAppAuthState {
   id        String         @id @default(cuid())

@@ -40,8 +40,17 @@ async function main() {
   const runners = new Map<string, { stopped: boolean }>();
 
   let lastReap = Date.now();
+  let lastChipAlert = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
+    const beat = new Date();
+    await prisma.workerHeartbeat.upsert({
+      where: { id: "singleton" },
+      update: { beatAt: beat },
+      create: { id: "singleton", beatAt: beat },
+    });
+
     // mantém sockets vivos e conecta chips recém-pareados pela UI (gera o QR),
     // mesmo fora da janela comercial — pareamento não depende de horário.
     if (env.WHATSAPP_MODE === "baileys" && pool) await pool.ensureConnections();
@@ -68,6 +77,19 @@ async function main() {
       }
       // sinaliza parada p/ chips que saíram (banido/pausado/desconectado)
       for (const [id, sig] of runners) if (!live.has(id)) sig.stopped = true;
+
+      // Alerta: 0 chips vivos mas há fila pendente → operador precisa repor números.
+      // Throttle de 1 min p/ não floodar o log a cada poll.
+      if (chips.length === 0 && Date.now() - lastChipAlert >= 60_000) {
+        const pendingJobs = await prisma.outboundJob.count({ where: { status: "PENDING" } });
+        if (pendingJobs > 0) {
+          console.error(
+            "[worker] ALERTA: 0 chips vivos com %d jobs PENDING — repor números p/ retomar o disparo.",
+            pendingJobs,
+          );
+          lastChipAlert = Date.now();
+        }
+      }
 
       await sleep(env.WORKER_POLL_MS);
       continue;
