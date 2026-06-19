@@ -1,5 +1,6 @@
 import { runQualification, type ConversationTurn } from "@/server/ai/qualification.agent";
 import { generateNextQuestion } from "@/server/ai/conversation.agent";
+import { buildAiClient } from "@/server/ai/provider";
 
 /**
  * Smoke da camada de IA (OpenAI): roda a qualificação estruturada + a próxima
@@ -20,12 +21,19 @@ async function main() {
     },
   ];
 
+  // Smoke usa a chave da plataforma direto (sem resolução por-usuário).
+  const ai = buildAiClient({
+    provider: "OPENAI",
+    apiKey: process.env.OPENAI_API_KEY ?? "",
+  });
+
   console.log("→ Qualificação estruturada (gpt-4o, function calling)…");
-  const qual = await runQualification({ leadName: "João", conversation });
+  const qual = await runQualification({ ai, leadName: "João", conversation });
   console.log(JSON.stringify(qual, null, 2));
 
   console.log("\n→ Próxima pergunta (gpt-4o-mini)…");
   const next = await generateNextQuestion({
+    ai,
     leadName: "João",
     conversation,
     qualification: qual,

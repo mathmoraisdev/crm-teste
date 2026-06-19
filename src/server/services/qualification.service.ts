@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { runQualification, type ConversationTurn } from "@/server/ai/qualification.agent";
+import type { AiClient } from "@/server/ai/provider";
 import type { QualificationResult } from "@/server/ai/schemas";
 import { normalizeEmail } from "@/lib/email";
 
@@ -9,11 +10,13 @@ import { normalizeEmail } from "@/lib/email";
  * para a listagem). Devolve o resultado validado para a orquestração decidir.
  */
 export async function qualifyLead(opts: {
+  ai: AiClient;
   leadId: string;
   leadName: string;
   conversation: ConversationTurn[];
 }): Promise<QualificationResult> {
   const result = await runQualification({
+    ai: opts.ai,
     leadName: opts.leadName,
     conversation: opts.conversation,
   });

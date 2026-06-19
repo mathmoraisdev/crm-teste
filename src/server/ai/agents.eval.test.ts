@@ -6,6 +6,12 @@ import type { ConversationTurn } from "./transcript";
 // e o arquivo coleta limpo (0 testes), sem exigir DATABASE_URL/OPENAI_API_KEY.
 const loadQual = () => import("./qualification.agent").then((m) => m.runQualification);
 const loadSlot = () => import("./conversation.agent").then((m) => m.interpretSlotChoice);
+// AiClient de plataforma (OpenAI), construído dinamicamente p/ não puxar env
+// quando o eval está desligado.
+const loadAi = () =>
+  import("./provider").then((m) =>
+    m.buildAiClient({ provider: "OPENAI", apiKey: process.env.OPENAI_API_KEY ?? "" }),
+  );
 
 /**
  * EVALS COMPORTAMENTAIS (chamam a OpenAI de verdade).
@@ -31,7 +37,8 @@ describe.skipIf(!enabled)("eval: runQualification", () => {
       { direction: "INBOUND", content: "Sou a dona. Quero resolver isso essa semana ainda, tá me custando caro." },
     ];
     const runQualification = await loadQual();
-    const q = await runQualification({ leadName: "Ana", conversation: conv });
+    const ai = await loadAi();
+    const q = await runQualification({ ai, leadName: "Ana", conversation: conv });
     expect(q.nextAction).not.toBe("discard");
     expect(q.score).toBeGreaterThanOrEqual(55);
     expect(["alto", "medio"]).toContain(q.interestLevel);
@@ -43,7 +50,8 @@ describe.skipIf(!enabled)("eval: runQualification", () => {
       { direction: "INBOUND", content: "Não tenho interesse. Para de me mandar mensagem, por favor." },
     ];
     const runQualification = await loadQual();
-    const q = await runQualification({ leadName: "Carlos", conversation: conv });
+    const ai = await loadAi();
+    const q = await runQualification({ ai, leadName: "Carlos", conversation: conv });
     expect(q.nextAction === "discard" || q.score < 40).toBe(true);
   }, EVAL_TIMEOUT);
 
@@ -53,24 +61,26 @@ describe.skipIf(!enabled)("eval: runQualification", () => {
       { direction: "INBOUND", content: "Oi, quem é?" },
     ];
     const runQualification = await loadQual();
-    const q = await runQualification({ leadName: "Marina", conversation: conv });
+    const ai = await loadAi();
+    const q = await runQualification({ ai, leadName: "Marina", conversation: conv });
     expect(q.nextAction).toBe("ask_question");
   }, EVAL_TIMEOUT);
 
   it("captura e-mail quando informado; nunca inventa quando ausente", async () => {
     const runQualification = await loadQual();
+    const ai = await loadAi();
     const withEmail: ConversationTurn[] = [
       { direction: "OUTBOUND", content: "Qual seu melhor e-mail pra eu te enviar os detalhes?" },
       { direction: "INBOUND", content: "manda pra ana.silva@loja.com.br" },
     ];
-    const a = await runQualification({ leadName: "Ana", conversation: withEmail });
+    const a = await runQualification({ ai, leadName: "Ana", conversation: withEmail });
     expect(a.email).toContain("ana.silva@loja.com.br");
 
     const noEmail: ConversationTurn[] = [
       { direction: "OUTBOUND", content: "Tudo bem?" },
       { direction: "INBOUND", content: "Tudo, e aí?" },
     ];
-    const b = await runQualification({ leadName: "Ana", conversation: noEmail });
+    const b = await runQualification({ ai, leadName: "Ana", conversation: noEmail });
     expect(b.email).toBeNull();
   }, EVAL_TIMEOUT);
 });
@@ -80,20 +90,23 @@ describe.skipIf(!enabled)("eval: interpretSlotChoice", () => {
 
   it("entende escolha por número", async () => {
     const interpretSlotChoice = await loadSlot();
-    const r = await interpretSlotChoice({ formattedSlots: slots, leadMessage: "pode ser a 2" });
+    const ai = await loadAi();
+    const r = await interpretSlotChoice({ ai, formattedSlots: slots, leadMessage: "pode ser a 2" });
     expect(r.chosenIndex).toBe(1);
     expect(r.confident).toBe(true);
   }, EVAL_TIMEOUT);
 
   it("entende escolha por descrição do horário", async () => {
     const interpretSlotChoice = await loadSlot();
-    const r = await interpretSlotChoice({ formattedSlots: slots, leadMessage: "quinta às 16 fica ótimo" });
+    const ai = await loadAi();
+    const r = await interpretSlotChoice({ ai, formattedSlots: slots, leadMessage: "quinta às 16 fica ótimo" });
     expect(r.chosenIndex).toBe(2);
   }, EVAL_TIMEOUT);
 
   it("resposta ambígua → não força escolha", async () => {
     const interpretSlotChoice = await loadSlot();
-    const r = await interpretSlotChoice({ formattedSlots: slots, leadMessage: "qualquer um tá bom" });
+    const ai = await loadAi();
+    const r = await interpretSlotChoice({ ai, formattedSlots: slots, leadMessage: "qualquer um tá bom" });
     expect(r.confident === false || r.chosenIndex === null).toBe(true);
   }, EVAL_TIMEOUT);
 });

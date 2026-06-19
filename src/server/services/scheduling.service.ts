@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { formatSlot } from "@/lib/utils";
 import { getCalendar } from "@/server/calendar";
 import { interpretSlotChoice } from "@/server/ai/conversation.agent";
+import { getAiClient } from "@/server/ai/resolve";
 import { sendWhatsAppMessage } from "./messaging";
 
 const TZ = env.SCHEDULING_TIMEZONE;
@@ -66,7 +67,10 @@ export async function interpretAndBook(
   const slots = (lead.meeting.proposedSlots as string[]) ?? [];
   const formatted = slots.map((iso) => formatSlot(iso, TZ));
 
+  // BYOK: resolve o AiClient do dono do lead (chave própria ou fallback da plataforma).
+  const ai = await getAiClient(lead.userId);
   const choice = await interpretSlotChoice({
+    ai,
     formattedSlots: formatted,
     leadMessage,
   });

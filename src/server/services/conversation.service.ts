@@ -1,11 +1,13 @@
 import { prisma } from "@/server/db/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { generateNextQuestion } from "@/server/ai/conversation.agent";
+import { getAiClient } from "@/server/ai/resolve";
 import { qualifyLead } from "./qualification.service";
 import { decidePipeline } from "./pipeline";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import { sendWhatsAppMessage } from "./messaging";
 import { isOptOut } from "@/lib/optout";
+import { brPhoneVariants } from "@/lib/phone";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -33,19 +35,25 @@ async function resolveLead(input: InboundInput) {
       where: { id: input.leadId, ...(input.userId ? { userId: input.userId } : {}) },
     });
   }
+  // Casa o telefone tolerando o 9º dígito BR: o JID canônico do WhatsApp (de onde
+  // vem o inbound) pode não ter o 9 que o lead foi salvo, e vice-versa.
   if (input.whatsAppNumberId && input.phone) {
     const num = await prisma.whatsAppNumber.findUnique({
       where: { id: input.whatsAppNumberId },
       select: { userId: true },
     });
     if (!num) return null;
-    return prisma.lead.findFirst({ where: { userId: num.userId, phone: input.phone } });
+    return prisma.lead.findFirst({
+      where: { userId: num.userId, phone: { in: brPhoneVariants(input.phone) } },
+    });
   }
   if (input.userId && input.phone) {
-    return prisma.lead.findFirst({ where: { userId: input.userId, phone: input.phone } });
+    return prisma.lead.findFirst({
+      where: { userId: input.userId, phone: { in: brPhoneVariants(input.phone) } },
+    });
   }
   if (input.phone) {
-    return prisma.lead.findFirst({ where: { phone: input.phone } });
+    return prisma.lead.findFirst({ where: { phone: { in: brPhoneVariants(input.phone) } } });
   }
   return null;
 }
@@ -82,7 +90,14 @@ export async function handleInbound(
   const lead = await resolveLead(input);
 
   if (!lead) {
-    // Webhook de número desconhecido: ignora silenciosamente (não cria lead solto).
+    // Não cria lead solto, mas NÃO fica mudo: um inbound de um telefone que não
+    // casa com nenhum lead (ex.: 9º dígito divergente) é a causa clássica de
+    // "a IA parou de responder". Logar dá o rastro que produção precisa.
+    if (input.phone) {
+      console.warn(
+        `[inbound] descartado: nenhum lead casou telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"} userId=${input.userId ?? "—"}`,
+      );
+    }
     return { leadId: null };
   }
 
@@ -147,8 +162,11 @@ export async function handleInbound(
   }
 
   // 4. Qualifica → decide → age
+  // BYOK: resolve o AiClient do dono do lead (chave própria ou fallback da plataforma).
+  const ai = await getAiClient(lead.userId);
   const conversation = await loadConversation(lead.id);
   const qual = await qualifyLead({
+    ai,
     leadId: lead.id,
     leadName: lead.name,
     conversation,
@@ -171,6 +189,7 @@ export async function handleInbound(
     await proposeSlots(lead.id);
   } else if (decision.shouldReply) {
     const reply = await generateNextQuestion({
+      ai,
       leadName: lead.name,
       conversation,
       qualification: qual,

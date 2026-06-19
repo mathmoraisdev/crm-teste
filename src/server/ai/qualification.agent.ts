@@ -1,4 +1,3 @@
-import { getOpenAI, MODELS } from "./provider";
 import { QUALIFICATION_SYSTEM } from "./prompts";
 import { formatTranscript, type ConversationTurn } from "./transcript";
 import {
@@ -6,63 +5,38 @@ import {
   qualificationSchema,
   type QualificationResult,
 } from "./schemas";
+import type { AiClient } from "./provider";
 
 // Re-export p/ compatibilidade com quem importava ConversationTurn daqui.
 export type { ConversationTurn };
 
 /**
- * Agente de qualificação (gpt-4o, function calling forçado → JSON estruturado).
+ * Agente de qualificação (tier "strong", function calling forçado → JSON estruturado).
  * Analisa a conversa inteira e devolve a qualificação validada por zod.
+ * O `ai` (AiClient) é resolvido por-usuário pelo chamador (BYOK).
  */
 export async function runQualification(opts: {
+  ai: AiClient;
   leadName: string;
   conversation: ConversationTurn[];
 }): Promise<QualificationResult> {
-  const client = getOpenAI();
-
-  const res = await client.chat.completions.create({
-    model: MODELS.strong,
-    max_completion_tokens: 1024,
-    messages: [
-      { role: "system", content: QUALIFICATION_SYSTEM },
-      {
-        role: "user",
-        content: `Lead: ${opts.leadName}\n\nConversa até agora:\n${formatTranscript(
-          opts.conversation,
-        )}`,
-      },
-    ],
-    tools: [
-      {
-        type: "function",
-        function: {
-          name: "registrar_qualificacao",
-          description: "Registra a qualificação estruturada do lead.",
-          parameters: qualificationJsonSchema as unknown as Record<string, unknown>,
-        },
-      },
-    ],
-    tool_choice: { type: "function", function: { name: "registrar_qualificacao" } },
+  const input = await opts.ai.forcedToolCall({
+    tier: "strong",
+    maxTokens: 1024,
+    system: QUALIFICATION_SYSTEM,
+    user: `Lead: ${opts.leadName}\n\nConversa até agora:\n${formatTranscript(opts.conversation)}`,
+    toolName: "registrar_qualificacao",
+    toolDescription: "Registra a qualificação estruturada do lead.",
+    jsonSchema: qualificationJsonSchema as unknown as Record<string, unknown>,
   });
 
-  const call = res.choices[0]?.message?.tool_calls?.[0];
-  if (!call || call.type !== "function") {
+  if (input == null) {
     throw new Error("Agente de qualificação não retornou tool_call.");
   }
-
-  let input: unknown;
-  try {
-    input = JSON.parse(call.function.arguments);
-  } catch {
-    throw new Error("Agente de qualificação retornou JSON inválido.");
-  }
-
   const parsed = qualificationSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error(
-      `Saída de qualificação inválida: ${parsed.error.issues
-        .map((i) => i.message)
-        .join("; ")}`,
+      `Saída de qualificação inválida: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
     );
   }
   return parsed.data;
