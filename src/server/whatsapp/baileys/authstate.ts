@@ -83,9 +83,14 @@ export async function useDbAuthState(numberId: string): Promise<{
   };
 
   const removeData = async (key: string): Promise<void> => {
-    await prisma.whatsAppAuthState
-      .delete({ where: { numberId_key: { numberId, key: fixKey(key) } } })
-      .catch(() => {}); // idempotente: ausente já é o estado desejado
+    // deleteMany (não delete): apagar uma chave ausente é idempotente e NÃO deve
+    // lançar nem poluir o log com prisma:error (o delete falha/loga em "record
+    // not found"; o Baileys 7 remove prekeys com frequência → muito ruído).
+    await withRetry(() =>
+      prisma.whatsAppAuthState.deleteMany({
+        where: { numberId, key: fixKey(key) },
+      }),
+    );
   };
 
   const creds: AuthenticationCreds =
