@@ -25,6 +25,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@hapi/boom": "^10.0.1",
     "@prisma/client": "^6.16.0",
     "@whiskeysockets/baileys": "^6.17.16",

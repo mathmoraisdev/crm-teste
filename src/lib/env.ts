@@ -16,6 +16,10 @@ const schema = z.object({
   AI_MODEL_CHEAP: z.string().default("gpt-4o-mini"), // classificação / próxima pergunta (barato)
   AI_MODEL_STRONG: z.string().default("gpt-4o"), // qualificação estruturada / decisões
 
+  // Chave mestra p/ cifrar credenciais de IA dos usuários (BYOK). 64 hex = 32 bytes.
+  // Opcional p/ não quebrar build/avaliador; o factory de crypto exige em runtime.
+  ENCRYPTION_KEY: z.string().optional().default(""),
+
   WHATSAPP_MODE: z.enum(["mock", "cloud-api", "baileys"]).default("mock"),
   WHATSAPP_TOKEN: z.string().optional().default(""),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
@@ -112,3 +116,6 @@ export const env = parsed.success
 
 /** A IA é real sempre. Esta flag indica se a chave foi configurada. */
 export const isAiConfigured = env.OPENAI_API_KEY.length > 0;
+
+/** BYOK exige a chave mestra de 32 bytes (64 hex). */
+export const isEncryptionConfigured = /^[0-9a-fA-F]{64}$/.test(env.ENCRYPTION_KEY);
