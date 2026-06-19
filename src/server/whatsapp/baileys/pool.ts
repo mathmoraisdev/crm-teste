@@ -136,7 +136,23 @@ export async function connectNumber(numberId: string): Promise<void> {
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (!handlers) return;
     for (const m of messages) {
-      if (m.key.fromMe || !m.key.remoteJid?.endsWith("@s.whatsapp.net")) continue;
+      const remoteJid = m.key.remoteJid ?? "";
+      // Baileys 7 endereça DMs por LID (@lid) OU por telefone (@s.whatsapp.net).
+      // O guard antigo exigia @s.whatsapp.net e descartava TODO inbound LID antes
+      // do trace — a resposta do lead sumia sem rastro e a IA nunca era acionada.
+      // Aceita os dois; grupos/broadcast/status/newsletter continuam ignorados.
+      const isDM = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid");
+      if (m.key.fromMe || !isDM) continue;
+
+      // Telefone real (E.164) p/ casar o lead: se o inbound veio por LID, o número
+      // de telefone (PN) está em remoteJidAlt. Sem PN não dá p/ achar o lead por
+      // telefone — só o id LID, que não bate com o phone salvo.
+      const altJid = m.key.remoteJidAlt ?? "";
+      const pnJid = remoteJid.endsWith("@s.whatsapp.net")
+        ? remoteJid
+        : altJid.endsWith("@s.whatsapp.net")
+          ? altJid
+          : null;
 
       // O conteúdo pode vir ANINHADO: conversa com mensagens temporárias
       // (ephemeralMessage), view-once, ou doc-com-legenda. Sem desaninhar, o
@@ -152,10 +168,10 @@ export async function connectNumber(numberId: string): Promise<void> {
       const text =
         inner?.conversation ?? inner?.extendedTextMessage?.text ?? "";
 
-      // TRACE: mostra type, campos crus e texto extraído — pra flagrar mensagem
-      // descartada antes da IA (estrutura inesperada do Baileys, type != notify).
+      // TRACE: mostra type, JID cru + alt + PN resolvido, campos e texto — pra
+      // flagrar mensagem descartada antes da IA (LID sem PN, type != notify, etc).
       console.log(
-        `[inbound] type=${type} de=${m.key.remoteJid} ` +
+        `[inbound] type=${type} de=${remoteJid} alt=${altJid || "—"} pn=${pnJid ?? "SEM_PN"} ` +
           `campos=${msg ? Object.keys(msg).join("|") : "SEM_MESSAGE"} ` +
           `text="${text.slice(0, 40)}"`,
       );
@@ -164,13 +180,21 @@ export async function connectNumber(numberId: string): Promise<void> {
       if (!text) {
         if (!msg) {
           console.warn(
-            `[baileys] "${rec.label}" inbound NÃO descriptografado de ${m.key.remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
+            `[baileys] "${rec.label}" inbound NÃO descriptografado de ${remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );
         }
         continue;
       }
+      if (!pnJid) {
+        // Inbound por LID sem o PN no alt: não temos o telefone p/ casar o lead.
+        // Logar é melhor que o silêncio — sinaliza que precisamos do mapa LID→PN.
+        console.warn(
+          `[baileys] "${rec.label}" inbound LID sem PN (de=${remoteJid}) — sem telefone p/ casar o lead.`,
+        );
+        continue;
+      }
       await handlers.onInbound({
-        fromPhone: `+${m.key.remoteJid.split("@")[0]}`,
+        fromPhone: `+${pnJid.split("@")[0]}`,
         text,
         providerMessageId: m.key.id ?? null,
         whatsAppNumberId: numberId,
