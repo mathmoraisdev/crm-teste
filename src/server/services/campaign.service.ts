@@ -1,6 +1,14 @@
 import { prisma } from "@/server/db/client";
+import type { LeadStatus } from "@prisma/client";
 import { env } from "@/lib/env";
 import { renderSpintax } from "@/lib/spintax";
+
+/**
+ * Status que podem (re)entrar numa campanha. Inclui CONTATADO (permite redisparo
+ * para quem já foi abordado), mas PROTEGE conversas ativas/qualificadas/agendadas
+ * e descartados — esses NÃO recebem disparo frio de campanha.
+ */
+const DISPATCHABLE_LEAD_STATUSES: LeadStatus[] = ["NOVO", "CONTATADO"];
 
 export interface CampaignListItem {
   id: string;
@@ -52,8 +60,9 @@ export async function listCampaigns(userId: string): Promise<CampaignListItem[]>
 }
 
 /**
- * Cria a campanha e associa os leads `NOVO` informados (ou todos os `NOVO`
- * sem campanha, se nenhum id for passado).
+ * Cria a campanha e associa os leads informados (ou todos os elegíveis sem
+ * campanha, se nenhum id for passado). Elegível = status disparável
+ * (NOVO ou CONTATADO — ver DISPATCHABLE_LEAD_STATUSES).
  */
 export async function createCampaign(
   userId: string,
@@ -74,8 +83,8 @@ export async function createCampaign(
 
   const where =
     opts.leadIds && opts.leadIds.length > 0
-      ? { userId, id: { in: opts.leadIds }, status: "NOVO" as const }
-      : { userId, status: "NOVO" as const };
+      ? { userId, id: { in: opts.leadIds }, status: { in: DISPATCHABLE_LEAD_STATUSES } }
+      : { userId, status: { in: DISPATCHABLE_LEAD_STATUSES } };
 
   const { count } = await prisma.lead.updateMany({
     where,
@@ -86,10 +95,10 @@ export async function createCampaign(
 }
 
 /**
- * Inicia a campanha ENFILEIRANDO um OutboundJob por lead `NOVO` (não em opt-out)
- * e marcando a campanha como `RUNNING`. O disparo em si é feito pelo worker,
- * respeitando rate limit, janela comercial e cap diário — não há mais loop
- * síncrono aqui.
+ * Inicia a campanha ENFILEIRANDO um OutboundJob por lead disparável (NOVO ou
+ * CONTATADO, não em opt-out) e marcando a campanha como `RUNNING`. O disparo em
+ * si é feito pelo worker, respeitando rate limit, janela comercial e cap diário
+ * — não há mais loop síncrono aqui.
  */
 export async function startCampaign(
   campaignId: string,
@@ -99,7 +108,7 @@ export async function startCampaign(
     where: { id: campaignId, userId },
     include: {
       leads: {
-        where: { status: "NOVO", optOut: false },
+        where: { status: { in: DISPATCHABLE_LEAD_STATUSES }, optOut: false },
         select: { id: true, name: true },
       },
     },

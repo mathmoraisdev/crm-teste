@@ -88,6 +88,23 @@ describe("startCampaign (enfileiramento)", () => {
     expect((createMany.mock.calls[0][0] as { data: unknown[] }).data).toEqual([]);
   });
 
+  it("permite redisparo: enfileira leads NOVO e CONTATADO (protege conversas ativas)", async () => {
+    findFirst.mockResolvedValue({
+      id: "camp-3",
+      messageTemplate: "Oi {{nome}}",
+      leads: [{ id: "l1", name: "Ana" }],
+    });
+
+    await startCampaign("camp-3", "user-1");
+
+    // o filtro de leads elegíveis deve incluir CONTATADO (além de NOVO)
+    const arg = findFirst.mock.calls[0][0] as {
+      include: { leads: { where: { status: { in: string[] }; optOut: boolean } } };
+    };
+    expect(arg.include.leads.where.status.in).toEqual(["NOVO", "CONTATADO"]);
+    expect(arg.include.leads.where.optOut).toBe(false);
+  });
+
   it("lança quando a campanha não existe", async () => {
     findFirst.mockResolvedValue(null);
     await expect(startCampaign("nope", "user-1")).rejects.toThrow("Campanha não encontrada");

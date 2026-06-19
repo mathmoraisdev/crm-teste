@@ -98,14 +98,7 @@ export async function dispatchOutboundJob(
     const numberId = opts.numberId;
     if (!numberId) throw new Error("Baileys exige numberId (rotação no worker)");
 
-    const { send: poolSend, isOnWhatsApp } = await loadPool();
-    if (env.BAILEYS_ONWHATSAPP_CHECK && !(await isOnWhatsApp(numberId, lead.phone))) {
-      await prisma.outboundJob.update({
-        where: { id: jobId },
-        data: { status: "CANCELLED", lastError: "número não está no WhatsApp" },
-      });
-      return;
-    }
+    const { send: poolSend } = await loadPool();
 
     // simula digitação proporcional ANTES de enviar
     await sleep(
@@ -115,8 +108,19 @@ export async function dispatchOutboundJob(
       }),
     );
 
+    // O send() resolve o JID canônico (corrige o 9º dígito BR) e já aplica o
+    // gate anti-spam (BAILEYS_ONWHATSAPP_CHECK). Número fora do WhatsApp → cancela.
     const out = await poolSend(numberId, lead.phone, job.content);
-    if (!out.ok) throw new Error(`baileys send falhou: ${out.reason}`);
+    if (!out.ok) {
+      if (out.reason === "not_on_whatsapp") {
+        await prisma.outboundJob.update({
+          where: { id: jobId },
+          data: { status: "CANCELLED", lastError: "número não está no WhatsApp" },
+        });
+        return;
+      }
+      throw new Error(`baileys send falhou: ${out.reason}`);
+    }
 
     await prisma.$transaction([
       prisma.message.create({

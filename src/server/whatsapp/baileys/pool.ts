@@ -12,6 +12,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
+import { jidOf, pickSendJid } from "./jid";
 
 const logger = pino({ level: "warn" });
 
@@ -33,8 +34,6 @@ type Handlers = {
 const sockets = new Map<string, WASocket>();
 const connecting = new Set<string>(); // lock síncrono contra conexão duplicada (race reconnect × ensure)
 let handlers: Handlers | null = null;
-
-const jidOf = (phone: string) => `${phone.replace(/^\+/, "")}@s.whatsapp.net`;
 
 export function registerHandlers(h: Handlers) {
   handlers = h;
@@ -135,16 +134,28 @@ export async function connectNumber(numberId: string): Promise<void> {
   }
 }
 
-/** Verifica se o número existe no WhatsApp (sinal anti-spam). */
-export async function isOnWhatsApp(numberId: string, phone: string): Promise<boolean> {
-  const sock = sockets.get(numberId);
-  if (!sock) return false;
-  const res = await sock.onWhatsApp(jidOf(phone)).catch(() => []);
-  return !!res?.[0]?.exists;
+/**
+ * Resolve o JID canônico consultando o WhatsApp. `exists`:
+ *  - true/false → o WhatsApp respondeu (conta existe ou não);
+ *  - null       → a consulta falhou (rede/limite); usamos o fallback e NÃO
+ *                 bloqueamos o envio por causa de um erro de lookup.
+ */
+async function resolveJid(
+  sock: WASocket,
+  phone: string,
+): Promise<{ exists: boolean | null; jid: string }> {
+  const fallback = jidOf(phone);
+  try {
+    const res = await sock.onWhatsApp(fallback);
+    return pickSendJid(fallback, res);
+  } catch {
+    return { exists: null, jid: fallback };
+  }
 }
 
 /** Envia com simulação humana (presence/typing). NÃO faz o delay de digitação
- *  aqui — quem chama (messaging) controla o sleep p/ manter a lógica testável. */
+ *  aqui — quem chama (messaging) controla o sleep p/ manter a lógica testável.
+ *  O JID de destino é o CANÔNICO do WhatsApp (corrige o 9º dígito BR). */
 export async function send(
   numberId: string,
   phone: string,
@@ -152,7 +163,13 @@ export async function send(
 ): Promise<SendOutcome> {
   const sock = sockets.get(numberId);
   if (!sock) return { ok: false, reason: "no_socket" };
-  const jid = jidOf(phone);
+  const { exists, jid } = await resolveJid(sock, phone);
+  // Gate anti-spam: só bloqueia quando a checagem está ligada E o WhatsApp
+  // respondeu explicitamente que o número NÃO existe (exists === false).
+  // Erro de lookup (exists === null) não bloqueia — envia pelo fallback.
+  if (exists === false && env.BAILEYS_ONWHATSAPP_CHECK) {
+    return { ok: false, reason: "not_on_whatsapp" };
+  }
   try {
     await sock.presenceSubscribe(jid).catch(() => {});
     await sock.sendPresenceUpdate("composing", jid).catch(() => {});
