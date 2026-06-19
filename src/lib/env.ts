@@ -55,7 +55,7 @@ const schema = z.object({
   // do Railway (disco efêmero) gravando na tabela WhatsAppAuthState; "file"
   // mantém o comportamento antigo (useMultiFileAuthState em BAILEYS_AUTH_DIR).
   BAILEYS_AUTH_STORE: z.enum(["db", "file"]).default("db"),
-  BAILEYS_PER_NUMBER_DAILY_CAP: z.coerce.number().int().positive().default(30), // warm-up conservador por chip
+  BAILEYS_PER_NUMBER_DAILY_CAP: z.coerce.number().int().positive().default(100000), // modo massa: default solto (baixe na UI p/ warm-up)
   BAILEYS_ONWHATSAPP_CHECK: z.coerce.boolean().default(true), // pula número sem WhatsApp
   BAILEYS_TYPING_MS_PER_CHAR: z.coerce.number().int().nonnegative().default(55), // simula digitação
   BAILEYS_TYPING_MAX_MS: z.coerce.number().int().positive().default(9000), // teto do "digitando..."
