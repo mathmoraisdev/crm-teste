@@ -66,7 +66,12 @@ function LoginForm() {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-[13px] font-bold text-[#1A2A23]">Senha</label>
-            <span className="text-[12.5px] font-bold text-slate-400">Esqueci a senha</span>
+            <Link
+              href="/esqueci-senha"
+              className="text-[12.5px] font-bold text-slate-400 transition-colors hover:text-brand-500"
+            >
+              Esqueci a senha
+            </Link>
           </div>
           <input
             type="password"

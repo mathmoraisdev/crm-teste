@@ -1,6 +1,16 @@
 import { prisma } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { normalizeEmail } from "@/lib/email";
+import { normalizeEmail, sendEmail } from "@/lib/email";
+import { generateToken, hashToken } from "@/lib/tokens";
+
+/** Base para os links nos e-mails (sem barra final). */
+function appUrl(): string {
+  return (process.env.APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+}
+
+// Validade dos tokens one-time.
+const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60; // 1h
+const EMAIL_VERIFY_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 
 export interface RegisterInput {
   name: string;
@@ -51,6 +61,196 @@ export async function authenticateUser(
 export async function getUserById(id: string) {
   return prisma.user.findUnique({
     where: { id },
-    select: { id: true, name: true, email: true, whatsapp: true },
+    select: { id: true, name: true, email: true, whatsapp: true, emailVerified: true, createdAt: true },
   });
+}
+
+// ───────────────────────── Reset de senha ─────────────────────────
+
+/**
+ * Cria um token de reset e envia o e-mail com o link.
+ *
+ * Não revela se a conta existe: se o e-mail não bate com nenhuma conta,
+ * simplesmente não faz nada (a rota responde 200 de qualquer jeito).
+ * Best-effort no envio — não lança se o e-mail falhar.
+ */
+export async function createPasswordReset(rawEmail: string): Promise<void> {
+  const email = normalizeEmail(rawEmail);
+  if (!email) return;
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, name: true, email: true },
+  });
+  if (!user) return; // não vaza existência da conta
+
+  const token = generateToken();
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    },
+  });
+
+  const link = `${appUrl()}/redefinir-senha?token=${token}`;
+  await sendEmail({
+    to: user.email,
+    subject: "Redefinir sua senha — Disparador.ai",
+    html: `<p>Olá${user.name ? `, ${user.name}` : ""}!</p>
+<p>Recebemos um pedido para redefinir a senha da sua conta. Clique no link abaixo para escolher uma nova senha (válido por 1 hora):</p>
+<p><a href="${link}">Redefinir minha senha</a></p>
+<p>Se você não fez esse pedido, pode ignorar este e-mail.</p>`,
+    text: `Para redefinir sua senha, acesse: ${link}\n(Válido por 1 hora. Se não foi você, ignore este e-mail.)`,
+  });
+}
+
+/**
+ * Troca a senha a partir de um token válido (não expirado, não usado).
+ * Marca o token como usado. Lança erro amigável se inválido/expirado.
+ */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  if (newPassword.length < 8) {
+    throw new Error("A senha precisa ter ao menos 8 caracteres.");
+  }
+
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashToken(token) },
+  });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    throw new Error("Link inválido ou expirado. Solicite um novo.");
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash: hashPassword(newPassword) },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+}
+
+// ──────────────────── Verificação de e-mail ────────────────────
+
+/**
+ * Gera um token de verificação de e-mail e envia o link de confirmação.
+ * Best-effort: não lança se o e-mail falhar (o cadastro não pode quebrar).
+ */
+export async function createEmailVerification(userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, emailVerified: true },
+  });
+  if (!user || user.emailVerified) return; // já verificado: nada a fazer
+
+  const token = generateToken();
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+    },
+  });
+
+  const link = `${appUrl()}/api/auth/verify?token=${token}`;
+  await sendEmail({
+    to: user.email,
+    subject: "Confirme seu e-mail — Disparador.ai",
+    html: `<p>Olá${user.name ? `, ${user.name}` : ""}!</p>
+<p>Falta pouco para concluir seu cadastro. Confirme seu e-mail clicando no link abaixo (válido por 24 horas):</p>
+<p><a href="${link}">Confirmar meu e-mail</a></p>`,
+    text: `Confirme seu e-mail acessando: ${link}\n(Válido por 24 horas.)`,
+  });
+}
+
+/**
+ * Valida o token de verificação e marca `emailVerified = now`.
+ * Retorna true em sucesso; false se o token for inválido/expirado.
+ */
+export async function verifyEmailToken(token: string): Promise<boolean> {
+  const record = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash: hashToken(token) },
+  });
+  if (!record || record.expiresAt < new Date()) return false;
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { emailVerified: new Date() },
+    }),
+    // Token é one-time: consome todos os pendentes desta conta.
+    prisma.emailVerificationToken.deleteMany({ where: { userId: record.userId } }),
+  ]);
+  return true;
+}
+
+// ───────────────────── LGPD: exportar / apagar ─────────────────────
+
+/**
+ * Exporta TODOS os dados do usuário (conta, leads, campanhas, mensagens,
+ * números) como objeto serializável — para download em JSON (portabilidade LGPD).
+ */
+export async function exportUserData(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      whatsapp: true,
+      emailVerified: true,
+      createdAt: true,
+      updatedAt: true,
+      leads: {
+        include: {
+          messages: true,
+          qualification: true,
+          meeting: true,
+          campaign: { select: { id: true, name: true } },
+        },
+      },
+      campaigns: true,
+      whatsAppNumbers: {
+        // Não exporta credenciais/sessão do Baileys — só metadados do chip.
+        select: {
+          id: true,
+          label: true,
+          phone: true,
+          status: true,
+          dailyCap: true,
+          connectedAt: true,
+          bannedAt: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+  if (!user) throw new Error("Conta não encontrada.");
+
+  return {
+    exportedAt: new Date().toISOString(),
+    account: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      whatsapp: user.whatsapp,
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    },
+    leads: user.leads,
+    campaigns: user.campaigns,
+    whatsAppNumbers: user.whatsAppNumbers,
+  };
+}
+
+/**
+ * Apaga a conta do usuário. O cascade do schema (onDelete: Cascade) remove
+ * leads, mensagens, campanhas, números e tokens associados.
+ */
+export async function deleteAccount(userId: string): Promise<void> {
+  await prisma.user.delete({ where: { id: userId } });
 }

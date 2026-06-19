@@ -96,7 +96,9 @@ export async function handleInbound(
     },
   });
 
-  // Opt-out: encerra o lead, cancela jobs pendentes, não qualifica nem responde.
+  // Opt-out (LGPD): tem precedência sobre tudo — inclusive sobre o handoff humano.
+  // Mesmo com a IA pausada (operador no controle), um "PARAR/SAIR" precisa encerrar
+  // o lead e cancelar os jobs pendentes; é requisito legal, não pode ser ignorado.
   if (isOptOut(input.text)) {
     await prisma.$transaction([
       prisma.lead.update({
@@ -108,6 +110,13 @@ export async function handleInbound(
         data: { status: "CANCELLED", lastError: "opt-out do lead" },
       }),
     ]);
+    return { leadId: lead.id };
+  }
+
+  // Handoff humano: o operador assumiu a conversa (aiPaused=true). Apenas
+  // persistimos o inbound acima e paramos aqui — não rodamos os agentes de IA
+  // nem respondemos automaticamente. O operador responde manualmente via /reply.
+  if (lead.aiPaused) {
     return { leadId: lead.id };
   }
 
@@ -171,4 +180,35 @@ export async function handleInbound(
   // decision.shouldDiscard → silêncio (não responde a lead descartado)
 
   return { leadId: lead.id };
+}
+
+/**
+ * Handoff humano: pausa (paused=true) ou retoma (paused=false) a IA para o lead.
+ * Com aiPaused=true, handleInbound só persiste o inbound e o operador responde
+ * manualmente via sendManualReply. Escopado por conta (userId).
+ */
+export async function setHandoff(leadId: string, userId: string, paused: boolean) {
+  const exists = await prisma.lead.findFirst({
+    where: { id: leadId, userId },
+    select: { id: true },
+  });
+  if (!exists) throw new Error("Lead não encontrado");
+  return prisma.lead.update({
+    where: { id: leadId },
+    data: { aiPaused: paused, aiPausedAt: paused ? new Date() : null },
+  });
+}
+
+/**
+ * Resposta manual do operador: envia uma mensagem OUTBOUND ao lead pelo mesmo
+ * chip e persiste como Message(OUTBOUND) — reaproveita sendWhatsAppMessage, a
+ * fonte única de verdade de envio. Escopado por conta (userId).
+ */
+export async function sendManualReply(leadId: string, userId: string, content: string) {
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, userId },
+    select: { id: true, phone: true, userId: true, whatsAppNumberId: true },
+  });
+  if (!lead) throw new Error("Lead não encontrado");
+  await sendWhatsAppMessage(lead, content);
 }

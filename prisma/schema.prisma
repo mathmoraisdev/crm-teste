@@ -15,17 +15,20 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique // login (normalizado lowercase)
-  whatsapp     String? // telefone informado no cadastro (opcional)
-  passwordHash String // scrypt$salt$hash
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique // login (normalizado lowercase)
+  whatsapp      String? // telefone informado no cadastro (opcional)
+  passwordHash  String // scrypt$salt$hash
+  emailVerified DateTime? // null = e-mail ainda não confirmado
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  leads           Lead[]
-  campaigns       Campaign[]
-  whatsAppNumbers WhatsAppNumber[]
+  leads                     Lead[]
+  campaigns                 Campaign[]
+  whatsAppNumbers           WhatsAppNumber[]
+  emailVerificationTokens   EmailVerificationToken[]
+  passwordResetTokens       PasswordResetToken[]
 }
 
 enum LeadStatus {
@@ -96,6 +99,9 @@ model Lead {
   optOut        Boolean        @default(false)
   optOutAt      DateTime?
   consentSource String? // origem do opt-in (LGPD)
+  // IA pausada manualmente p/ este lead (handover humano)
+  aiPaused      Boolean        @default(false)
+  aiPausedAt    DateTime?
   outboundJobs  OutboundJob[]
   // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
   whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
@@ -216,8 +222,61 @@ model WhatsAppNumber {
   outboundJobs OutboundJob[]
   messages     Message[]
   leads        Lead[]
+  authState    WhatsAppAuthState[] // credenciais Baileys persistidas no banco
 
   @@unique([userId, phone])
   @@index([userId])
   @@index([status])
+}
+
+// Token de confirmação de e-mail (one-time, guardamos só o hash).
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Token de redefinição de senha (one-time, guardamos só o hash).
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime? // marca consumo (evita reuso)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Lead de consultoria captado na landing (formulário "fale com um consultor").
+model ConsultantLead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  whatsapp  String
+  plan      String? // plano de interesse
+  message   String?
+  source    String   @default("landing")
+  status    String   @default("NOVO")
+  createdAt DateTime @default(now())
+
+  @@index([status])
+}
+
+// Estado de autenticação do Baileys persistido no banco (chave/valor por número).
+model WhatsAppAuthState {
+  id        String         @id @default(cuid())
+  number    WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  numberId  String
+  key       String
+  value     String
+  updatedAt DateTime       @updatedAt
+
+  @@unique([numberId, key])
 }

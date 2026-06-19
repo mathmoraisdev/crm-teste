@@ -110,6 +110,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               messages={lead.messages}
               onReplied={load}
               canReply={canReply}
+              aiPaused={lead.aiPaused}
             />
           </Card>
         </div>

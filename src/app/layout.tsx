@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Manrope, DM_Mono } from "next/font/google";
 import "./globals.css";
+import { PostHogProvider } from "@/components/app/PostHogProvider";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -39,7 +40,9 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
     >
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-screen font-sans">
+        <PostHogProvider>{children}</PostHogProvider>
+      </body>
     </html>
   );
 }

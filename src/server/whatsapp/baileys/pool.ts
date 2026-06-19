@@ -11,6 +11,7 @@ import pino from "pino";
 import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
+import { useDbAuthState } from "./authstate";
 
 const logger = pino({ level: "warn" });
 
@@ -48,8 +49,14 @@ export async function connectNumber(numberId: string): Promise<void> {
     const rec = await prisma.whatsAppNumber.findUnique({ where: { id: numberId } });
     if (!rec || rec.status === "DISABLED" || rec.status === "BANNED") return;
 
-    const dir = path.join(env.BAILEYS_AUTH_DIR, rec.sessionDir);
-    const { state, saveCreds } = await useMultiFileAuthState(dir);
+    // Auth-state: por padrão no Postgres (sobrevive a redeploys do Railway,
+    // que zeram o disco). BAILEYS_AUTH_STORE="file" volta ao comportamento
+    // antigo (arquivos em BAILEYS_AUTH_DIR). Aqui o número já existe no banco
+    // (findUnique acima), então o caminho "db" é sempre seguro.
+    const { state, saveCreds } =
+      env.BAILEYS_AUTH_STORE === "file"
+        ? await useMultiFileAuthState(path.join(env.BAILEYS_AUTH_DIR, rec.sessionDir))
+        : await useDbAuthState(rec.id);
     // usa a versão ATUAL do WhatsApp Web — versão chumbada/velha causa rejeição
     // (Connection Failure 405) no pareamento. Cai no default do Baileys se falhar.
     const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));

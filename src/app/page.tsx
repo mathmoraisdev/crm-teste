@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { ArrowRight, Check, Plus } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { Logo } from "@/components/app/Logo";
+import { ConsultantModal } from "@/components/ConsultantModal";
 
-const STATS = [
-  { value: "2.000", suffix: "+", label: "negócios usando" },
-  { value: "8", suffix: "mi", label: "mensagens enviadas" },
-  { value: "98", suffix: "%", label: "taxa de entrega" },
-  { value: "4.9", suffix: "/5", label: "avaliação dos clientes" },
+// Selos honestos (sem métricas inventadas): destacam termos comerciais reais.
+const PERKS = [
+  { label: "Sem fidelidade" },
+  { label: "Cancele quando quiser" },
+  { label: "Conecte em 30s" },
+  { label: "Suporte de gente de verdade" },
 ];
 
 const STEPS = [
@@ -55,44 +57,19 @@ const FEATURES = [
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote:
-      "Disparei pra minha base de 4 mil clientes num domingo e segunda já tinha 60 pedidos novos. Pagou o ano inteiro num dia.",
-    name: "Marina Costa",
-    role: "Loja de roupas · Curitiba",
-    initial: "M",
-  },
-  {
-    quote:
-      "O CRM é a melhor parte. Antes eu perdia resposta no meio da bagunça. Agora vejo lead por lead e fecho mais.",
-    name: "João Henrique",
-    role: "Imobiliária · Goiânia",
-    initial: "J",
-    dark: true,
-  },
-  {
-    quote:
-      "Simples de mais. Importei meus contatos, agendei e fui dormir. Acordei com a campanha entregue e zero bloqueio.",
-    name: "Patrícia Lemos",
-    role: "Clínica estética · Recife",
-    initial: "P",
-  },
-];
-
 const PLANS = [
   {
     name: "Inicial",
     desc: "Para começar a vender no WhatsApp.",
     price: "R$97",
-    cta: "Começar grátis",
+    cta: "Falar com um consultor",
     features: ["1 número de WhatsApp", "1.000 disparos / mês", "CRM básico", "Importação por CSV"],
   },
   {
     name: "Profissional",
     desc: "Para escalar de verdade as vendas.",
     price: "R$197",
-    cta: "Começar grátis",
+    cta: "Falar com um consultor",
     featured: true,
     features: [
       "1 número de WhatsApp",
@@ -106,7 +83,7 @@ const PLANS = [
     name: "Escala",
     desc: "Para agências e times de vendas.",
     price: "R$397",
-    cta: "Falar com vendas",
+    cta: "Falar com um consultor",
     features: ["3 números de WhatsApp", "Disparos ilimitados", "Acesso à API", "Multiusuário", "Suporte prioritário"],
   },
 ];
@@ -149,6 +126,16 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Link href="/login" className="px-2 py-2 text-sm font-bold text-ink">Entrar</Link>
+            <ConsultantModal
+              trigger={
+                <button
+                  type="button"
+                  className="hidden rounded-xl border border-[#E0E7E3] bg-white px-4 py-2.5 text-sm font-bold text-ink transition-colors hover:border-brand-400 hover:text-brand-700 sm:inline-flex"
+                >
+                  Falar com um consultor
+                </button>
+              }
+            />
             <Link
               href="/signup"
               className="inline-flex items-center gap-2 rounded-xl bg-forest px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-500"
@@ -254,16 +241,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* STATS STRIP */}
+      {/* SELOS — proposta de valor honesta, sem métricas inventadas */}
       <section className="border-y border-[rgba(10,27,20,.06)] bg-white">
-        <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-6 px-6 py-9 text-center md:grid-cols-4 md:px-8">
-          {STATS.map((s) => (
-            <div key={s.label}>
-              <div className="font-display text-[36px] font-bold tracking-[-0.02em]">
-                {s.value}
-                <span className="text-brand-500">{s.suffix}</span>
-              </div>
-              <div className="mt-1 text-[13.5px] font-semibold text-slate-500">{s.label}</div>
+        <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-6 px-6 py-9 md:grid-cols-4 md:px-8">
+          {PERKS.map((p) => (
+            <div key={p.label} className="flex items-center justify-center gap-2.5 text-center">
+              <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-brand-50 text-brand-500">
+                <Check size={16} />
+              </span>
+              <span className="text-[14.5px] font-bold tracking-[-0.01em] text-ink">{p.label}</span>
             </div>
           ))}
         </div>
@@ -319,42 +305,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* DEPOIMENTOS */}
-      <section className="pb-24">
-        <div className="mx-auto max-w-[1180px] px-6 md:px-8">
-          <SectionHead eyebrow="Quem usa, recomenda" title="Negócios reais, resultados reais" />
-          <div className="grid gap-5 md:grid-cols-3">
-            {TESTIMONIALS.map((t) => (
-              <div
-                key={t.name}
-                className={
-                  t.dark
-                    ? "relative overflow-hidden rounded-[18px] border border-forest bg-forest p-7"
-                    : "rounded-[18px] border border-[#EBEFEC] bg-white p-7"
-                }
-              >
-                {t.dark && (
-                  <span className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(95,227,161,.2),transparent_70%)]" />
-                )}
-                <div className={`text-[15px] ${t.dark ? "text-mint" : "text-brand-400"}`}>★★★★★</div>
-                <p className={`mt-4 text-[15.5px] font-medium leading-relaxed ${t.dark ? "text-white" : "text-[#1A2A23]"}`}>
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <div className="mt-6 flex items-center gap-3">
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-full text-[15px] font-extrabold ${t.dark ? "bg-mint text-forest" : "bg-gradient-to-br from-brand-400 to-brand-800 text-white"}`}>
-                    {t.initial}
-                  </div>
-                  <div>
-                    <div className={`text-[14.5px] font-extrabold ${t.dark ? "text-white" : ""}`}>{t.name}</div>
-                    <div className={`text-[12.5px] ${t.dark ? "text-[#9FBCAF]" : "text-slate-500"}`}>{t.role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* PREÇOS */}
       <section id="precos" className="pb-24">
         <div className="mx-auto max-w-[1180px] px-6 md:px-8">
@@ -385,16 +335,21 @@ export default function LandingPage() {
                   <span className={`font-display text-[46px] font-bold leading-none tracking-[-0.03em] ${p.featured ? "text-white" : ""}`}>{p.price}</span>
                   <span className={`mb-1.5 text-sm font-semibold ${p.featured ? "text-[#9FBCAF]" : "text-slate-500"}`}>/mês</span>
                 </div>
-                <Link
-                  href="/signup"
-                  className={
-                    p.featured
-                      ? "relative mt-6 rounded-xl bg-brand-500 py-3.5 text-center text-[15px] font-bold text-white shadow-[0_12px_26px_-10px_rgba(14,164,107,.7)] transition-colors hover:bg-brand-400"
-                      : "relative mt-6 rounded-xl border border-[#E0E7E3] bg-[#F1F5F3] py-3.5 text-center text-[15px] font-bold text-ink transition-colors hover:border-brand-100 hover:bg-brand-50"
+                <ConsultantModal
+                  plan={p.name}
+                  trigger={
+                    <button
+                      type="button"
+                      className={
+                        p.featured
+                          ? "relative mt-6 rounded-xl bg-brand-500 py-3.5 text-center text-[15px] font-bold text-white shadow-[0_12px_26px_-10px_rgba(14,164,107,.7)] transition-colors hover:bg-brand-400"
+                          : "relative mt-6 rounded-xl border border-[#E0E7E3] bg-[#F1F5F3] py-3.5 text-center text-[15px] font-bold text-ink transition-colors hover:border-brand-100 hover:bg-brand-50"
+                      }
+                    >
+                      {p.cta}
+                    </button>
                   }
-                >
-                  {p.cta}
-                </Link>
+                />
                 <div className={`relative my-6 h-px ${p.featured ? "bg-[#1E3A2C]" : "bg-[#F0F3F1]"}`} />
                 <div className="relative flex flex-col gap-3">
                   {p.features.map((f) => (
@@ -468,7 +423,8 @@ export default function LandingPage() {
             </div>
             <div className="flex flex-wrap gap-16">
               <FooterCol title="Produto" links={[["Recursos", "#recursos"], ["Planos", "#precos"], ["Como funciona", "#funciona"]]} />
-              <FooterCol title="Empresa" links={[["Perguntas", "#faq"], ["Suporte", "#"], ["Contato", "#"]]} />
+              <FooterCol title="Empresa" links={[["Perguntas", "#faq"], ["Suporte", "/consultor"], ["Contato", "/consultor"]]} />
+              <FooterCol title="Legal" links={[["Privacidade", "/privacidade"], ["Termos", "/termos"], ["Cookies", "/cookies"]]} />
               <FooterCol title="Acesso" links={[["Entrar", "/login"], ["Criar conta", "/signup"]]} />
             </div>
           </div>

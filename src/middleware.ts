@@ -10,6 +10,8 @@ import { SESSION_COOKIE, isAuthEnabled, verifySession } from "@/lib/auth";
  *  - /api/webhooks/*       — a Meta chama o webhook do WhatsApp; tem verificação
  *                            própria (verify_token + assinatura X-Hub-Signature)
  *  - /api/cron/*           — disparo serverless, protegido pelo CRON_SECRET
+ *  - páginas legais / fluxos de conta (privacidade, termos, cookies, consultor,
+ *    esqueci/redefinir senha, verificar e-mail) + /api/consultant (lead público)
  */
 const PUBLIC_PREFIXES = [
   "/",
@@ -18,6 +20,14 @@ const PUBLIC_PREFIXES = [
   "/api/auth",
   "/api/webhooks",
   "/api/cron",
+  "/privacidade",
+  "/termos",
+  "/cookies",
+  "/consultor",
+  "/esqueci-senha",
+  "/redefinir-senha",
+  "/verificar-email",
+  "/api/consultant",
 ];
 
 function isPublic(pathname: string): boolean {

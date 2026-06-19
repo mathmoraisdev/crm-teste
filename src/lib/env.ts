@@ -45,10 +45,23 @@ const schema = z.object({
 
   // Baileys (transporte não-oficial, multi-número)
   BAILEYS_AUTH_DIR: z.string().default(".baileys-auth"),
+  // Onde persistir o auth-state dos chips. "db" (default) sobrevive a redeploys
+  // do Railway (disco efêmero) gravando na tabela WhatsAppAuthState; "file"
+  // mantém o comportamento antigo (useMultiFileAuthState em BAILEYS_AUTH_DIR).
+  BAILEYS_AUTH_STORE: z.enum(["db", "file"]).default("db"),
   BAILEYS_PER_NUMBER_DAILY_CAP: z.coerce.number().int().positive().default(30), // warm-up conservador por chip
   BAILEYS_ONWHATSAPP_CHECK: z.coerce.boolean().default(true), // pula número sem WhatsApp
   BAILEYS_TYPING_MS_PER_CHAR: z.coerce.number().int().nonnegative().default(55), // simula digitação
   BAILEYS_TYPING_MAX_MS: z.coerce.number().int().positive().default(9000), // teto do "digitando..."
+
+  // App / e-mail transacional / consultor / admin / observabilidade.
+  // Todas opcionais com default seguro: o build nunca quebra sem elas.
+  APP_URL: z.string().default("http://localhost:3000"), // base p/ links em e-mails
+  EMAIL_FROM: z.string().optional().default(""), // remetente dos e-mails (Resend)
+  RESEND_API_KEY: z.string().optional().default(""), // chave da Resend (sem ela, e-mail vira console.info)
+  CONSULTANT_WHATSAPP: z.string().optional().default(""), // número que recebe leads do consultor
+  ADMIN_EMAILS: z.string().optional().default(""), // e-mails admin (separados por vírgula)
+  SENTRY_DSN: z.string().optional().default(""), // DSN do Sentry (server-side)
 });
 
 const parsed = schema.safeParse(process.env);

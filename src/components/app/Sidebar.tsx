@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Megaphone, Smartphone, LogOut } from "lucide-react";
+import { Users, Megaphone, Smartphone, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
 const NAV = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/campaigns", label: "Campanhas", icon: Megaphone },
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function Sidebar() {

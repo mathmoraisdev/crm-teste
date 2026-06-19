@@ -109,7 +109,15 @@ export default function SignupPage() {
               {loading ? "Criando conta…" : "Criar conta grátis →"}
             </button>
             <p className="mt-0.5 text-center text-xs leading-snug text-slate-400">
-              Ao criar a conta você concorda com os Termos de Uso e a Política de Privacidade.
+              Ao criar a conta você concorda com os{" "}
+              <Link href="/termos" className="font-semibold text-brand-500 hover:underline">
+                Termos de Uso
+              </Link>{" "}
+              e a{" "}
+              <Link href="/privacidade" className="font-semibold text-brand-500 hover:underline">
+                Política de Privacidade
+              </Link>
+              .
             </p>
           </div>
         </form>

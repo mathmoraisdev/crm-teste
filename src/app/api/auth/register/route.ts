@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/auth";
-import { registerUser } from "@/server/services/user.service";
+import { registerUser, createEmailVerification } from "@/server/services/user.service";
 
 export const runtime = "nodejs";
 
@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const { id } = await registerUser(parsed.data);
+    // Dispara o e-mail de confirmação (best-effort: não bloqueia o cadastro).
+    void createEmailVerification(id).catch((e) =>
+      console.error("[register] falha ao enviar verificação de e-mail:", e),
+    );
     const token = await signSession(id);
     const res = NextResponse.json({ ok: true }, { status: 201 });
     res.cookies.set(SESSION_COOKIE, token, {
