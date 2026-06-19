@@ -31,32 +31,62 @@ export async function listCampaigns(userId: string): Promise<CampaignListItem[]>
   const campaigns = await prisma.campaign.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: {
-      leads: { select: { status: true } },
-      outboundJobs: { select: { status: true } },
+    select: {
+      id: true,
+      name: true,
+      messageTemplate: true,
+      status: true,
+      dailyCap: true,
+      createdAt: true,
     },
   });
-  return campaigns.map((c) => {
-    const jobs = c.outboundJobs;
-    return {
-      id: c.id,
-      name: c.name,
-      messageTemplate: c.messageTemplate,
-      status: c.status,
-      dailyCap: c.dailyCap,
-      leadCount: c.leads.length,
-      pendingCount: c.leads.filter((l) => l.status === "NOVO").length,
-      jobs: {
-        pending: jobs.filter(
-          (j) => j.status === "PENDING" || j.status === "SENDING",
-        ).length,
-        sent: jobs.filter((j) => j.status === "SENT").length,
-        failed: jobs.filter((j) => j.status === "FAILED").length,
-        total: jobs.length,
-      },
-      createdAt: c.createdAt,
-    };
-  });
+  const ids = campaigns.map((c) => c.id);
+  if (ids.length === 0) return [];
+
+  // Contagens agregadas no banco — não puxamos leads/jobs individuais (aguenta
+  // campanhas com milhares de leads sem estourar a memória).
+  const [leadCounts, novoCounts, jobCounts] = await Promise.all([
+    prisma.lead.groupBy({ by: ["campaignId"], where: { campaignId: { in: ids } }, _count: { _all: true } }),
+    prisma.lead.groupBy({
+      by: ["campaignId"],
+      where: { campaignId: { in: ids }, status: "NOVO" },
+      _count: { _all: true },
+    }),
+    prisma.outboundJob.groupBy({
+      by: ["campaignId", "status"],
+      where: { campaignId: { in: ids } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const leadByCampaign = new Map<string, number>();
+  for (const r of leadCounts) if (r.campaignId) leadByCampaign.set(r.campaignId, r._count._all);
+  const novoByCampaign = new Map<string, number>();
+  for (const r of novoCounts) if (r.campaignId) novoByCampaign.set(r.campaignId, r._count._all);
+
+  const jobsByCampaign = new Map<string, { pending: number; sent: number; failed: number; total: number }>();
+  for (const r of jobCounts) {
+    if (!r.campaignId) continue;
+    const acc = jobsByCampaign.get(r.campaignId) ?? { pending: 0, sent: 0, failed: 0, total: 0 };
+    const n = r._count._all;
+    acc.total += n;
+    if (r.status === "PENDING" || r.status === "SENDING") acc.pending += n;
+    else if (r.status === "SENT") acc.sent += n;
+    else if (r.status === "FAILED") acc.failed += n;
+    jobsByCampaign.set(r.campaignId, acc);
+  }
+
+  return campaigns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    messageTemplate: c.messageTemplate,
+    status: c.status,
+    dailyCap: c.dailyCap,
+    leadCount: leadByCampaign.get(c.id) ?? 0,
+    pendingCount: novoByCampaign.get(c.id) ?? 0,
+    jobs: jobsByCampaign.get(c.id) ?? { pending: 0, sent: 0, failed: 0, total: 0 },
+    createdAt: c.createdAt,
+  }));
 }
 
 /**
