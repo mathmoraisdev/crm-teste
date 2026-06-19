@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
+import { getAiCredentialStatus } from "@/server/services/ai-credential.service";
 import { AccountSettings } from "@/components/app/AccountSettings";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ export default async function ConfiguracoesPage() {
 
   const user = await getUserById(userId);
   if (!user) redirect("/login");
+
+  const aiKey = await getAiCredentialStatus(userId);
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -27,6 +30,7 @@ export default async function ConfiguracoesPage() {
           emailVerified: user.emailVerified ? user.emailVerified.toISOString() : null,
           createdAt: user.createdAt.toISOString(),
         }}
+        aiKey={aiKey}
       />
     </div>
   );

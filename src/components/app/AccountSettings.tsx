@@ -16,7 +16,20 @@ type Account = {
   createdAt: string; // ISO
 };
 
-export function AccountSettings({ account }: { account: Account }) {
+type AiKeyStatus = {
+  configured: boolean;
+  provider: "OPENAI" | "ANTHROPIC" | null;
+  last4: string | null;
+  verifiedAt: string | null;
+};
+
+export function AccountSettings({
+  account,
+  aiKey,
+}: {
+  account: Account;
+  aiKey: AiKeyStatus;
+}) {
   const router = useRouter();
   const verified = !!account.emailVerified;
 
@@ -24,6 +37,40 @@ export function AccountSettings({ account }: { account: Account }) {
   const [resent, setResent] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // BYOK: chave de API do usuário.
+  const [status, setStatus] = useState<AiKeyStatus>(aiKey);
+  const [provider, setProvider] = useState<"OPENAI" | "ANTHROPIC">(
+    aiKey.provider ?? "OPENAI",
+  );
+  const [keyInput, setKeyInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  async function saveKey() {
+    setSaving(true);
+    setKeyError(null);
+    try {
+      const res = await fetch("/api/account/ai-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, apiKey: keyInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao salvar.");
+      setStatus(data);
+      setKeyInput("");
+    } catch (e) {
+      setKeyError(e instanceof Error ? e.message : "Erro ao salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeKey() {
+    await fetch("/api/account/ai-key", { method: "DELETE" });
+    setStatus({ configured: false, provider: null, last4: null, verifiedAt: null });
+  }
 
   async function resendVerification() {
     setResending(true);
@@ -134,6 +181,60 @@ export function AccountSettings({ account }: { account: Account }) {
             )}
             Exportar meus dados
           </Button>
+        </div>
+      </Card>
+
+      {/* BYOK — Chave de API de IA */}
+      <Card>
+        <CardHeader
+          title="Chave de API de IA"
+          subtitle="Use sua própria chave (OpenAI ou Anthropic). Se não configurar, usamos a chave da plataforma."
+        />
+        <div className="space-y-3 px-5 py-4">
+          {status.configured ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                {status.provider} • chave terminando em{" "}
+                <strong>••••{status.last4}</strong>
+                {status.verifiedAt ? " • validada" : ""}
+              </p>
+              <Button variant="secondary" onClick={removeKey}>
+                Remover
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <select
+                  value={provider}
+                  onChange={(e) =>
+                    setProvider(e.target.value as "OPENAI" | "ANTHROPIC")
+                  }
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <option value="OPENAI">OpenAI</option>
+                  <option value="ANTHROPIC">Anthropic</option>
+                </select>
+                <input
+                  type="password"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder={provider === "OPENAI" ? "sk-..." : "sk-ant-..."}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              {keyError && <p className="text-sm text-[#C0392B]">{keyError}</p>}
+              <div className="flex justify-end">
+                <Button
+                  onClick={saveKey}
+                  loading={saving}
+                  disabled={keyInput.length < 12}
+                >
+                  Testar e salvar
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Card>
 
