@@ -111,7 +111,17 @@ export async function connectNumber(numberId: string): Promise<void> {
       if (m.key.fromMe || !m.key.remoteJid?.endsWith("@s.whatsapp.net")) continue;
       const text =
         m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? "";
-      if (!text) continue;
+      if (!text) {
+        // Sem texto extraível: pode ser mídia (ok ignorar) OU uma mensagem que
+        // não descriptografou (m.message ausente) — esta é uma causa real de
+        // "a IA parou de responder". Logar p/ não sumir em silêncio.
+        if (!m.message) {
+          console.warn(
+            `[baileys] "${rec.label}" inbound NÃO descriptografado de ${m.key.remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
+          );
+        }
+        continue;
+      }
       await handlers.onInbound({
         fromPhone: `+${m.key.remoteJid.split("@")[0]}`,
         text,

@@ -21,7 +21,16 @@ async function bootBaileys(): Promise<Pool> {
         whatsAppNumberId: e.whatsAppNumberId,
         text: e.text,
         providerMessageId: e.providerMessageId,
-      }).then(() => {}),
+      })
+        .then(() => {})
+        .catch((err) => {
+          // Nunca deixar a falha virar unhandled rejection: o lead fica sem
+          // resposta, mas pelo menos fica rastreável (chip + telefone + erro).
+          console.error(
+            `[worker] handleInbound falhou (chip=${e.whatsAppNumberId} de=${e.fromPhone}):`,
+            err,
+          );
+        }),
     onAck: (id, status) => applyAck(id, status),
   });
   await p.ensureConnections();
