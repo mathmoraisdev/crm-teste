@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { LeadStatus } from "@prisma/client";
 import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +10,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
-  const lead = await getLeadDetail(id);
+  const lead = await getLeadDetail(id, userId);
   if (!lead) {
     return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
   }
@@ -31,6 +34,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -41,7 +46,7 @@ export async function PATCH(
     );
   }
   try {
-    const lead = await updateLead(id, parsed.data);
+    const lead = await updateLead(id, userId, parsed.data);
     return NextResponse.json({ lead });
   } catch (e) {
     return NextResponse.json(
@@ -55,9 +60,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteLead(id);
+    await deleteLead(id, userId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

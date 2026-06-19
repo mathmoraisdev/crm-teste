@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { handleInbound } from "@/server/services/conversation.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ const schema = z.object({
  * para o avaliador exercitar o fluxo de IA sem WhatsApp de verdade.
  */
 export async function POST(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -28,6 +31,7 @@ export async function POST(req: NextRequest) {
     const providerMessageId = `sim-${parsed.data.leadId}-${Date.now()}`;
     const result = await handleInbound({
       leadId: parsed.data.leadId,
+      userId,
       text: parsed.data.text,
       providerMessageId,
     });

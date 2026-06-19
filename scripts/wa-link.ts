@@ -8,11 +8,17 @@ async function main() {
     console.error('Uso: npm run wa:link -- "<label>" "<+E164>"');
     process.exit(1);
   }
-  const sessionDir = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();
+  const user = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!user) {
+    console.error('Nenhum usuário encontrado. Rode "npm run seed" primeiro.');
+    process.exit(1);
+  }
+  const slug = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();
+  const sessionDir = `${user.id}__${slug}`;
   const rec = await prisma.whatsAppNumber.upsert({
-    where: { phone },
+    where: { userId_phone: { userId: user.id, phone } },
     update: { label, sessionDir, status: "CONNECTING" },
-    create: { label, phone, sessionDir, status: "CONNECTING", dailyCap: 30 },
+    create: { userId: user.id, label, phone, sessionDir, status: "CONNECTING", dailyCap: 30 },
   });
   console.log(`[wa:link] subindo socket de "${label}" — escaneie o QR abaixo.`);
   await connectNumber(rec.id);

@@ -5,6 +5,7 @@ import {
   deleteWhatsAppNumber,
   updateWhatsAppNumber,
 } from "@/server/services/numbers.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +29,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -38,7 +41,7 @@ export async function PATCH(
     );
   }
   try {
-    await updateWhatsAppNumber(id, parsed.data);
+    await updateWhatsAppNumber(id, userId, parsed.data);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
@@ -52,9 +55,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteWhatsAppNumber(id);
+    await deleteWhatsAppNumber(id, userId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

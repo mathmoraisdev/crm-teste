@@ -16,9 +16,12 @@ export interface WhatsAppNumberListItem {
  * Lista os chips Baileys com o total enviado hoje (reusa `sentTodayByNumber`
  * p/ não duplicar a contagem por número). Vazio nos modos mock/cloud-api.
  */
-export async function listWhatsAppNumbers(): Promise<WhatsAppNumberListItem[]> {
+export async function listWhatsAppNumbers(
+  userId: string,
+): Promise<WhatsAppNumberListItem[]> {
   const [numbers, counts] = await Promise.all([
     prisma.whatsAppNumber.findMany({
+      where: { userId },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
@@ -44,9 +47,10 @@ const MANUAL_STATUSES = new Set<WhatsAppNumberStatus>(["CONNECTED", "PAUSED", "D
  */
 export async function updateWhatsAppNumber(
   id: string,
+  userId: string,
   data: { label?: string; dailyCap?: number; status?: WhatsAppNumberStatus },
 ): Promise<void> {
-  const exists = await prisma.whatsAppNumber.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Número não encontrado");
   if (data.status !== undefined && !MANUAL_STATUSES.has(data.status)) {
     throw new Error("Status não permitido por aqui (use pausar/reativar/desativar).");
@@ -62,8 +66,8 @@ export async function updateWhatsAppNumber(
 }
 
 /** Remove um chip do CRM. Jobs/mensagens/leads ligados ficam órfãos (SetNull). */
-export async function deleteWhatsAppNumber(id: string): Promise<void> {
-  const exists = await prisma.whatsAppNumber.findUnique({ where: { id }, select: { id: true } });
+export async function deleteWhatsAppNumber(id: string, userId: string): Promise<void> {
+  const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Número não encontrado");
   await prisma.whatsAppNumber.delete({ where: { id } });
 }

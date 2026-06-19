@@ -16,15 +16,15 @@ const loadPool = () => import("@/server/whatsapp/baileys/pool");
  * pelo agendamento, evitando duplicar a lógica de persistência em cada lugar.
  */
 export async function sendWhatsAppMessage(
-  lead: { id: string; phone: string; whatsAppNumberId?: string | null },
+  lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
   text: string,
 ): Promise<void> {
   if (env.WHATSAPP_MODE === "baileys") {
-    // responde pelo chip que iniciou a conversa; senão, qualquer um conectado
+    // responde pelo chip que iniciou a conversa; senão, qualquer um conectado DA CONTA
     let numberId = lead.whatsAppNumberId ?? null;
     if (!numberId) {
       const healthy = await prisma.whatsAppNumber.findFirst({
-        where: { status: { in: ["CONNECTED", "WARMING"] } },
+        where: { userId: lead.userId, status: { in: ["CONNECTED", "WARMING"] } },
         select: { id: true },
       });
       numberId = healthy?.id ?? null;

@@ -46,10 +46,10 @@ export function LeadsTable({
           <tr key={l.id} className="group hover:bg-slate-50">
             <Td>
               <Link href={`/leads/${l.id}`} className="block">
-                <span className="font-medium text-slate-800 group-hover:text-brand-600">
+                <span className="font-bold text-ink group-hover:text-brand-600">
                   {l.name}
                 </span>
-                <span className="block text-xs text-slate-400">
+                <span className="block font-mono text-[11.5px] text-slate-400">
                   {formatPhone(l.phone)}
                 </span>
               </Link>

@@ -1,5 +1,7 @@
 import { prisma } from "@/server/db/client";
+import { env } from "@/lib/env";
 import { dispatchOutboundJob } from "@/server/services/messaging";
+import { selectNumber } from "@/server/whatsapp/baileys/selection";
 
 /** Conta quantos jobs já foram enviados hoje (cap diário / warm-up). */
 export async function sentToday(now: Date): Promise<number> {
@@ -53,10 +55,40 @@ export function cappedCampaignIds(
 }
 
 /**
+ * Seleciona o chip (Baileys) menos carregado DA CONTA dona do job. Retorna o
+ * id do número, ou null se a conta não tem nenhum chip elegível agora.
+ */
+async function pickNumberForUser(
+  userId: string,
+  now: Date,
+): Promise<string | null> {
+  const [counts, nums] = await Promise.all([
+    sentTodayByNumber(now),
+    prisma.whatsAppNumber.findMany({
+      where: { userId },
+      select: { id: true, status: true, dailyCap: true },
+    }),
+  ]);
+  const chosen = selectNumber(
+    nums.map((n) => ({
+      id: n.id,
+      status: n.status,
+      dailyCap: n.dailyCap,
+      sentToday: counts[n.id] ?? 0,
+    })),
+  );
+  return chosen?.id ?? null;
+}
+
+/**
  * Reserva atomicamente 1 job PENDING (status → SENDING via updateMany com guarda)
  * de uma campanha que NÃO esteja pausada, e o processa. Retorna true se enviou.
+ *
+ * Multi-conta: no modo Baileys o chip de envio é escolhido entre os números DA
+ * CONTA dona do job (job → lead → userId). Se a conta não tem chip elegível, o
+ * job volta para a fila (sem contar tentativa) e seguimos para o próximo poll.
  */
-export async function processNextJob(now: Date, numberId?: string): Promise<boolean> {
+export async function processNextJob(now: Date): Promise<boolean> {
   // Campanhas que já bateram o próprio cap diário ficam de fora da seleção de hoje.
   const [capCampaigns, sentByCampaign] = await Promise.all([
     prisma.campaign.findMany({
@@ -81,7 +113,7 @@ export async function processNextJob(now: Date, numberId?: string): Promise<bool
       ],
     },
     orderBy: { scheduledFor: "asc" },
-    select: { id: true },
+    select: { id: true, lead: { select: { userId: true } } },
   });
   if (!candidate) return false;
 
@@ -91,6 +123,25 @@ export async function processNextJob(now: Date, numberId?: string): Promise<bool
     data: { status: "SENDING", attempts: { increment: 1 } },
   });
   if (claim.count === 0) return false; // outro worker pegou
+
+  // Baileys: escolhe um chip da conta dona do job.
+  let numberId: string | undefined;
+  if (env.WHATSAPP_MODE === "baileys") {
+    const picked = await pickNumberForUser(candidate.lead.userId, now);
+    if (!picked) {
+      // Conta sem chip elegível agora: devolve à fila sem penalizar tentativa.
+      await prisma.outboundJob.update({
+        where: { id: candidate.id },
+        data: {
+          status: "PENDING",
+          attempts: { decrement: 1 },
+          scheduledFor: new Date(now.getTime() + 30_000),
+        },
+      });
+      return false;
+    }
+    numberId = picked;
+  }
 
   try {
     await dispatchOutboundJob(candidate.id, { numberId });

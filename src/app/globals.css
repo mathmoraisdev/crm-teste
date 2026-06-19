@@ -2,19 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
 html,
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-ink antialiased;
 }
 
-/* Scrollbar discreta para a área de conversa */
+::selection {
+  background: #0ea46b;
+  color: #fff;
+}
+
+/* Scrollbar discreta para áreas roláveis (conversa, kanban). */
 .scroll-thin::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
   @apply rounded-full bg-slate-300;
+}
+
+/* <details> sem o marcador nativo — usado no FAQ da landing. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details[open] .faq-plus {
+  transform: rotate(45deg);
 }

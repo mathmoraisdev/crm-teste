@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importLeadsFromCsv } from "@/server/services/lead.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
  *  - text/csv ou text/plain no corpo cru
  */
 export async function POST(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   let content: string | null = null;
 
   const contentType = req.headers.get("content-type") ?? "";
@@ -33,6 +36,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await importLeadsFromCsv(content);
+  const result = await importLeadsFromCsv(userId, content);
   return NextResponse.json(result, { status: 200 });
 }

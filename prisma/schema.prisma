@@ -14,6 +14,20 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique // login (normalizado lowercase)
+  whatsapp     String? // telefone informado no cadastro (opcional)
+  passwordHash String // scrypt$salt$hash
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  leads           Lead[]
+  campaigns       Campaign[]
+  whatsAppNumbers WhatsAppNumber[]
+}
+
 enum LeadStatus {
   NOVO
   CONTATADO
@@ -67,8 +81,10 @@ enum WhatsAppNumberStatus {
 
 model Lead {
   id            String         @id @default(cuid())
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
   name          String
-  phone         String         @unique // E.164 normalizado
+  phone         String // E.164 normalizado — único POR conta (ver @@unique abaixo)
   email         String? // capturado pela IA na conversa (ou informado manualmente)
   status        LeadStatus     @default(NOVO)
   score         Int            @default(0)
@@ -87,6 +103,8 @@ model Lead {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  @@unique([userId, phone])
+  @@index([userId])
   @@index([status])
 }
 
@@ -108,6 +126,8 @@ model Message {
 
 model Campaign {
   id              String         @id @default(cuid())
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
   name            String
   messageTemplate String // contém {{nome}}
   status          CampaignStatus @default(DRAFT)
@@ -115,6 +135,8 @@ model Campaign {
   leads           Lead[]
   outboundJobs    OutboundJob[]
   createdAt       DateTime       @default(now())
+
+  @@index([userId])
 }
 
 model Qualification {
@@ -177,9 +199,11 @@ model OutboundJob {
 
 model WhatsAppNumber {
   id           String               @id @default(cuid())
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
   label        String               // apelido operacional ("chip-01")
-  phone        String               @unique // número do próprio chip, E.164
-  sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR
+  phone        String               // número do próprio chip, E.164 — único POR conta
+  sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR (global, com prefixo do user)
   status       WhatsAppNumberStatus @default(CONNECTING)
   dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up)
   pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
@@ -193,5 +217,7 @@ model WhatsAppNumber {
   messages     Message[]
   leads        Lead[]
 
+  @@unique([userId, phone])
+  @@index([userId])
   @@index([status])
 }

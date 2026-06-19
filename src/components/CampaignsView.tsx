@@ -99,8 +99,10 @@ export function CampaignsView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Campanhas</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+            Campanhas
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
             Crie uma campanha, associe os leads novos e dispare a mensagem
             inicial.
           </p>
@@ -116,7 +118,7 @@ export function CampaignsView() {
       </div>
 
       {flash && (
-        <div className="rounded-md bg-brand-50 px-3 py-2 text-sm text-brand-700">
+        <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-700">
           {flash}
         </div>
       )}
@@ -197,7 +199,7 @@ export function CampaignsView() {
                 return (
                   <tr key={c.id} className="hover:bg-slate-50">
                     <Td>
-                      <span className="font-medium text-slate-800">{c.name}</span>
+                      <span className="font-bold text-ink">{c.name}</span>
                       <span className="block max-w-md truncate text-xs text-slate-400">
                         {c.messageTemplate}
                       </span>

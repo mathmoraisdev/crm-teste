@@ -5,12 +5,15 @@ import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { normalizePhone } from "@/lib/phone";
 import { listWhatsAppNumbers } from "@/server/services/numbers.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const numbers = await listWhatsAppNumbers();
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const numbers = await listWhatsAppNumbers(userId);
   // converte o QR cru em data URL p/ a UI renderizar como <img>
   const withQr = await Promise.all(
     numbers.map(async ({ pairingQr, ...n }) => ({
@@ -27,6 +30,8 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   if (env.WHATSAPP_MODE !== "baileys") {
     return NextResponse.json(
       { error: "Pareamento por QR só está disponível com WHATSAPP_MODE=baileys." },
@@ -46,13 +51,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Número inválido (use E.164, ex.: +5511...)" }, { status: 400 });
   }
   const label = parsed.data.label.trim();
-  const sessionDir = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();
+  const slug = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();
+  // sessionDir é global (filesystem): prefixa com a conta p/ não colidir entre usuários.
+  const sessionDir = `${userId}__${slug}`;
 
   // CONNECTING + limpa QR antigo → o worker gera um novo QR e grava em pairingQr.
   const rec = await prisma.whatsAppNumber.upsert({
-    where: { phone },
+    where: { userId_phone: { userId, phone } },
     update: { label, sessionDir, status: "CONNECTING", pairingQr: null, lastError: null },
     create: {
+      userId,
       label,
       phone,
       sessionDir,

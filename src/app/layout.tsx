@@ -1,11 +1,32 @@
 import type { Metadata } from "next";
-import { AppHeader } from "@/components/AppHeader";
+import { Bricolage_Grotesque, Manrope, DM_Mono } from "next/font/google";
 import "./globals.css";
 
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const sans = Manrope({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const mono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Mini CRM de Prospecção com IA",
+  title: "Disparador.ai — Disparos em massa no WhatsApp que vendem",
   description:
-    "Plataforma de prospecção que qualifica leads automaticamente com IA via WhatsApp.",
+    "Envie campanhas para milhares de clientes no WhatsApp, acompanhe cada resposta num CRM simples e transforme sua lista de contatos em faturamento.",
 };
 
 export default function RootLayout({
@@ -14,19 +35,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <body className="min-h-screen">
-        <div className="flex min-h-screen flex-col">
-          <AppHeader />
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
-            {children}
-          </main>
-          <footer className="border-t border-slate-200 bg-white py-3 text-center text-xs text-slate-400">
-            Mini CRM de Prospecção com IA · WhatsApp & Calendar em modo mock ·
-            IA real (Anthropic)
-          </footer>
-        </div>
-      </body>
+    <html
+      lang="pt-BR"
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+    >
+      <body className="min-h-screen font-sans">{children}</body>
     </html>
   );
 }

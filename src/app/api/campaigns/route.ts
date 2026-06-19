@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createCampaign, listCampaigns } from "@/server/services/campaign.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const campaigns = await listCampaigns();
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const campaigns = await listCampaigns(userId);
   return NextResponse.json({ campaigns });
 }
 
@@ -21,6 +24,8 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -29,6 +34,6 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const result = await createCampaign(parsed.data);
+  const result = await createCampaign(userId, parsed.data);
   return NextResponse.json(result, { status: 201 });
 }

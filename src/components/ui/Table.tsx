@@ -18,7 +18,7 @@ export function Th({
   return (
     <th
       className={cn(
-        "border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500",
+        "border-b border-slate-100 px-5 py-3 text-left font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400",
         className,
       )}
     >
@@ -35,7 +35,7 @@ export function Td({
   className?: string;
 }) {
   return (
-    <td className={cn("border-b border-slate-100 px-3 py-2.5 align-middle", className)}>
+    <td className={cn("border-b border-slate-100 px-5 py-3.5 align-middle", className)}>
       {children}
     </td>
   );

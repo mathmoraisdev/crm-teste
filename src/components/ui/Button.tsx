@@ -13,16 +13,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-500 text-white hover:bg-brand-600 disabled:bg-brand-300",
+  primary:
+    "bg-brand-500 text-white shadow-[0_8px_20px_-8px_rgba(14,164,107,.55)] hover:bg-brand-600 disabled:bg-brand-300 disabled:shadow-none",
   secondary:
-    "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50",
-  ghost: "text-slate-600 hover:bg-slate-100 disabled:opacity-50",
-  danger: "bg-red-500 text-white hover:bg-red-600 disabled:bg-red-300",
+    "bg-white text-ink border border-slate-300 hover:border-brand-400 hover:bg-slate-50 disabled:opacity-50",
+  ghost: "text-slate-600 hover:bg-slate-100 hover:text-ink disabled:opacity-50",
+  danger: "bg-[#E5484D] text-white hover:bg-[#C93B40] disabled:opacity-50",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "px-2.5 py-1.5 text-xs",
-  md: "px-4 py-2 text-sm",
+  sm: "px-3 py-1.5 text-xs",
+  md: "px-4 py-2.5 text-sm",
 };
 
 export function Button({
@@ -37,7 +38,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:cursor-not-allowed",
         variants[variant],
         sizes[size],
         className,

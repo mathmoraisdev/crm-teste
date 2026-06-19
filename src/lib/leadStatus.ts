@@ -6,10 +6,10 @@ export const LEAD_STATUS_META: Record<
   LeadStatus,
   { label: string; tone: Tone; order: number }
 > = {
-  NOVO: { label: "Novo", tone: "slate", order: 0 },
-  CONTATADO: { label: "Contatado", tone: "blue", order: 1 },
-  EM_CONVERSA: { label: "Em conversa", tone: "amber", order: 2 },
-  QUALIFICADO: { label: "Qualificado", tone: "violet", order: 3 },
+  NOVO: { label: "Novo", tone: "blue", order: 0 },
+  CONTATADO: { label: "Contatado", tone: "amber", order: 1 },
+  EM_CONVERSA: { label: "Em conversa", tone: "violet", order: 2 },
+  QUALIFICADO: { label: "Qualificado", tone: "green", order: 3 },
   REUNIAO_AGENDADA: { label: "Reunião agendada", tone: "emerald", order: 4 },
   DESCARTADO: { label: "Descartado", tone: "red", order: 5 },
 };

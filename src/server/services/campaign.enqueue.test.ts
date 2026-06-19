@@ -17,7 +17,7 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 
-const findUnique = vi.fn();
+const findFirst = vi.fn();
 const update = vi.fn();
 const createMany = vi.fn();
 const $transaction = vi.fn((ops: Promise<unknown>[]) => Promise.all(ops));
@@ -25,7 +25,7 @@ const $transaction = vi.fn((ops: Promise<unknown>[]) => Promise.all(ops));
 vi.mock("@/server/db/client", () => ({
   prisma: {
     campaign: {
-      findUnique: (...a: unknown[]) => findUnique(...a),
+      findFirst: (...a: unknown[]) => findFirst(...a),
       update: (...a: unknown[]) => update(...a),
     },
     outboundJob: {
@@ -39,14 +39,14 @@ import { startCampaign } from "./campaign.service";
 
 describe("startCampaign (enfileiramento)", () => {
   beforeEach(() => {
-    findUnique.mockReset();
+    findFirst.mockReset();
     update.mockReset().mockResolvedValue({});
     createMany.mockReset().mockResolvedValue({ count: 0 });
     $transaction.mockClear();
   });
 
   it("cria N OutboundJobs PENDING e marca a campanha como RUNNING (sem enviar)", async () => {
-    findUnique.mockResolvedValue({
+    findFirst.mockResolvedValue({
       id: "camp-1",
       messageTemplate: "Olá {{nome}}!",
       leads: [
@@ -55,7 +55,7 @@ describe("startCampaign (enfileiramento)", () => {
       ],
     });
 
-    const result = await startCampaign("camp-1");
+    const result = await startCampaign("camp-1", "user-1");
 
     expect(result).toEqual({ enqueued: 2 });
 
@@ -75,13 +75,13 @@ describe("startCampaign (enfileiramento)", () => {
   });
 
   it("enfileira zero jobs quando não há leads NOVO elegíveis", async () => {
-    findUnique.mockResolvedValue({
+    findFirst.mockResolvedValue({
       id: "camp-2",
       messageTemplate: "Oi {{nome}}",
       leads: [],
     });
 
-    const result = await startCampaign("camp-2");
+    const result = await startCampaign("camp-2", "user-1");
 
     expect(result).toEqual({ enqueued: 0 });
     expect(createMany).toHaveBeenCalledTimes(1);
@@ -89,8 +89,8 @@ describe("startCampaign (enfileiramento)", () => {
   });
 
   it("lança quando a campanha não existe", async () => {
-    findUnique.mockResolvedValue(null);
-    await expect(startCampaign("nope")).rejects.toThrow("Campanha não encontrada");
+    findFirst.mockResolvedValue(null);
+    await expect(startCampaign("nope", "user-1")).rejects.toThrow("Campanha não encontrada");
     expect(createMany).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteCampaign, updateCampaign } from "@/server/services/campaign.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -33,7 +36,7 @@ export async function PATCH(
     );
   }
   try {
-    await updateCampaign(id, parsed.data);
+    await updateCampaign(id, userId, parsed.data);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
@@ -47,9 +50,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteCampaign(id);
+    await deleteCampaign(id, userId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

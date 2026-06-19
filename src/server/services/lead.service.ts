@@ -20,10 +20,11 @@ export interface LeadListItem {
 
 /**
  * Lista leads para o dashboard, já com a última mensagem e nome da campanha.
- * Ordena por atividade recente (updatedAt desc).
+ * Ordena por atividade recente (updatedAt desc). Escopo: conta do usuário.
  */
-export async function listLeads(): Promise<LeadListItem[]> {
+export async function listLeads(userId: string): Promise<LeadListItem[]> {
   const leads = await prisma.lead.findMany({
+    where: { userId },
     orderBy: { updatedAt: "desc" },
     include: {
       campaign: { select: { name: true } },
@@ -51,9 +52,9 @@ export async function listLeads(): Promise<LeadListItem[]> {
 }
 
 /** Detalhe completo de um lead: mensagens (cronológicas), qualificação e reunião. */
-export async function getLeadDetail(id: string) {
-  return prisma.lead.findUnique({
-    where: { id },
+export async function getLeadDetail(id: string, userId: string) {
+  return prisma.lead.findFirst({
+    where: { id, userId },
     include: {
       campaign: { select: { id: true, name: true } },
       messages: { orderBy: { createdAt: "asc" } },
@@ -65,8 +66,9 @@ export async function getLeadDetail(id: string) {
 
 export type LeadDetail = NonNullable<Awaited<ReturnType<typeof getLeadDetail>>>;
 
-/** Cria um lead avulso (NOVO). Idempotente por telefone (upsert do nome/e-mail). */
+/** Cria um lead avulso (NOVO). Idempotente por telefone POR conta. */
 export async function createLead(
+  userId: string,
   name: string,
   rawPhone: string,
   rawEmail?: string,
@@ -78,9 +80,9 @@ export async function createLead(
   const email = normalizeEmail(rawEmail);
   if (rawEmail?.trim() && !email) throw new Error(`E-mail inválido: ${rawEmail}`);
   return prisma.lead.upsert({
-    where: { phone },
+    where: { userId_phone: { userId, phone } },
     update: { name, ...(email ? { email } : {}) },
-    create: { name, phone, email, status: "NOVO" },
+    create: { userId, name, phone, email, status: "NOVO" },
   });
 }
 
@@ -90,9 +92,10 @@ export async function createLead(
  */
 export async function updateLead(
   id: string,
+  userId: string,
   data: { name?: string; phone?: string; email?: string; status?: LeadStatus; optOut?: boolean },
 ): Promise<Lead> {
-  const exists = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Lead não encontrado");
 
   const patch: Prisma.LeadUpdateInput = {};
@@ -111,7 +114,10 @@ export async function updateLead(
   if (data.phone !== undefined) {
     const phone = normalizePhone(data.phone);
     if (!phone) throw new Error(`Telefone inválido: ${data.phone}`);
-    const clash = await prisma.lead.findUnique({ where: { phone }, select: { id: true } });
+    const clash = await prisma.lead.findFirst({
+      where: { userId, phone },
+      select: { id: true },
+    });
     if (clash && clash.id !== id) {
       throw new Error("Já existe outro lead com este telefone.");
     }
@@ -122,8 +128,8 @@ export async function updateLead(
 }
 
 /** Apaga um lead e tudo associado (mensagens, qualificação, reunião, jobs — cascade). */
-export async function deleteLead(id: string): Promise<void> {
-  const exists = await prisma.lead.findUnique({ where: { id }, select: { id: true } });
+export async function deleteLead(id: string, userId: string): Promise<void> {
+  const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Lead não encontrado");
   await prisma.lead.delete({ where: { id } });
 }
@@ -138,16 +144,19 @@ export interface ImportResult {
  * Importa leads de um CSV. Dedupe por telefone (não recria quem já existe).
  * Devolve um resumo para a UI mostrar quantos entraram e o que foi rejeitado.
  */
-export async function importLeadsFromCsv(content: string): Promise<ImportResult> {
+export async function importLeadsFromCsv(
+  userId: string,
+  content: string,
+): Promise<ImportResult> {
   const { valid, invalid } = parseLeadsCsv(content);
 
-  // Dedup dentro do próprio arquivo (último vence) + contra o banco.
+  // Dedup dentro do próprio arquivo (último vence) + contra o banco (por conta).
   const byPhone = new Map<string, string>();
   for (const row of valid) byPhone.set(row.phone, row.name);
 
   const phones = [...byPhone.keys()];
   const existing = await prisma.lead.findMany({
-    where: { phone: { in: phones } },
+    where: { userId, phone: { in: phones } },
     select: { phone: true },
   });
   const existingSet = new Set(existing.map((e) => e.phone));
@@ -159,7 +168,7 @@ export async function importLeadsFromCsv(content: string): Promise<ImportResult>
       skipped++;
       continue;
     }
-    toCreate.push({ name, phone, status: "NOVO" });
+    toCreate.push({ userId, name, phone, status: "NOVO" });
   }
 
   if (toCreate.length > 0) {

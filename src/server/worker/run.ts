@@ -1,9 +1,7 @@
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
-import { processNextJob, sentToday, sentTodayByNumber } from "./dispatcher";
-import { selectNumber } from "@/server/whatsapp/baileys/selection";
+import { processNextJob, sentToday } from "./dispatcher";
 import { sleep } from "@/lib/humanize";
-import { prisma } from "@/server/db/client";
 
 type Pool = typeof import("@/server/whatsapp/baileys/pool");
 let pool: Pool | null = null;
@@ -15,23 +13,16 @@ async function bootBaileys(): Promise<Pool> {
   const { applyAck } = await import("@/server/services/webhook.service");
   p.registerHandlers({
     onInbound: (e) =>
-      handleInbound({ phone: e.fromPhone, text: e.text, providerMessageId: e.providerMessageId }).then(() => {}),
+      handleInbound({
+        phone: e.fromPhone,
+        whatsAppNumberId: e.whatsAppNumberId,
+        text: e.text,
+        providerMessageId: e.providerMessageId,
+      }).then(() => {}),
     onAck: (id, status) => applyAck(id, status),
   });
   await p.ensureConnections();
   return p;
-}
-
-/** Escolhe o chip menos carregado e elegível para a próxima iteração. */
-async function pickNumberId(now: Date): Promise<string | null> {
-  const counts = await sentTodayByNumber(now);
-  const nums = await prisma.whatsAppNumber.findMany({
-    select: { id: true, status: true, dailyCap: true },
-  });
-  const chosen = selectNumber(
-    nums.map((n) => ({ id: n.id, status: n.status, dailyCap: n.dailyCap, sentToday: counts[n.id] ?? 0 })),
-  );
-  return chosen?.id ?? null;
 }
 
 async function main() {
@@ -60,17 +51,8 @@ async function main() {
       continue;
     }
 
-    let numberId: string | undefined;
-    if (env.WHATSAPP_MODE === "baileys") {
-      const id = await pickNumberId(now);
-      if (!id) {
-        await sleep(30_000); // todos no cap / sem chip saudável
-        continue;
-      }
-      numberId = id;
-    }
-
-    const sent = await processNextJob(now, numberId);
+    // O chip de envio (Baileys) é escolhido por conta dentro de processNextJob.
+    const sent = await processNextJob(now);
     await sleep(
       sent ? env.WHATSAPP_MIN_INTERVAL_MS + jitterMs(env.WHATSAPP_JITTER_MS) : env.WORKER_POLL_MS,
     );

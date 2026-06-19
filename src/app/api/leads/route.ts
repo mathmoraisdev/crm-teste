@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createLead, listLeads } from "@/server/services/lead.service";
+import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const leads = await listLeads();
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const leads = await listLeads(userId);
   return NextResponse.json({ leads });
 }
 
@@ -16,6 +19,8 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -25,7 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const lead = await createLead(parsed.data.name, parsed.data.phone, parsed.data.email);
+    const lead = await createLead(userId, parsed.data.name, parsed.data.phone, parsed.data.email);
     return NextResponse.json({ lead }, { status: 201 });
   } catch (e) {
     return NextResponse.json(

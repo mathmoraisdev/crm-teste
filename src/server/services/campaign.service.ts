@@ -19,8 +19,9 @@ export function renderTemplate(template: string, name: string): string {
   return template.replace(/\{\{\s*nome\s*\}\}/gi, name);
 }
 
-export async function listCampaigns(): Promise<CampaignListItem[]> {
+export async function listCampaigns(userId: string): Promise<CampaignListItem[]> {
   const campaigns = await prisma.campaign.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
       leads: { select: { status: true } },
@@ -54,13 +55,17 @@ export async function listCampaigns(): Promise<CampaignListItem[]> {
  * Cria a campanha e associa os leads `NOVO` informados (ou todos os `NOVO`
  * sem campanha, se nenhum id for passado).
  */
-export async function createCampaign(opts: {
-  name: string;
-  messageTemplate: string;
-  leadIds?: string[];
-}): Promise<{ id: string; associated: number }> {
+export async function createCampaign(
+  userId: string,
+  opts: {
+    name: string;
+    messageTemplate: string;
+    leadIds?: string[];
+  },
+): Promise<{ id: string; associated: number }> {
   const campaign = await prisma.campaign.create({
     data: {
+      userId,
       name: opts.name,
       messageTemplate: opts.messageTemplate,
       status: "DRAFT",
@@ -69,8 +74,8 @@ export async function createCampaign(opts: {
 
   const where =
     opts.leadIds && opts.leadIds.length > 0
-      ? { id: { in: opts.leadIds }, status: "NOVO" as const }
-      : { status: "NOVO" as const };
+      ? { userId, id: { in: opts.leadIds }, status: "NOVO" as const }
+      : { userId, status: "NOVO" as const };
 
   const { count } = await prisma.lead.updateMany({
     where,
@@ -88,9 +93,10 @@ export async function createCampaign(opts: {
  */
 export async function startCampaign(
   campaignId: string,
+  userId: string,
 ): Promise<{ enqueued: number }> {
-  const campaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, userId },
     include: {
       leads: {
         where: { status: "NOVO", optOut: false },
@@ -126,9 +132,10 @@ export async function startCampaign(
  */
 export async function updateCampaign(
   id: string,
+  userId: string,
   data: { name?: string; messageTemplate?: string; dailyCap?: number | null },
 ): Promise<void> {
-  const exists = await prisma.campaign.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.campaign.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Campanha não encontrada");
   await prisma.campaign.update({
     where: { id },
@@ -146,8 +153,8 @@ export async function updateCampaign(
  * a ficar sem campanha) e remove a campanha. O histórico de enviados é mantido,
  * apenas desassociado (via SetNull no campaignId do OutboundJob).
  */
-export async function deleteCampaign(id: string): Promise<void> {
-  const exists = await prisma.campaign.findUnique({ where: { id }, select: { id: true } });
+export async function deleteCampaign(id: string, userId: string): Promise<void> {
+  const exists = await prisma.campaign.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Campanha não encontrada");
   await prisma.$transaction([
     prisma.outboundJob.updateMany({

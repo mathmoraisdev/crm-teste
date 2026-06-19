@@ -11,12 +11,16 @@ import { LeadsTable } from "@/components/LeadsTable";
 import { LeadForm } from "@/components/LeadForm";
 import { PipelineBoard } from "@/components/PipelineBoard";
 import { CsvUpload } from "@/components/CsvUpload";
+import { StatCard } from "@/components/app/StatCard";
 import { cn } from "@/lib/utils";
 import { LEAD_STATUS_META, PIPELINE_ORDER } from "@/lib/leadStatus";
 import type { LeadListItem } from "@/server/services/lead.service";
 
 type View = "table" | "board";
 const NO_CAMPAIGN = "__none__";
+
+const selectClass =
+  "rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15";
 
 export function LeadsDashboard() {
   const [leads, setLeads] = useState<LeadListItem[] | null>(null);
@@ -62,6 +66,18 @@ export function LeadsDashboard() {
     return [...new Set(leads.map((l) => l.campaignName).filter((n): n is string => !!n))].sort();
   }, [leads]);
 
+  // Métricas reais do funil (derivadas dos leads carregados).
+  const stats = useMemo(() => {
+    if (!leads) return null;
+    const by = (s: string) => leads.filter((l) => l.status === s).length;
+    return {
+      total: leads.length,
+      contatados: leads.filter((l) => l.status !== "NOVO").length,
+      qualificados: by("QUALIFICADO") + by("REUNIAO_AGENDADA"),
+      reunioes: by("REUNIAO_AGENDADA"),
+    };
+  }, [leads]);
+
   const filtered = useMemo(() => {
     if (!leads) return null;
     const q = query.trim().toLowerCase();
@@ -101,28 +117,31 @@ export function LeadsDashboard() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      {/* title row */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Leads</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+            Leads
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
             {filtered === null
               ? "—"
               : hasFilters
                 ? `${filtered.length} de ${leads?.length ?? 0} leads`
-                : `${leads?.length ?? 0} leads no funil`}{" "}
+                : `${leads?.length ?? 0} contatos no funil`}{" "}
             · atualização automática
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border border-slate-300 bg-white p-0.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex rounded-xl bg-[#EBF0ED] p-[3px]">
             <button
               onClick={() => setView("table")}
               className={cn(
-                "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium",
+                "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-bold transition-colors",
                 view === "table"
-                  ? "bg-brand-500 text-white"
-                  : "text-slate-600 hover:bg-slate-100",
+                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
+                  : "text-slate-500 hover:text-ink",
               )}
             >
               <List size={14} /> Tabela
@@ -130,10 +149,10 @@ export function LeadsDashboard() {
             <button
               onClick={() => setView("board")}
               className={cn(
-                "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium",
+                "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-bold transition-colors",
                 view === "board"
-                  ? "bg-brand-500 text-white"
-                  : "text-slate-600 hover:bg-slate-100",
+                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
+                  : "text-slate-500 hover:text-ink",
               )}
             >
               <LayoutGrid size={14} /> Kanban
@@ -151,25 +170,33 @@ export function LeadsDashboard() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
+      {/* stat cards */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="Leads no funil" value={stats?.total ?? "—"} />
+        <StatCard label="Contatados" value={stats?.contatados ?? "—"} />
+        <StatCard label="Qualificados" value={stats?.qualificados ?? "—"} accent />
+        <StatCard
+          label="Reuniões agendadas"
+          value={stats?.reunioes ?? "—"}
+          dark
+        />
+      </div>
+
+      {/* filtros */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative min-w-[220px] flex-1">
           <Search
-            size={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nome ou telefone…"
-            className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        >
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
           <option value="ALL">Todos os status</option>
           {PIPELINE_ORDER.map((s) => (
             <option key={s} value={s}>
@@ -177,11 +204,7 @@ export function LeadsDashboard() {
             </option>
           ))}
         </select>
-        <select
-          value={campaignFilter}
-          onChange={(e) => setCampaignFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        >
+        <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} className={selectClass}>
           <option value="ALL">Todas as campanhas</option>
           <option value={NO_CAMPAIGN}>Sem campanha</option>
           {campaignNames.map((n) => (
@@ -190,11 +213,7 @@ export function LeadsDashboard() {
             </option>
           ))}
         </select>
-        <select
-          value={optOutFilter}
-          onChange={(e) => setOptOutFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        >
+        <select value={optOutFilter} onChange={(e) => setOptOutFilter(e.target.value)} className={selectClass}>
           <option value="ALL">Opt-out: todos</option>
           <option value="active">Sem opt-out</option>
           <option value="optout">Só opt-out</option>
@@ -211,7 +230,7 @@ export function LeadsDashboard() {
           <LoadingBlock label="Carregando leads…" />
         </Card>
       ) : view === "table" ? (
-        <Card>
+        <Card className="overflow-hidden">
           <LeadsTable leads={filtered} onEdit={setEditing} onDelete={setDeleting} />
         </Card>
       ) : (

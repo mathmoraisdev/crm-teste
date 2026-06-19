@@ -5,39 +5,28 @@
  * sem `node:*`. Por isso pode ser importado tanto no `middleware.ts` (Edge runtime)
  * quanto nas rotas de API (Node runtime).
  *
- * Login é único e vem de variáveis de ambiente (não há tabela de usuários):
- *   AUTH_USER       — nome de usuário
- *   AUTH_PASSWORD   — senha
- *   SESSION_SECRET  — segredo aleatório que assina o cookie de sessão
- *
- * Se as três não estiverem setadas, a autenticação fica DESLIGADA (app aberto,
- * útil em dev local). Em produção/Vercel, setar as três liga a proteção.
+ * O login agora é por conta real (tabela `User`): o payload do cookie guarda o
+ * `id` do usuário (campo `u`). A assinatura usa `SESSION_SECRET`; em dev, sem ele,
+ * cai num segredo inseguro só para não travar o desenvolvimento local.
  */
 
 export const SESSION_COOKIE = "crm_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 dias
 
-/** Auth só é exigida quando as três variáveis estão configuradas. */
+/** Com contas reais, a proteção fica sempre ligada. */
 export function isAuthEnabled(): boolean {
-  return Boolean(
-    process.env.AUTH_USER &&
-      process.env.AUTH_PASSWORD &&
-      process.env.SESSION_SECRET,
-  );
-}
-
-/** Credenciais esperadas (lidas direto do ambiente). */
-export function getExpectedCredentials(): { user: string; pass: string } {
-  return {
-    user: process.env.AUTH_USER ?? "",
-    pass: process.env.AUTH_PASSWORD ?? "",
-  };
+  return true;
 }
 
 function getSecret(): string {
   const s = process.env.SESSION_SECRET;
-  if (!s) throw new Error("SESSION_SECRET não configurado");
-  return s;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET não configurado");
+  }
+  // Dev: segredo fixo inseguro só para não bloquear o login local.
+  console.warn("[auth] SESSION_SECRET ausente — usando segredo de dev inseguro.");
+  return "dev-insecure-session-secret-change-me";
 }
 
 const encoder = new TextEncoder();
@@ -83,9 +72,9 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-/** Gera o token de sessão assinado para um usuário. */
-export async function signSession(username: string): Promise<string> {
-  const payload = { u: username, exp: nowSeconds() + SESSION_TTL_SECONDS };
+/** Gera o token de sessão assinado para o id do usuário. */
+export async function signSession(userId: string): Promise<string> {
+  const payload = { u: userId, exp: nowSeconds() + SESSION_TTL_SECONDS };
   const body = bytesToBase64Url(encoder.encode(JSON.stringify(payload)));
   const sig = bytesToBase64Url(await hmac(body));
   return `${body}.${sig}`;

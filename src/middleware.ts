@@ -5,12 +5,20 @@ import { SESSION_COOKIE, isAuthEnabled, verifySession } from "@/lib/auth";
  * Protege todo o dashboard com login. Roda no Edge runtime.
  *
  * Rotas públicas (nunca exigem login):
- *  - /login e /api/auth/*  — a própria tela e API de autenticação
+ *  - /  e  /signup         — landing e cadastro (marketing)
+ *  - /login e /api/auth/*  — a própria tela e API de autenticação/cadastro
  *  - /api/webhooks/*       — a Meta chama o webhook do WhatsApp; tem verificação
  *                            própria (verify_token + assinatura X-Hub-Signature)
  *  - /api/cron/*           — disparo serverless, protegido pelo CRON_SECRET
  */
-const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/webhooks", "/api/cron"];
+const PUBLIC_PREFIXES = [
+  "/",
+  "/signup",
+  "/login",
+  "/api/auth",
+  "/api/webhooks",
+  "/api/cron",
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

@@ -23,6 +23,12 @@ async function main() {
     })
     .filter((x): x is { name: string; phone: string } => !!x.phone);
 
+  // Multi-conta: vincula tudo à primeira conta (rode `npm run seed` antes).
+  const user = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!user) {
+    throw new Error('Nenhum usuário encontrado. Rode "npm run seed" primeiro.');
+  }
+
   console.log("🧹 limpando dados de teste anteriores (chips preservados)…");
   await prisma.message.deleteMany();
   await prisma.qualification.deleteMany();
@@ -33,6 +39,7 @@ async function main() {
 
   const campaign = await prisma.campaign.create({
     data: {
+      userId: user.id,
       name: "Teste Baileys",
       // spintax {a|b} (varia por lead) + {{nome}} (renderTemplate)
       messageTemplate:
@@ -49,9 +56,9 @@ async function main() {
 
   for (const l of leads) {
     await prisma.lead.upsert({
-      where: { phone: l.phone },
+      where: { userId_phone: { userId: user.id, phone: l.phone } },
       update: { name: l.name, status: "NOVO", optOut: false, campaignId: campaign.id },
-      create: { name: l.name, phone: l.phone, status: "NOVO", campaignId: campaign.id },
+      create: { userId: user.id, name: l.name, phone: l.phone, status: "NOVO", campaignId: campaign.id },
     });
     console.log(`  + ${l.name} — ${l.phone}`);
   }

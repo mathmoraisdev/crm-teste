@@ -11,9 +11,43 @@ export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
   leadId?: string;
   phone?: string;
+  /** Conta dona da conversa (simulate-reply passa a sessão; webhook cloud-api pode omitir). */
+  userId?: string;
+  /** Chip que recebeu a mensagem (Baileys) — resolve a conta dona p/ achar o lead. */
+  whatsAppNumberId?: string;
   text: string;
   /** Id do provedor para dedupe. Pode ser nulo no mock. */
   providerMessageId?: string | null;
+}
+
+/**
+ * Resolve o lead da mensagem inbound respeitando o isolamento por conta:
+ *  - leadId (+userId)         → dono direto (simulate-reply)
+ *  - whatsAppNumberId + phone → conta dona do chip que recebeu
+ *  - userId + phone           → conta explícita
+ *  - phone (fallback)         → global (cloud-api sem mapa de número→conta)
+ */
+async function resolveLead(input: InboundInput) {
+  if (input.leadId) {
+    return prisma.lead.findFirst({
+      where: { id: input.leadId, ...(input.userId ? { userId: input.userId } : {}) },
+    });
+  }
+  if (input.whatsAppNumberId && input.phone) {
+    const num = await prisma.whatsAppNumber.findUnique({
+      where: { id: input.whatsAppNumberId },
+      select: { userId: true },
+    });
+    if (!num) return null;
+    return prisma.lead.findFirst({ where: { userId: num.userId, phone: input.phone } });
+  }
+  if (input.userId && input.phone) {
+    return prisma.lead.findFirst({ where: { userId: input.userId, phone: input.phone } });
+  }
+  if (input.phone) {
+    return prisma.lead.findFirst({ where: { phone: input.phone } });
+  }
+  return null;
 }
 
 async function loadConversation(leadId: string): Promise<ConversationTurn[]> {
@@ -44,12 +78,8 @@ export async function handleInbound(
     if (existing) return { leadId: existing.leadId, deduped: true };
   }
 
-  // Localiza o lead
-  const lead = input.leadId
-    ? await prisma.lead.findUnique({ where: { id: input.leadId } })
-    : input.phone
-      ? await prisma.lead.findUnique({ where: { phone: input.phone } })
-      : null;
+  // Localiza o lead (respeitando o isolamento por conta)
+  const lead = await resolveLead(input);
 
   if (!lead) {
     // Webhook de número desconhecido: ignora silenciosamente (não cria lead solto).
