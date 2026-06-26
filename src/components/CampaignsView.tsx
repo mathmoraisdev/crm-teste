@@ -10,7 +10,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { CampaignForm } from "@/components/CampaignForm";
-import { WhatsAppNumbersPanel } from "@/components/WhatsAppNumbersPanel";
 import type { CampaignListItem } from "@/server/services/campaign.service";
 
 const STATUS_TONE = {
@@ -272,8 +271,6 @@ export function CampaignsView() {
           </Table>
         </Card>
       )}
-
-      <WhatsAppNumbersPanel />
 
       <Modal open={formOpen} onClose={() => setFormOpen(false)} title="Nova campanha">
         <CampaignForm

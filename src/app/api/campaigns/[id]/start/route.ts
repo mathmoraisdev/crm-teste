@@ -8,6 +8,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (process.env.ENABLE_DISPATCH !== "1") return NextResponse.json({ error: "Disparo desativado nesta instalação." }, { status: 403 });
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
