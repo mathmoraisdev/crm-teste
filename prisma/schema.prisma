@@ -120,8 +120,11 @@ model Lead {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  @@unique([userId, phone])
+  // Identidade da conversa é por EMPRESA (número), não por operador:
+  // a mesma pessoa pode falar com 2 empresas suas = 2 conversas distintas.
+  @@unique([whatsAppNumberId, phone])
   @@index([userId])
+  @@index([userId, status])
   @@index([status])
 }
 
@@ -225,7 +228,18 @@ model WhatsAppNumber {
   phone        String               // número do próprio chip, E.164 — único POR conta
   sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR (global, com prefixo do user)
   status       WhatsAppNumberStatus @default(CONNECTING)
-  dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up)
+  dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up / disparo dormente)
+
+  // ── Config de ATENDIMENTO (número = empresa) ───────────────────────────
+  displayName       String?  // nome público da empresa (cai p/ `label` se null)
+  persona           String?  // tom/estilo do atendente ("formal", "descontraído", instruções)
+  knowledgeBase     String?  // FAQ / produtos / serviços (texto livre injetado no prompt)
+  businessHours     String?  // horário de atendimento em texto livre ("Seg–Sex 9h–18h")
+  customInstructions String? // instruções extras específicas da empresa
+  autoReplyEnabled  Boolean  @default(true)  // IA responde automaticamente o inbound
+  qualifyEnabled    Boolean  @default(false) // roda qualificação/score (funil de vendas)
+  scheduleEnabled   Boolean  @default(false) // permite propor/agendar reunião
+
   pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
   lastError    String?
   connectedAt  DateTime?
