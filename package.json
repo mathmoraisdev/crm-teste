@@ -20,7 +20,8 @@
     "worker:prod": "tsx src/server/worker/run.ts",
     "wa:link": "tsx --env-file-if-exists=.env scripts/wa-link.ts",
     "ai:smoke": "tsx --env-file-if-exists=.env scripts/ai-smoke.ts",
-    "seed:test": "tsx --env-file-if-exists=.env scripts/seed-test-leads.ts"
+    "seed:test": "tsx --env-file-if-exists=.env scripts/seed-test-leads.ts",
+    "smoke:atendimento": "tsx --env-file-if-exists=.env scripts/smoke-atendimento.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
