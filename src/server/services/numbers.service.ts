@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { WhatsAppNumberStatus } from "@prisma/client";
+import type { WhatsAppNumberStatus, Prisma } from "@prisma/client";
 import { sentTodayByNumber } from "@/server/worker/dispatcher";
 
 export interface WhatsAppNumberListItem {
@@ -10,6 +10,15 @@ export interface WhatsAppNumberListItem {
   dailyCap: number;
   sentToday: number;
   pairingQr: string | null; // QR cru p/ pareamento (a UI converte em imagem)
+  // config de atendimento
+  displayName: string | null;
+  persona: string | null;
+  knowledgeBase: string | null;
+  businessHours: string | null;
+  customInstructions: string | null;
+  autoReplyEnabled: boolean;
+  qualifyEnabled: boolean;
+  scheduleEnabled: boolean;
 }
 
 /**
@@ -30,6 +39,14 @@ export async function listWhatsAppNumbers(
         status: true,
         dailyCap: true,
         pairingQr: true,
+        displayName: true,
+        persona: true,
+        knowledgeBase: true,
+        businessHours: true,
+        customInstructions: true,
+        autoReplyEnabled: true,
+        qualifyEnabled: true,
+        scheduleEnabled: true,
       },
     }),
     sentTodayByNumber(new Date()),
@@ -48,21 +65,41 @@ const MANUAL_STATUSES = new Set<WhatsAppNumberStatus>(["CONNECTED", "PAUSED", "D
 export async function updateWhatsAppNumber(
   id: string,
   userId: string,
-  data: { label?: string; dailyCap?: number; status?: WhatsAppNumberStatus },
+  data: {
+    label?: string;
+    dailyCap?: number;
+    status?: WhatsAppNumberStatus;
+    displayName?: string | null;
+    persona?: string | null;
+    knowledgeBase?: string | null;
+    businessHours?: string | null;
+    customInstructions?: string | null;
+    autoReplyEnabled?: boolean;
+    qualifyEnabled?: boolean;
+    scheduleEnabled?: boolean;
+  },
 ): Promise<void> {
   const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Número não encontrado");
   if (data.status !== undefined && !MANUAL_STATUSES.has(data.status)) {
     throw new Error("Status não permitido por aqui (use pausar/reativar/desativar).");
   }
-  await prisma.whatsAppNumber.update({
-    where: { id },
-    data: {
-      ...(data.label !== undefined ? { label: data.label } : {}),
-      ...(data.dailyCap !== undefined ? { dailyCap: data.dailyCap } : {}),
-      ...(data.status !== undefined ? { status: data.status } : {}),
-    },
-  });
+  // Monta o patch só com o que veio (undefined = não mexe; null limpa o campo).
+  // Build explícito p/ satisfazer Prisma.WhatsAppNumberUpdateInput (Object.fromEntries
+  // perde a tipagem e quebra o tsc).
+  const patch: Prisma.WhatsAppNumberUpdateInput = {};
+  if (data.label !== undefined) patch.label = data.label;
+  if (data.dailyCap !== undefined) patch.dailyCap = data.dailyCap;
+  if (data.status !== undefined) patch.status = data.status;
+  if (data.displayName !== undefined) patch.displayName = data.displayName;
+  if (data.persona !== undefined) patch.persona = data.persona;
+  if (data.knowledgeBase !== undefined) patch.knowledgeBase = data.knowledgeBase;
+  if (data.businessHours !== undefined) patch.businessHours = data.businessHours;
+  if (data.customInstructions !== undefined) patch.customInstructions = data.customInstructions;
+  if (data.autoReplyEnabled !== undefined) patch.autoReplyEnabled = data.autoReplyEnabled;
+  if (data.qualifyEnabled !== undefined) patch.qualifyEnabled = data.qualifyEnabled;
+  if (data.scheduleEnabled !== undefined) patch.scheduleEnabled = data.scheduleEnabled;
+  await prisma.whatsAppNumber.update({ where: { id }, data: patch });
 }
 
 /** Remove um chip do CRM. Jobs/mensagens/leads ligados ficam órfãos (SetNull). */
