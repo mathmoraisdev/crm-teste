@@ -1,0 +1,11 @@
+# Build no Railway (Nixpacks) — vale p/ os dois serviços (web e worker).
+#
+# Por que `npm install` e nao `npm ci`:
+# `sharp` (puxado por next e por baileys) traz um fallback wasm32 cujos
+# sub-deps (@emnapi/*) sao podados do lockfile quando o `npm install` roda
+# no Windows (host usa o binario nativo win32). No Linux do Railway o
+# `npm ci` valida a arvore inteira, acha o requisito @emnapi sem entrada
+# resolvida e aborta. `npm install` reconcilia o lock e segue — o Linux usa
+# o binario nativo @img/sharp-linux-x64 de qualquer forma.
+[phases.install]
+cmds = ["npm install --no-audit --no-fund"]
