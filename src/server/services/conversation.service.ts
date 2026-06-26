@@ -59,13 +59,21 @@ async function resolveLead(input: InboundInput) {
   return null;
 }
 
+/** Teto de mensagens enviadas à IA por resposta — controla custo de token em
+ *  conversas longas. Reenviar o histórico inteiro a cada réplica cresce de forma
+ *  quadrática ao longo da vida do lead; 25 turnos cobrem o contexto recente sem
+ *  fazer a IA "esquecer" leads que retornam (ao contrário de uma janela de tempo). */
+const CONVERSATION_CONTEXT_LIMIT = 25;
+
 async function loadConversation(leadId: string): Promise<ConversationTurn[]> {
+  // Pega as últimas N (createdAt desc + take) e reverte p/ ordem cronológica.
   const messages = await prisma.message.findMany({
     where: { leadId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
+    take: CONVERSATION_CONTEXT_LIMIT,
     select: { direction: true, content: true },
   });
-  return messages.map((m) => ({ direction: m.direction, content: m.content }));
+  return messages.reverse().map((m) => ({ direction: m.direction, content: m.content }));
 }
 
 export interface IngestResult {

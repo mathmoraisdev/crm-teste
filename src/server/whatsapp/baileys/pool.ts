@@ -14,6 +14,7 @@ import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
 import { jidOf, pickSendJid } from "./jid";
+import { isMediaMessage } from "./media";
 
 const logger = pino({ level: "warn" });
 
@@ -57,6 +58,22 @@ const sentByBot = new Set<string>();
 function rememberBotSent(id: string) {
   sentByBot.add(id);
   setTimeout(() => sentByBot.delete(id), 60_000).unref?.();
+}
+
+// Anti-spam: avisa "só leio texto" no máx. 1x por lead a cada 5 min, p/ não
+// responder a cada arquivo de uma rajada de mídias.
+const mediaNoticeCooldown = new Set<string>();
+const MEDIA_NOTICE =
+  "Por enquanto só consigo ler mensagens de texto 🙏 Pode me escrever a sua dúvida?";
+async function replyUnsupportedMedia(numberId: string, phone: string, label: string) {
+  const key = `${numberId}:${phone}`;
+  if (mediaNoticeCooldown.has(key)) return;
+  mediaNoticeCooldown.add(key); // síncrono, antes do await: trava a rajada
+  setTimeout(() => mediaNoticeCooldown.delete(key), 5 * 60_000).unref?.();
+  const r = await send(numberId, phone, MEDIA_NOTICE);
+  if (!r.ok) {
+    console.warn(`[baileys] "${label}" falha ao avisar mídia não suportada p/ ${phone}: ${r.reason}`);
+  }
 }
 
 /** Sobe (ou ressuscita) o socket de UM número e persiste estado/eventos. */
@@ -204,6 +221,9 @@ export async function connectNumber(numberId: string): Promise<void> {
           console.warn(
             `[baileys] "${rec.label}" inbound NÃO descriptografado de ${remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );
+        } else if (!fromMe && pnJid && isMediaMessage(inner)) {
+          // Mídia de um lead: ainda não lemos arquivos → avisa que só lê texto.
+          await replyUnsupportedMedia(numberId, `+${pnJid.split("@")[0]}`, rec.label);
         }
         continue;
       }
