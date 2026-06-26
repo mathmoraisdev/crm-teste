@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutGrid, List, Upload, RefreshCw, Plus, Search, X } from "lucide-react";
+import { LayoutGrid, List, RefreshCw, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -10,7 +10,6 @@ import { LoadingBlock } from "@/components/ui/Spinner";
 import { LeadsTable } from "@/components/LeadsTable";
 import { LeadForm } from "@/components/LeadForm";
 import { PipelineBoard } from "@/components/PipelineBoard";
-import { CsvUpload } from "@/components/CsvUpload";
 import { StatCard } from "@/components/app/StatCard";
 import { cn } from "@/lib/utils";
 import { LEAD_STATUS_META, PIPELINE_ORDER } from "@/lib/leadStatus";
@@ -25,7 +24,6 @@ const selectClass =
 export function LeadsDashboard() {
   const [leads, setLeads] = useState<LeadListItem[] | null>(null);
   const [view, setView] = useState<View>("table");
-  const [importOpen, setImportOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<LeadListItem | null>(null);
   const [deleting, setDeleting] = useState<LeadListItem | null>(null);
@@ -161,9 +159,6 @@ export function LeadsDashboard() {
           <Button variant="secondary" size="sm" onClick={manualRefresh} loading={refreshing}>
             <RefreshCw size={14} /> Atualizar
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
-            <Upload size={14} /> Importar CSV
-          </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus size={14} /> Novo lead
           </Button>
@@ -236,15 +231,6 @@ export function LeadsDashboard() {
       ) : (
         <PipelineBoard leads={filtered} />
       )}
-
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importar leads (CSV)">
-        <CsvUpload
-          onImported={() => {
-            load();
-            setTimeout(() => setImportOpen(false), 1500);
-          }}
-        />
-      </Modal>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Novo lead">
         <LeadForm
