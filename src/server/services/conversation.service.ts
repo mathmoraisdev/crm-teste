@@ -8,6 +8,7 @@ import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import { sendWhatsAppMessage } from "./messaging";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
+import { shouldCreateContact } from "./inbound-resolve";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -87,18 +88,40 @@ export async function handleInbound(
   }
 
   // Localiza o lead (respeitando o isolamento por conta)
-  const lead = await resolveLead(input);
+  let lead = await resolveLead(input);
 
   if (!lead) {
-    // Não cria lead solto, mas NÃO fica mudo: um inbound de um telefone que não
-    // casa com nenhum lead (ex.: 9º dígito divergente) é a causa clássica de
-    // "a IA parou de responder". Logar dá o rastro que produção precisa.
-    if (input.phone) {
-      console.warn(
-        `[inbound] descartado: nenhum lead casou telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"} userId=${input.userId ?? "—"}`,
-      );
+    // Atendimento: inbound de um telefone desconhecido CRIA o contato atrelado à
+    // empresa (número) que recebeu. Sem a empresa (cloud-api sem mapa) não criamos.
+    if (shouldCreateContact({ matched: false, whatsAppNumberId: input.whatsAppNumberId, phone: input.phone })) {
+      // Descobre o dono (operador) a partir da empresa (número) que recebeu.
+      const num = await prisma.whatsAppNumber.findUnique({
+        where: { id: input.whatsAppNumberId! },
+        select: { userId: true },
+      });
+      if (num) {
+        lead = await prisma.lead.create({
+          data: {
+            userId: num.userId,
+            whatsAppNumberId: input.whatsAppNumberId!,
+            phone: input.phone!,
+            name: input.phone!, // sem nome ainda; o telefone é o rótulo inicial
+            status: "EM_CONVERSA",
+            consentSource: "inbound", // o cliente iniciou o contato (base legal p/ responder)
+          },
+        });
+      }
     }
-    return { leadId: null };
+    if (!lead) {
+      // NÃO fica mudo: um inbound sem empresa para criar contato (ex.: cloud-api
+      // sem mapa) é a causa clássica de "a IA parou de responder". Logar dá o rastro.
+      if (input.phone) {
+        console.warn(
+          `[inbound] descartado: sem empresa p/ criar contato telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"}`,
+        );
+      }
+      return { leadId: null };
+    }
   }
 
   // 1b. Salva inbound
