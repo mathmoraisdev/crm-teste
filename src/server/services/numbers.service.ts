@@ -20,6 +20,10 @@ export interface WhatsAppNumberListItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  replyDelaySeconds: number;
+  firstReplyDelaySeconds: number;
+  autoPauseOnHumanReply: boolean;
+  inactivityResumeMinutes: number;
 }
 
 /**
@@ -49,6 +53,10 @@ export async function listWhatsAppNumbers(
         autoReplyEnabled: true,
         qualifyEnabled: true,
         scheduleEnabled: true,
+        replyDelaySeconds: true,
+        firstReplyDelaySeconds: true,
+        autoPauseOnHumanReply: true,
+        inactivityResumeMinutes: true,
       },
     }),
     sentTodayByNumber(new Date()),
@@ -80,6 +88,10 @@ export async function updateWhatsAppNumber(
     autoReplyEnabled?: boolean;
     qualifyEnabled?: boolean;
     scheduleEnabled?: boolean;
+    replyDelaySeconds?: number;
+    firstReplyDelaySeconds?: number;
+    autoPauseOnHumanReply?: boolean;
+    inactivityResumeMinutes?: number;
   },
 ): Promise<void> {
   const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });
@@ -103,6 +115,10 @@ export async function updateWhatsAppNumber(
   if (data.autoReplyEnabled !== undefined) patch.autoReplyEnabled = data.autoReplyEnabled;
   if (data.qualifyEnabled !== undefined) patch.qualifyEnabled = data.qualifyEnabled;
   if (data.scheduleEnabled !== undefined) patch.scheduleEnabled = data.scheduleEnabled;
+  if (data.replyDelaySeconds !== undefined) patch.replyDelaySeconds = data.replyDelaySeconds;
+  if (data.firstReplyDelaySeconds !== undefined) patch.firstReplyDelaySeconds = data.firstReplyDelaySeconds;
+  if (data.autoPauseOnHumanReply !== undefined) patch.autoPauseOnHumanReply = data.autoPauseOnHumanReply;
+  if (data.inactivityResumeMinutes !== undefined) patch.inactivityResumeMinutes = data.inactivityResumeMinutes;
   await prisma.whatsAppNumber.update({ where: { id }, data: patch });
 }
 

@@ -12,22 +12,47 @@ let pool: Pool | null = null;
 /** Boot do modo Baileys: importa o pool, liga inbound/ack ao domínio e conecta. */
 async function bootBaileys(): Promise<Pool> {
   const p = await import("@/server/whatsapp/baileys/pool");
-  const { handleInbound } = await import("@/server/services/conversation.service");
+  const { ingestInbound, handleOperatorMessage } = await import(
+    "@/server/services/conversation.service"
+  );
+  const { scheduleResponse, cancelResponse } = await import("./respond-queue");
   const { applyAck } = await import("@/server/services/webhook.service");
   p.registerHandlers({
+    // Inbound: persiste na hora (ingest) e AGENDA a resposta com debounce — junta
+    // mensagens picadas e dá o tempo de espera configurado por número.
     onInbound: (e) =>
-      handleInbound({
+      ingestInbound({
         phone: e.fromPhone,
         whatsAppNumberId: e.whatsAppNumberId,
         text: e.text,
         providerMessageId: e.providerMessageId,
       })
-        .then(() => {})
+        .then((r) => {
+          if (r.respond && r.leadId) scheduleResponse(r.leadId, r.delayMs);
+        })
         .catch((err) => {
           // Nunca deixar a falha virar unhandled rejection: o lead fica sem
           // resposta, mas pelo menos fica rastreável (chip + telefone + erro).
           console.error(
-            `[worker] handleInbound falhou (chip=${e.whatsAppNumberId} de=${e.fromPhone}):`,
+            `[worker] ingestInbound falhou (chip=${e.whatsAppNumberId} de=${e.fromPhone}):`,
+            err,
+          );
+        }),
+    // Operador respondeu manual pelo zap (fromMe não-bot): registra, pausa a IA
+    // (se configurado) e cancela qualquer resposta em debounce pendente.
+    onOperatorMessage: (e) =>
+      handleOperatorMessage({
+        toPhone: e.toPhone,
+        text: e.text,
+        providerMessageId: e.providerMessageId,
+        whatsAppNumberId: e.whatsAppNumberId,
+      })
+        .then((r) => {
+          if (r.leadId) cancelResponse(r.leadId);
+        })
+        .catch((err) => {
+          console.error(
+            `[worker] handleOperatorMessage falhou (chip=${e.whatsAppNumberId} p/=${e.toPhone}):`,
             err,
           );
         }),

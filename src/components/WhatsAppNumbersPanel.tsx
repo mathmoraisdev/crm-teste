@@ -26,6 +26,10 @@ interface NumberItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  replyDelaySeconds: number;
+  firstReplyDelaySeconds: number;
+  autoPauseOnHumanReply: boolean;
+  inactivityResumeMinutes: number;
 }
 
 interface ServiceConfig {
@@ -38,6 +42,10 @@ interface ServiceConfig {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  replyDelaySeconds: number;
+  firstReplyDelaySeconds: number;
+  autoPauseOnHumanReply: boolean;
+  inactivityResumeMinutes: number;
 }
 
 const TONE: Record<string, Tone> = {
@@ -224,6 +232,10 @@ export function WhatsAppNumbersPanel() {
       autoReplyEnabled: n.autoReplyEnabled,
       qualifyEnabled: n.qualifyEnabled,
       scheduleEnabled: n.scheduleEnabled,
+      replyDelaySeconds: n.replyDelaySeconds,
+      firstReplyDelaySeconds: n.firstReplyDelaySeconds,
+      autoPauseOnHumanReply: n.autoPauseOnHumanReply,
+      inactivityResumeMinutes: n.inactivityResumeMinutes,
     });
     setServiceError(null);
   }
@@ -244,6 +256,10 @@ export function WhatsAppNumbersPanel() {
         autoReplyEnabled: service.autoReplyEnabled,
         qualifyEnabled: service.qualifyEnabled,
         scheduleEnabled: service.scheduleEnabled,
+        replyDelaySeconds: service.replyDelaySeconds,
+        firstReplyDelaySeconds: service.firstReplyDelaySeconds,
+        autoPauseOnHumanReply: service.autoPauseOnHumanReply,
+        inactivityResumeMinutes: service.inactivityResumeMinutes,
       });
       setServiceFor(null);
       setService(null);
@@ -608,6 +624,86 @@ export function WhatsAppNumbersPanel() {
                 placeholder="Regras específicas de tom, o que evitar, etc."
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
+            </div>
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="text-xs font-semibold text-slate-600">
+                Tempo de resposta &amp; handoff
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Espera p/ responder (s)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={600}
+                    value={service.replyDelaySeconds}
+                    onChange={(e) =>
+                      setService({
+                        ...service,
+                        replyDelaySeconds: Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Espera da 1ª resposta (s)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={600}
+                    value={service.firstReplyDelaySeconds}
+                    onChange={(e) =>
+                      setService({
+                        ...service,
+                        firstReplyDelaySeconds: Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">
+                A IA aguarda esse tempo antes de responder e junta mensagens picadas numa
+                resposta só. 0 = responde na hora.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Reativar IA após inatividade (min)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={1440}
+                  value={service.inactivityResumeMinutes}
+                  onChange={(e) =>
+                    setService({
+                      ...service,
+                      inactivityResumeMinutes: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Depois que um humano assume, se a conversa ficar parada por esse tempo a IA
+                  volta a responder sozinha. 0 = nunca reativa automaticamente.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={service.autoPauseOnHumanReply}
+                  onChange={(e) =>
+                    setService({ ...service, autoPauseOnHumanReply: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                />
+                Pausar a IA quando eu responder manualmente pelo WhatsApp
+              </label>
             </div>
             <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2.5">
               <label className="flex items-center gap-2 text-sm text-slate-700">

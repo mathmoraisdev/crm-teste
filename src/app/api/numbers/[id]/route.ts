@@ -32,6 +32,11 @@ const updateSchema = z
     autoReplyEnabled: z.boolean().optional(),
     qualifyEnabled: z.boolean().optional(),
     scheduleEnabled: z.boolean().optional(),
+    // timing & handoff
+    replyDelaySeconds: z.number().int().min(0).max(600).optional(),
+    firstReplyDelaySeconds: z.number().int().min(0).max(600).optional(),
+    autoPauseOnHumanReply: z.boolean().optional(),
+    inactivityResumeMinutes: z.number().int().min(0).max(1440).optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 

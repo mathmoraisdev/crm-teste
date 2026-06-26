@@ -241,6 +241,12 @@ model WhatsAppNumber {
   qualifyEnabled    Boolean  @default(false) // roda qualificação/score (funil de vendas)
   scheduleEnabled   Boolean  @default(false) // permite propor/agendar reunião
 
+  // ── Timing & handoff do atendimento ────────────────────────────────────
+  replyDelaySeconds       Int     @default(10) // janela de espera (debounce) antes de responder; junta msgs picadas
+  firstReplyDelaySeconds  Int     @default(15) // espera específica da PRIMEIRA resposta da conversa
+  autoPauseOnHumanReply   Boolean @default(true) // operador respondeu manual pelo zap → pausa a IA
+  inactivityResumeMinutes Int     @default(0)  // 0 = desligado; >0 = reativa a IA após N min sem interação
+
   pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
   lastError    String?
   connectedAt  DateTime?

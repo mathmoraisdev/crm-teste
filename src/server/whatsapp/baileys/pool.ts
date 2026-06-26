@@ -23,6 +23,13 @@ export interface InboundEvent {
   providerMessageId: string | null;
   whatsAppNumberId: string;
 }
+/** Mensagem `fromMe` digitada por humano (não pelo bot) — handoff manual pelo zap. */
+export interface OperatorEvent {
+  toPhone: string; // destinatário (lead), E.164 com "+"
+  text: string;
+  providerMessageId: string | null;
+  whatsAppNumberId: string;
+}
 export type SendOutcome =
   | { ok: true; providerMessageId: string }
   | { ok: false; reason: "no_socket" | "not_on_whatsapp" | "send_failed" };
@@ -30,6 +37,8 @@ export type SendOutcome =
 type Handlers = {
   onInbound: (e: InboundEvent) => Promise<void>;
   onAck: (providerMessageId: string, status: "DELIVERED" | "READ") => Promise<void>;
+  /** opcional: mensagem manual do operador (fromMe não-bot) → handoff automático. */
+  onOperatorMessage?: (e: OperatorEvent) => Promise<void>;
 };
 
 const sockets = new Map<string, WASocket>();
@@ -38,6 +47,16 @@ let handlers: Handlers | null = null;
 
 export function registerHandlers(h: Handlers) {
   handlers = h;
+}
+
+// Ids das mensagens que o PRÓPRIO bot enviou. O WhatsApp ecoa todo envio de volta
+// como `fromMe` no messages.upsert — sem isto, o eco do bot seria confundido com
+// uma resposta manual do operador e auto-pausaria a IA. Registrado de forma
+// SÍNCRONA no send() (antes de qualquer eco chegar) e limpo após 60s.
+const sentByBot = new Set<string>();
+function rememberBotSent(id: string) {
+  sentByBot.add(id);
+  setTimeout(() => sentByBot.delete(id), 60_000).unref?.();
 }
 
 /** Sobe (ou ressuscita) o socket de UM número e persiste estado/eventos. */
@@ -142,7 +161,10 @@ export async function connectNumber(numberId: string): Promise<void> {
       // do trace — a resposta do lead sumia sem rastro e a IA nunca era acionada.
       // Aceita os dois; grupos/broadcast/status/newsletter continuam ignorados.
       const isDM = remoteJid.endsWith("@s.whatsapp.net") || remoteJid.endsWith("@lid");
-      if (m.key.fromMe || !isDM) continue;
+      if (!isDM) continue;
+      // fromMe = mensagem saindo deste número: ou o eco do próprio bot, ou o
+      // operador respondendo manual pelo zap. Tratada abaixo (handoff automático).
+      const fromMe = !!m.key.fromMe;
 
       // Telefone real (E.164) p/ casar o lead: se o inbound veio por LID, o número
       // de telefone (PN) está em remoteJidAlt. Sem PN não dá p/ achar o lead por
@@ -171,14 +193,14 @@ export async function connectNumber(numberId: string): Promise<void> {
       // TRACE: mostra type, JID cru + alt + PN resolvido, campos e texto — pra
       // flagrar mensagem descartada antes da IA (LID sem PN, type != notify, etc).
       console.log(
-        `[inbound] type=${type} de=${remoteJid} alt=${altJid || "—"} pn=${pnJid ?? "SEM_PN"} ` +
+        `[inbound] type=${type} fromMe=${fromMe} de=${remoteJid} alt=${altJid || "—"} pn=${pnJid ?? "SEM_PN"} ` +
           `campos=${msg ? Object.keys(msg).join("|") : "SEM_MESSAGE"} ` +
           `text="${text.slice(0, 40)}"`,
       );
 
       if (type !== "notify") continue; // history/append não aciona a IA
       if (!text) {
-        if (!msg) {
+        if (!msg && !fromMe) {
           console.warn(
             `[baileys] "${rec.label}" inbound NÃO descriptografado de ${remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );
@@ -186,13 +208,29 @@ export async function connectNumber(numberId: string): Promise<void> {
         continue;
       }
       if (!pnJid) {
-        // Inbound por LID sem o PN no alt: não temos o telefone p/ casar o lead.
+        // Sem o PN (LID sem alt): não temos o telefone p/ casar o lead.
         // Logar é melhor que o silêncio — sinaliza que precisamos do mapa LID→PN.
-        console.warn(
-          `[baileys] "${rec.label}" inbound LID sem PN (de=${remoteJid}) — sem telefone p/ casar o lead.`,
-        );
+        if (!fromMe) {
+          console.warn(
+            `[baileys] "${rec.label}" inbound LID sem PN (de=${remoteJid}) — sem telefone p/ casar o lead.`,
+          );
+        }
         continue;
       }
+
+      // fromMe: eco do bot vs. resposta manual do operador. O eco já está no
+      // sentByBot (registrado no send) → ignora. O resto é humano → handoff.
+      if (fromMe) {
+        if (m.key.id && sentByBot.has(m.key.id)) continue; // nosso próprio envio
+        await handlers.onOperatorMessage?.({
+          toPhone: `+${pnJid.split("@")[0]}`,
+          text,
+          providerMessageId: m.key.id ?? null,
+          whatsAppNumberId: numberId,
+        });
+        continue;
+      }
+
       await handlers.onInbound({
         fromPhone: `+${pnJid.split("@")[0]}`,
         text,
@@ -262,6 +300,9 @@ export async function send(
         try {
           await sock.sendPresenceUpdate("paused", jid).catch(() => {});
           const r = await sock.sendMessage(jid, { text });
+          // marca SÍNCRONO o id do nosso envio antes do eco fromMe chegar, p/ não
+          // confundir com resposta manual do operador (auto-pause indevido).
+          if (r?.key?.id) rememberBotSent(r.key.id);
           resolve({ ok: true, providerMessageId: r?.key?.id ?? `baileys-${numberId}` });
         } catch {
           resolve({ ok: false, reason: "send_failed" });

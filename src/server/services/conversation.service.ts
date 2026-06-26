@@ -68,23 +68,29 @@ async function loadConversation(leadId: string): Promise<ConversationTurn[]> {
   return messages.map((m) => ({ direction: m.direction, content: m.content }));
 }
 
+export interface IngestResult {
+  leadId: string | null;
+  deduped?: boolean;
+  /** true se há lead válido e a resposta da IA deve ser gerada (na hora ou via debounce). */
+  respond: boolean;
+  /** atraso recomendado antes de responder (debounce), em ms. 0 = imediato. */
+  delayMs: number;
+}
+
 /**
- * Orquestra o loop do agente a cada mensagem inbound:
- *  1. dedupe por providerMessageId → salva Message(INBOUND)
- *  2. NOVO/CONTATADO → EM_CONVERSA
- *  3. se há reunião PROPOSED → interpreta a escolha de horário (subfluxo)
- *  4. senão → qualifica (Sonnet) → aplica pipeline.ts → agenda / responde / descarta
+ * Camada 1 do inbound (SÍNCRONA, sempre roda na hora): dedupe → resolve/cria o
+ * lead → persiste a Message(INBOUND) → trata opt-out (LGPD). NÃO gera a resposta
+ * da IA — isso é `respondToLead`, que o worker pode adiar/agrupar (debounce).
+ * Devolve se vale responder e o atraso sugerido (timing por número).
  */
-export async function handleInbound(
-  input: InboundInput,
-): Promise<{ leadId: string | null; deduped?: boolean }> {
+export async function ingestInbound(input: InboundInput): Promise<IngestResult> {
   // 1. Dedupe
   if (input.providerMessageId) {
     const existing = await prisma.message.findUnique({
       where: { providerMessageId: input.providerMessageId },
       select: { leadId: true },
     });
-    if (existing) return { leadId: existing.leadId, deduped: true };
+    if (existing) return { leadId: existing.leadId, deduped: true, respond: false, delayMs: 0 };
   }
 
   // Localiza o lead (respeitando o isolamento por conta)
@@ -120,7 +126,7 @@ export async function handleInbound(
           `[inbound] descartado: sem empresa p/ criar contato telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"}`,
         );
       }
-      return { leadId: null };
+      return { leadId: null, respond: false, delayMs: 0 };
     }
   }
 
@@ -148,40 +154,103 @@ export async function handleInbound(
         data: { status: "CANCELLED", lastError: "opt-out do lead" },
       }),
     ]);
-    return { leadId: lead.id };
+    return { leadId: lead.id, respond: false, delayMs: 0 };
   }
 
-  // Handoff humano: o operador assumiu a conversa (aiPaused=true). Apenas
-  // persistimos o inbound acima e paramos aqui — não rodamos os agentes de IA
-  // nem respondemos automaticamente. O operador responde manualmente via /reply.
+  // Timing: calcula o atraso (debounce) sugerido. A 1ª resposta da conversa usa
+  // um tempo próprio; as demais usam o padrão. O worker usa isso pra agrupar
+  // mensagens picadas; chamadores síncronos (webhook/dev/smoke) ignoram e
+  // respondem na hora via handleInbound.
+  const num = lead.whatsAppNumberId
+    ? await prisma.whatsAppNumber.findUnique({
+        where: { id: lead.whatsAppNumberId },
+        select: { replyDelaySeconds: true, firstReplyDelaySeconds: true },
+      })
+    : null;
+  const hasOutbound =
+    (await prisma.message.count({ where: { leadId: lead.id, direction: "OUTBOUND" } })) > 0;
+  const seconds = hasOutbound ? num?.replyDelaySeconds ?? 0 : num?.firstReplyDelaySeconds ?? 0;
+  return { leadId: lead.id, respond: true, delayMs: Math.max(0, seconds) * 1000 };
+}
+
+/**
+ * Compat/síncrono: ingere o inbound e, se for o caso, gera a resposta na hora
+ * (sem debounce). Usado por webhook cloud-api, simulate-reply (dev) e smoke.
+ * O worker Baileys usa ingestInbound + respondToLead (debounce/agrupamento).
+ */
+export async function handleInbound(
+  input: InboundInput,
+): Promise<{ leadId: string | null; deduped?: boolean }> {
+  const r = await ingestInbound(input);
+  if (r.respond && r.leadId) await respondToLead(r.leadId);
+  return { leadId: r.leadId, deduped: r.deduped };
+}
+
+/**
+ * Camada 2 do inbound: gera e envia a resposta da IA. Recarrega o estado FRESCO
+ * (o operador pode ter assumido durante a janela de debounce) e:
+ *  - reativa a IA se o handoff esfriou (inactivityResumeMinutes do número);
+ *  - respeita aiPaused (handoff humano ativo) → silêncio;
+ *  - escolha de horário (reunião PROPOSED), qualificação e atendimento.
+ */
+export async function respondToLead(leadId: string): Promise<void> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) return;
+
+  // Handoff humano: por padrão a IA fica em silêncio. Mas se a conversa esfriou
+  // por mais de inactivityResumeMinutes (config do número), devolvemos o controle
+  // à IA — evita lead órfão quando o operador esquece de retomar.
   if (lead.aiPaused) {
-    return { leadId: lead.id };
+    const cfg = lead.whatsAppNumberId
+      ? await prisma.whatsAppNumber.findUnique({
+          where: { id: lead.whatsAppNumberId },
+          select: { inactivityResumeMinutes: true },
+        })
+      : null;
+    const mins = cfg?.inactivityResumeMinutes ?? 0;
+    // Idle = tempo desde a ÚLTIMA atividade do humano (aiPausedAt, renovado a cada
+    // resposta manual). Mensagens do cliente NÃO zeram o relógio — se o operador
+    // sumiu por N min com o lead esperando, a IA reassume. Robusto a msgs picadas.
+    const since = lead.aiPausedAt?.getTime() ?? 0;
+    const idleMs = since ? Date.now() - since : 0;
+    if (mins > 0 && since && idleMs >= mins * 60_000) {
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { aiPaused: false, aiPausedAt: null },
+      });
+      lead.aiPaused = false;
+    } else {
+      return; // operador no controle
+    }
   }
 
   // 2. NOVO/CONTATADO → EM_CONVERSA
   let status = lead.status;
   if (status === "NOVO" || status === "CONTATADO") {
     status = "EM_CONVERSA";
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { status },
-    });
+    await prisma.lead.update({ where: { id: lead.id }, data: { status } });
   }
 
-  if (status === "DESCARTADO") return { leadId: lead.id };
+  if (status === "DESCARTADO") return;
 
-  // 3. Aguardando escolha de horário?
+  // 3. Aguardando escolha de horário? Usa a mensagem inbound mais recente.
   const meeting = await prisma.meeting.findUnique({
     where: { leadId: lead.id },
     select: { status: true },
   });
   if (meeting?.status === "PROPOSED") {
-    await interpretAndBook(lead.id, input.text);
-    return { leadId: lead.id };
+    if (!(await aiStillActive(lead.id))) return; // operador assumiu durante o debounce
+    const lastInbound = await prisma.message.findFirst({
+      where: { leadId: lead.id, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      select: { content: true },
+    });
+    if (lastInbound) await interpretAndBook(lead.id, lastInbound.content);
+    return;
   }
   if (status === "REUNIAO_AGENDADA") {
     // Reunião já confirmada — não reprocessa qualificação.
-    return { leadId: lead.id };
+    return;
   }
 
   // Config da empresa (número) dona da conversa. Default seguro se faltar número.
@@ -223,12 +292,13 @@ export async function handleInbound(
   }
 
   // 4b. Descartado pela qualificação → silêncio.
-  if (shouldDiscard) return { leadId: lead.id };
+  if (shouldDiscard) return;
 
   // 4c. Agendamento opcional tem precedência sobre a resposta livre.
   if (shouldSchedule) {
+    if (!(await aiStillActive(lead.id))) return; // operador assumiu durante a geração
     await proposeSlots(lead.id);
-    return { leadId: lead.id };
+    return;
   }
 
   // 4d. Atendimento: responde a dúvida no contexto da empresa (sempre que autoReply).
@@ -245,11 +315,22 @@ export async function handleInbound(
       },
       conversation,
     });
+    // Recheck pós-geração: a chamada da IA leva segundos; nesse meio o operador
+    // pode ter assumido (auto-pause/handoff manual, possivelmente em outro
+    // processo). Relê o estado fresco e NÃO envia por cima do humano.
+    if (!(await aiStillActive(lead.id))) return;
     await sendWhatsAppMessage(lead, reply);
   }
   // !mode.reply → handoff total: só persiste o inbound (humano responde via /reply).
+}
 
-  return { leadId: lead.id };
+/** True se a IA ainda pode responder (não foi pausada). Recheck fresco anti-corrida. */
+async function aiStillActive(leadId: string): Promise<boolean> {
+  const l = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { aiPaused: true },
+  });
+  return !l?.aiPaused;
 }
 
 /**
@@ -277,8 +358,86 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
 export async function sendManualReply(leadId: string, userId: string, content: string) {
   const lead = await prisma.lead.findFirst({
     where: { id: leadId, userId },
-    select: { id: true, phone: true, userId: true, whatsAppNumberId: true },
+    select: { id: true, phone: true, userId: true, whatsAppNumberId: true, aiPaused: true },
   });
   if (!lead) throw new Error("Lead não encontrado");
   await sendWhatsAppMessage(lead, content);
+  // Operador respondeu pela tela do CRM: renova o relógio de inatividade p/ o
+  // resume automático medir o silêncio a partir de agora (não desde a pausa).
+  if (lead.aiPaused) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { aiPausedAt: new Date() } });
+  }
+}
+
+/**
+ * Mensagem `fromMe` que NÃO é do bot: o operador respondeu manualmente pelo
+ * próprio WhatsApp do número. Registra como OUTBOUND (histórico do CRM) e, se o
+ * número tiver autoPauseOnHumanReply, pausa a IA (handoff automático). O pool já
+ * filtra os ecos das mensagens que o próprio bot enviou (set sentByBot), então
+ * aqui só chega texto digitado por humano. Devolve o leadId p/ o worker cancelar
+ * qualquer resposta em debounce pendente.
+ */
+export async function handleOperatorMessage(input: {
+  toPhone: string;
+  text: string;
+  providerMessageId: string | null;
+  whatsAppNumberId: string;
+}): Promise<{ leadId: string | null }> {
+  // Backup ao filtro em memória do pool: se o id já está gravado, é o nosso
+  // próprio envio (ou já processado) — não duplica nem auto-pausa.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findUnique({
+      where: { providerMessageId: input.providerMessageId },
+      select: { leadId: true },
+    });
+    if (existing) return { leadId: existing.leadId };
+  }
+  const lead = await resolveLead({
+    whatsAppNumberId: input.whatsAppNumberId,
+    phone: input.toPhone,
+    text: input.text,
+  });
+  if (!lead) return { leadId: null };
+
+  const num = await prisma.whatsAppNumber.findUnique({
+    where: { id: input.whatsAppNumberId },
+    select: { autoPauseOnHumanReply: true },
+  });
+  try {
+    await prisma.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "OUTBOUND",
+        content: input.text,
+        providerMessageId: input.providerMessageId ?? undefined,
+        status: "SENT",
+        whatsAppNumberId: input.whatsAppNumberId,
+      },
+    });
+  } catch (e) {
+    // Race com o eco do próprio bot: o envio do bot persistiu o mesmo
+    // providerMessageId entre o findUnique acima e aqui. É mensagem NOSSA,
+    // não do operador — não auto-pausa. (P2002 = unique constraint do Prisma.)
+    if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") {
+      return { leadId: lead.id };
+    }
+    throw e;
+  }
+  // Duas responsabilidades distintas:
+  //  - pausar a IA (handoff automático) só se o número tiver autoPauseOnHumanReply;
+  //  - renovar o relógio de inatividade SEMPRE que o humano falar com um lead já
+  //    pausado (senão o resume automático reativaria a IA no meio do atendimento
+  //    humano feito pelo zap). Espelha sendManualReply.
+  if (num?.autoPauseOnHumanReply) {
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { aiPaused: true, aiPausedAt: new Date() },
+    });
+  } else if (lead.aiPaused) {
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { aiPausedAt: new Date() },
+    });
+  }
+  return { leadId: lead.id };
 }
