@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Megaphone, Smartphone, Settings, LogOut } from "lucide-react";
+import { Users, Building2, Smartphone, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
 const NAV = [
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/campaigns", label: "Campanhas", icon: Megaphone },
+  { href: "/leads", label: "Conversas", icon: Users },
+  { href: "/empresas", label: "Empresas", icon: Building2 },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -58,11 +58,11 @@ export function Sidebar() {
 
       <div className="mt-auto flex flex-col gap-2.5">
         <Link
-          href="/campaigns"
+          href="/empresas"
           className="rounded-2xl border border-white/[.07] bg-white/[.04] p-3.5 transition-colors hover:bg-white/[.07]"
         >
           <span className="flex items-center gap-2 text-[12.5px] font-bold text-white">
-            <Smartphone size={14} className="text-mint" /> Números WhatsApp
+            <Smartphone size={14} className="text-mint" /> Empresas &amp; atendimentos
           </span>
           <span className="mt-1 block font-mono text-[11.5px] text-[#8FB6A5]">
             Conectar &amp; gerenciar chips
