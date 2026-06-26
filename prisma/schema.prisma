@@ -89,7 +89,8 @@ enum WhatsAppNumberStatus {
   CONNECTED     // saudável, pode enviar
   WARMING       // conectado, mas em warm-up (cap reduzido)
   PAUSED        // pausado manualmente
-  BANNED        // logout/403 detectado — fora da rotação
+  LOGGED_OUT    // aparelho deslogado (401) — precisa reescanear; configs preservadas
+  BANNED        // 403 detectado — ban efetivo, fora da rotação
   DISABLED      // desativado pelo operador
 }
 

@@ -126,6 +126,49 @@ export async function updateWhatsAppNumber(
   await prisma.whatsAppNumber.update({ where: { id }, data: patch });
 }
 
+// Status offline a partir dos quais um chip pode ser forçado a reparear.
+const RECONNECTABLE_STATUSES = new Set<WhatsAppNumberStatus>([
+  "BANNED",
+  "LOGGED_OUT",
+  "DISABLED",
+]);
+
+/**
+ * Força o re-pareamento de um chip offline (BANIDO/DESLOGADO/DESATIVADO):
+ * apaga as credenciais Baileys mortas (tabela WhatsAppAuthState) e volta o
+ * status p/ CONNECTING. O worker então gera um QR novo p/ reescanear.
+ *
+ * As configs de atendimento (system prompt, modelo de IA, persona, base de
+ * conhecimento, delays, toggles…) NÃO ficam aqui — vivem na própria linha
+ * WhatsAppNumber, que é preservada. Só as credenciais de sessão são apagadas.
+ * Por isso reconectar mantém TUDO que já estava configurado no número.
+ */
+export async function reconnectWhatsAppNumber(
+  id: string,
+  userId: string,
+): Promise<void> {
+  const rec = await prisma.whatsAppNumber.findFirst({
+    where: { id, userId },
+    select: { id: true, status: true },
+  });
+  if (!rec) throw new Error("Número não encontrado");
+  if (!RECONNECTABLE_STATUSES.has(rec.status)) {
+    throw new Error(
+      "Só dá pra reconectar um número offline (banido/deslogado/desativado).",
+    );
+  }
+  // Apaga as creds mortas → o Baileys gera um QR novo em vez de tentar reusar a
+  // sessão derrubada (que cairia de novo em 401). Tudo numa transação p/ não
+  // deixar o número CONNECTING com metade das creds antigas ainda no banco.
+  await prisma.$transaction([
+    prisma.whatsAppAuthState.deleteMany({ where: { numberId: id } }),
+    prisma.whatsAppNumber.update({
+      where: { id },
+      data: { status: "CONNECTING", bannedAt: null, lastError: null, pairingQr: null },
+    }),
+  ]);
+}
+
 /** Remove um chip do CRM. Jobs/mensagens/leads ligados ficam órfãos (SetNull). */
 export async function deleteWhatsAppNumber(id: string, userId: string): Promise<void> {
   const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });

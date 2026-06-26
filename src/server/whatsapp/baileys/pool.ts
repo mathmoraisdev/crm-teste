@@ -83,7 +83,9 @@ export async function connectNumber(numberId: string): Promise<void> {
   connecting.add(numberId);
   try {
     const rec = await prisma.whatsAppNumber.findUnique({ where: { id: numberId } });
-    if (!rec || rec.status === "DISABLED" || rec.status === "BANNED") return;
+    // DESLOGADO/BANIDO/DESATIVADO não sobem socket sozinhos: o deslogado precisa
+    // do "Reconectar" (que apaga as creds mortas e volta p/ CONNECTING) antes.
+    if (!rec || rec.status === "DISABLED" || rec.status === "BANNED" || rec.status === "LOGGED_OUT") return;
 
     // Auth-state: por padrão no Postgres (sobrevive a redeploys do Railway,
     // que zeram o disco). BAILEYS_AUTH_STORE="file" volta ao comportamento
@@ -155,7 +157,19 @@ export async function connectNumber(numberId: string): Promise<void> {
         });
         const { rerouteJobsFromNumber } = await import("@/server/worker/reroute");
         const moved = await rerouteJobsFromNumber(numberId, new Date());
-        console.error(`[baileys] "${rec.label}" BANIDO/deslogado (code=${code}) — ${moved} jobs reroteados, fora da rotação.`);
+        console.error(`[baileys] "${rec.label}" BANIDO (code=${code}) — ${moved} jobs reroteados, fora da rotação.`);
+      } else if (action === "LOGGED_OUT") {
+        // 401: aparelho deslogado. As credenciais morreram — NÃO reconecta sozinho
+        // (reusar a sessão derrubada só re-derruba em 401). Fica DESLOGADO até o
+        // operador clicar "Reconectar" (apaga as creds → QR novo). As configs do
+        // número (system prompt, modelo, etc.) ficam intactas em outra tabela.
+        await prisma.whatsAppNumber.update({
+          where: { id: numberId },
+          data: { status: "LOGGED_OUT", lastError: `code=${code}`, pairingQr: null },
+        });
+        const { rerouteJobsFromNumber } = await import("@/server/worker/reroute");
+        const moved = await rerouteJobsFromNumber(numberId, new Date());
+        console.warn(`[baileys] "${rec.label}" deslogado (code=${code}) — ${moved} jobs reroteados. Use "Reconectar" p/ reescanear (configs preservadas).`);
       } else if (action === "RECONNECT" && code !== DisconnectReason.loggedOut) {
         console.warn(`[baileys] "${rec.label}" caiu (code=${code}) — reconectando…`);
         setTimeout(() => void connectNumber(numberId), 5000);
@@ -337,7 +351,7 @@ export async function send(
 /** Sobe todos os números não banidos/desabilitados (chamado no boot do worker). */
 export async function connectAll(): Promise<void> {
   const nums = await prisma.whatsAppNumber.findMany({
-    where: { status: { notIn: ["BANNED", "DISABLED"] } },
+    where: { status: { notIn: ["BANNED", "DISABLED", "LOGGED_OUT"] } },
     select: { id: true },
   });
   for (const n of nums) await connectNumber(n.id);
@@ -350,7 +364,7 @@ export async function connectAll(): Promise<void> {
  */
 export async function ensureConnections(): Promise<void> {
   const nums = await prisma.whatsAppNumber.findMany({
-    where: { status: { notIn: ["BANNED", "DISABLED"] } },
+    where: { status: { notIn: ["BANNED", "DISABLED", "LOGGED_OUT"] } },
     select: { id: true },
   });
   for (const n of nums) if (!sockets.has(n.id)) await connectNumber(n.id);

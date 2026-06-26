@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Smartphone, Plus, Pause, Play, Pencil, Trash2, Settings2 } from "lucide-react";
+import { Smartphone, Plus, Pause, Play, Pencil, Trash2, Settings2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
@@ -56,6 +56,7 @@ const TONE: Record<string, Tone> = {
   WARMING: "amber",
   CONNECTING: "blue",
   PAUSED: "slate",
+  LOGGED_OUT: "amber",
   BANNED: "red",
   DISABLED: "slate",
 };
@@ -65,9 +66,13 @@ const LABEL: Record<string, string> = {
   WARMING: "Aquecendo",
   CONNECTING: "Conectando",
   PAUSED: "Pausado",
+  LOGGED_OUT: "Desconectado",
   BANNED: "Banido",
   DISABLED: "Desativado",
 };
+
+// Status offline a partir dos quais o operador pode forçar um re-pareamento.
+const RECONNECTABLE = new Set(["BANNED", "LOGGED_OUT", "DISABLED"]);
 
 const STATUS_OPTIONS = Object.keys(LABEL);
 
@@ -192,6 +197,27 @@ export function WhatsAppNumbersPanel() {
       await patchNumber(n.id, { status: next });
     } catch {
       /* erro silencioso aqui; o status reflete no próximo poll */
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Reconecta um chip offline (banido/deslogado/desativado): apaga as creds
+  // mortas no servidor, volta p/ CONNECTING e abre o modal de QR apontando p/
+  // este número. As configs (system prompt, modelo…) são preservadas.
+  async function reconnectNumber(n: NumberItem) {
+    setBusyId(n.id);
+    try {
+      const res = await fetch(`/api/numbers/${n.id}/reconnect`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Falha ao reconectar");
+      }
+      await load();
+      setPairingId(n.id); // mostra o QR novo no modal de pareamento
+      setOpen(true);
+    } catch {
+      /* status reflete no próximo poll */
     } finally {
       setBusyId(null);
     }
@@ -349,6 +375,7 @@ export function WhatsAppNumbersPanel() {
               const atCap = n.sentToday >= n.dailyCap;
               const canPause = n.status === "CONNECTED" || n.status === "WARMING";
               const canResume = n.status === "PAUSED";
+              const canReconnect = RECONNECTABLE.has(n.status);
               return (
                 <tr key={n.id} className="hover:bg-slate-50">
                   <Td>
@@ -367,6 +394,19 @@ export function WhatsAppNumbersPanel() {
                   </Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {canReconnect && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => reconnectNumber(n)}
+                          loading={busyId === n.id}
+                          title="Reconectar (reescanear QR, mantém as configs)"
+                          aria-label="Reconectar chip"
+                          className="text-brand-600 hover:bg-brand-50"
+                        >
+                          <RefreshCw size={14} />
+                        </Button>
+                      )}
                       {(canPause || canResume) && (
                         <Button
                           variant="ghost"
