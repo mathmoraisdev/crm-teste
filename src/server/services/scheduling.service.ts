@@ -68,7 +68,14 @@ export async function interpretAndBook(
   const formatted = slots.map((iso) => formatSlot(iso, TZ));
 
   // BYOK: resolve o AiClient do dono do lead (chave própria ou fallback da plataforma).
-  const ai = await getAiClient(lead.userId);
+  // Aplica o modelo configurado no número (se houver) a todas as chamadas.
+  const num = lead.whatsAppNumberId
+    ? await prisma.whatsAppNumber.findUnique({
+        where: { id: lead.whatsAppNumberId },
+        select: { aiModel: true },
+      })
+    : null;
+  const ai = await getAiClient(lead.userId, num?.aiModel ?? undefined);
   const choice = await interpretSlotChoice({
     ai,
     formattedSlots: formatted,

@@ -232,6 +232,7 @@ model WhatsAppNumber {
 
   // ── Config de ATENDIMENTO (número = empresa) ───────────────────────────
   displayName       String?  // nome público da empresa (cai p/ `label` se null)
+  aiModel           String?  // modelo da IA que opera a resposta (ID do provider); null = padrão do tier
   systemPromptOverride String?  // prompt mestre completo; quando setado, SUBSTITUI o ATTENDANCE_SYSTEM padrão
   persona           String?  // tom/estilo do atendente ("formal", "descontraído", instruções)
   knowledgeBase     String?  // FAQ / produtos / serviços (texto livre injetado no prompt)

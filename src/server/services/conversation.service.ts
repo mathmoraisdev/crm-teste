@@ -266,7 +266,7 @@ export async function respondToLead(leadId: string): Promise<void> {
     ? await prisma.whatsAppNumber.findUnique({
         where: { id: lead.whatsAppNumberId },
         select: {
-          displayName: true, label: true, systemPromptOverride: true,
+          displayName: true, label: true, aiModel: true, systemPromptOverride: true,
           persona: true, knowledgeBase: true,
           businessHours: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
@@ -281,8 +281,10 @@ export async function respondToLead(leadId: string): Promise<void> {
   });
 
   // 4. Atendimento é o respondedor padrão. Qualificação/agendamento são opcionais
-  //    (toggles da empresa) e apenas pontuam/desviam o fluxo.
-  const ai = await getAiClient(lead.userId);
+  //    (toggles da empresa) e apenas pontuam/desviam o fluxo. O modelo configurado
+  //    no número (aiModel) vale p/ TODAS as chamadas deste client (qualificação,
+  //    próxima pergunta, atendimento).
+  const ai = await getAiClient(lead.userId, company?.aiModel ?? undefined);
   const conversation = await loadConversation(lead.id);
 
   let shouldSchedule = false;

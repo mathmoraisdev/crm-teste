@@ -21,6 +21,8 @@ export interface ForcedToolCallOpts {
   toolDescription: string;
   /** JSON Schema dos parâmetros da tool. */
   jsonSchema: Record<string, unknown>;
+  /** Override do modelo (ID do provider). Quando ausente, usa o do client/`tier`. */
+  model?: string;
 }
 
 export interface GenerateTextOpts {
@@ -28,6 +30,8 @@ export interface GenerateTextOpts {
   system: string;
   user: string;
   maxTokens: number;
+  /** Override do modelo (ID do provider). Quando ausente, usa o do client/`tier`. */
+  model?: string;
 }
 
 /**
@@ -44,14 +48,16 @@ export interface AiClient {
 
 // ───────────────────────── OpenAI ─────────────────────────
 
-function openAiClient(apiKey: string): AiClient {
+function openAiClient(apiKey: string, clientModel?: string): AiClient {
   const client = new OpenAI({ apiKey });
   const models = MODELS_BY_PROVIDER.OPENAI;
+  // Precedência: override da chamada → modelo do client (por-número) → padrão do tier.
+  const pick = (tier: Tier, callModel?: string) => callModel || clientModel || models[tier];
 
   return {
-    async generateText({ tier, system, user, maxTokens }) {
+    async generateText({ tier, model, system, user, maxTokens }) {
       const res = await client.chat.completions.create({
-        model: models[tier],
+        model: pick(tier, model),
         max_completion_tokens: maxTokens,
         messages: [
           { role: "system", content: system },
@@ -61,9 +67,9 @@ function openAiClient(apiKey: string): AiClient {
       return (res.choices[0]?.message?.content ?? "").trim();
     },
 
-    async forcedToolCall({ tier, system, user, maxTokens, toolName, toolDescription, jsonSchema }) {
+    async forcedToolCall({ tier, model, system, user, maxTokens, toolName, toolDescription, jsonSchema }) {
       const res = await client.chat.completions.create({
-        model: models[tier],
+        model: pick(tier, model),
         max_completion_tokens: maxTokens,
         messages: [
           { role: "system", content: system },
@@ -94,14 +100,16 @@ function openAiClient(apiKey: string): AiClient {
 
 // ──────────────────────── Anthropic ────────────────────────
 
-function anthropicClient(apiKey: string): AiClient {
+function anthropicClient(apiKey: string, clientModel?: string): AiClient {
   const client = new Anthropic({ apiKey });
   const models = MODELS_BY_PROVIDER.ANTHROPIC;
+  // Precedência: override da chamada → modelo do client (por-número) → padrão do tier.
+  const pick = (tier: Tier, callModel?: string) => callModel || clientModel || models[tier];
 
   return {
-    async generateText({ tier, system, user, maxTokens }) {
+    async generateText({ tier, model, system, user, maxTokens }) {
       const res = await client.messages.create({
-        model: models[tier],
+        model: pick(tier, model),
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: user }],
@@ -110,9 +118,9 @@ function anthropicClient(apiKey: string): AiClient {
       return block && block.type === "text" ? block.text.trim() : "";
     },
 
-    async forcedToolCall({ tier, system, user, maxTokens, toolName, toolDescription, jsonSchema }) {
+    async forcedToolCall({ tier, model, system, user, maxTokens, toolName, toolDescription, jsonSchema }) {
       const res = await client.messages.create({
-        model: models[tier],
+        model: pick(tier, model),
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: user }],
@@ -132,9 +140,17 @@ function anthropicClient(apiKey: string): AiClient {
   };
 }
 
-/** Constrói um AiClient para um provider + chave específicos. */
-export function buildAiClient(opts: { provider: AiProviderName; apiKey: string }): AiClient {
+/**
+ * Constrói um AiClient para um provider + chave específicos. `model` (opcional)
+ * fixa o modelo de TODAS as chamadas deste client (override por-número), ainda
+ * sujeito a um override per-call. Sem ele, cai no modelo padrão do tier.
+ */
+export function buildAiClient(opts: {
+  provider: AiProviderName;
+  apiKey: string;
+  model?: string;
+}): AiClient {
   return opts.provider === "ANTHROPIC"
-    ? anthropicClient(opts.apiKey)
-    : openAiClient(opts.apiKey);
+    ? anthropicClient(opts.apiKey, opts.model)
+    : openAiClient(opts.apiKey, opts.model);
 }

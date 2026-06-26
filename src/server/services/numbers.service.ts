@@ -12,6 +12,7 @@ export interface WhatsAppNumberListItem {
   pairingQr: string | null; // QR cru p/ pareamento (a UI converte em imagem)
   // config de atendimento
   displayName: string | null;
+  aiModel: string | null;
   systemPromptOverride: string | null;
   persona: string | null;
   knowledgeBase: string | null;
@@ -45,6 +46,7 @@ export async function listWhatsAppNumbers(
         dailyCap: true,
         pairingQr: true,
         displayName: true,
+        aiModel: true,
         systemPromptOverride: true,
         persona: true,
         knowledgeBase: true,
@@ -80,6 +82,7 @@ export async function updateWhatsAppNumber(
     dailyCap?: number;
     status?: WhatsAppNumberStatus;
     displayName?: string | null;
+    aiModel?: string | null;
     systemPromptOverride?: string | null;
     persona?: string | null;
     knowledgeBase?: string | null;
@@ -107,6 +110,7 @@ export async function updateWhatsAppNumber(
   if (data.dailyCap !== undefined) patch.dailyCap = data.dailyCap;
   if (data.status !== undefined) patch.status = data.status;
   if (data.displayName !== undefined) patch.displayName = data.displayName;
+  if (data.aiModel !== undefined) patch.aiModel = data.aiModel;
   if (data.systemPromptOverride !== undefined) patch.systemPromptOverride = data.systemPromptOverride;
   if (data.persona !== undefined) patch.persona = data.persona;
   if (data.knowledgeBase !== undefined) patch.knowledgeBase = data.knowledgeBase;

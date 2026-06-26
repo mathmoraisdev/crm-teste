@@ -8,6 +8,7 @@ import { Table, Th, Td } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { AI_MODELS_BY_PROVIDER, type AiProviderName } from "@/lib/ai-models";
 
 interface NumberItem {
   id: string;
@@ -18,6 +19,7 @@ interface NumberItem {
   sentToday: number;
   qrDataUrl: string | null;
   displayName: string | null;
+  aiModel: string | null;
   systemPromptOverride: string | null;
   persona: string | null;
   knowledgeBase: string | null;
@@ -34,6 +36,7 @@ interface NumberItem {
 
 interface ServiceConfig {
   displayName: string;
+  aiModel: string;
   systemPromptOverride: string;
   persona: string;
   businessHours: string;
@@ -75,6 +78,7 @@ const STATUS_OPTIONS = Object.keys(LABEL);
 export function WhatsAppNumbersPanel() {
   const [numbers, setNumbers] = useState<NumberItem[] | null>(null);
   const [mode, setMode] = useState<string | null>(null);
+  const [provider, setProvider] = useState<AiProviderName>("OPENAI");
 
   // estado do modal de pareamento
   const [open, setOpen] = useState(false);
@@ -108,6 +112,9 @@ export function WhatsAppNumbersPanel() {
       const data = await res.json();
       setNumbers(data.numbers as NumberItem[]);
       setMode(data.mode as string);
+      if (data.provider === "OPENAI" || data.provider === "ANTHROPIC") {
+        setProvider(data.provider);
+      }
     } catch {
       /* mantém estado anterior */
     }
@@ -224,6 +231,7 @@ export function WhatsAppNumbersPanel() {
     setServiceFor(n);
     setService({
       displayName: n.displayName ?? "",
+      aiModel: n.aiModel ?? "",
       systemPromptOverride: n.systemPromptOverride ?? "",
       persona: n.persona ?? "",
       businessHours: n.businessHours ?? "",
@@ -248,6 +256,7 @@ export function WhatsAppNumbersPanel() {
       // strings vazias → null (limpa o campo no banco)
       await patchNumber(serviceFor.id, {
         displayName: service.displayName.trim() || null,
+        aiModel: service.aiModel || null,
         systemPromptOverride: service.systemPromptOverride.trim() || null,
         persona: service.persona.trim() || null,
         businessHours: service.businessHours.trim() || null,
@@ -552,6 +561,30 @@ export function WhatsAppNumbersPanel() {
                 placeholder="Ex.: Clínica Sorriso"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Modelo de IA
+              </label>
+              <select
+                value={service.aiModel}
+                onChange={(e) =>
+                  setService({ ...service, aiModel: e.target.value })
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                <option value="">Padrão da conta</option>
+                {AI_MODELS_BY_PROVIDER[provider].map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Modelo que gera as respostas deste número.{" "}
+                {provider === "ANTHROPIC" ? "Provider: Anthropic." : "Provider: OpenAI."}{" "}
+                &quot;Padrão da conta&quot; usa o modelo configurado globalmente.
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">

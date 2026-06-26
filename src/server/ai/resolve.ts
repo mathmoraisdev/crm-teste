@@ -36,8 +36,12 @@ export async function resolveProviderForUser(userId: string): Promise<ResolvedPr
   return { provider: "OPENAI", apiKey: env.OPENAI_API_KEY, source: "platform" };
 }
 
-/** Atalho: AiClient pronto para o usuário (chave própria ou fallback). */
-export async function getAiClient(userId: string): Promise<AiClient> {
+/**
+ * Atalho: AiClient pronto para o usuário (chave própria ou fallback). `model`
+ * (opcional) fixa o modelo de todas as chamadas — usado p/ aplicar o modelo
+ * configurado por número WhatsApp.
+ */
+export async function getAiClient(userId: string, model?: string): Promise<AiClient> {
   const { provider, apiKey } = await resolveProviderForUser(userId);
-  return buildAiClient({ provider, apiKey });
+  return buildAiClient({ provider, apiKey, model });
 }

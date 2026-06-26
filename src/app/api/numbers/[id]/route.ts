@@ -6,6 +6,7 @@ import {
   updateWhatsAppNumber,
 } from "@/server/services/numbers.service";
 import { getCurrentUserId } from "@/lib/session";
+import { ALL_AI_MODEL_VALUES } from "@/lib/ai-models";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +25,12 @@ const updateSchema = z
       .optional(),
     // ── config de atendimento (número = empresa) ──
     displayName: z.string().max(120).nullable().optional(),
+    // modelo que opera a resposta; null = padrão. Validado contra o catálogo conhecido.
+    aiModel: z
+      .string()
+      .refine((v) => ALL_AI_MODEL_VALUES.has(v), "Modelo de IA inválido")
+      .nullable()
+      .optional(),
     systemPromptOverride: z.string().max(20000).nullable().optional(), // prompt mestre completo
     persona: z.string().max(2000).nullable().optional(),
     knowledgeBase: z.string().max(8000).nullable().optional(), // teto p/ caber no prompt

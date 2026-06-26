@@ -13,7 +13,10 @@ export const runtime = "nodejs";
 export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const numbers = await listWhatsAppNumbers(userId);
+  const [numbers, user] = await Promise.all([
+    listWhatsAppNumbers(userId),
+    prisma.user.findUnique({ where: { id: userId }, select: { aiProvider: true } }),
+  ]);
   // converte o QR cru em data URL p/ a UI renderizar como <img>
   const withQr = await Promise.all(
     numbers.map(async ({ pairingQr, ...n }) => ({
@@ -21,7 +24,9 @@ export async function GET() {
       qrDataUrl: pairingQr ? await QRCode.toDataURL(pairingQr, { margin: 1, width: 240 }) : null,
     })),
   );
-  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE });
+  // provider efetivo p/ a UI adaptar o catálogo de modelos (BYOK ou plataforma=OPENAI)
+  const provider = user?.aiProvider ?? "OPENAI";
+  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE, provider });
 }
 
 const createSchema = z.object({
