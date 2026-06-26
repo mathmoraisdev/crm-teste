@@ -40,13 +40,12 @@ async function resolveLead(input: InboundInput) {
   // Casa o telefone tolerando o 9º dígito BR: o JID canônico do WhatsApp (de onde
   // vem o inbound) pode não ter o 9 que o lead foi salvo, e vice-versa.
   if (input.whatsAppNumberId && input.phone) {
-    const num = await prisma.whatsAppNumber.findUnique({
-      where: { id: input.whatsAppNumberId },
-      select: { userId: true },
-    });
-    if (!num) return null;
+    // Identidade da conversa é por EMPRESA (número), não por operador: casa só o
+    // lead DESTA empresa. Casar por (userId, phone) faria duas empresas do mesmo
+    // operador compartilharem o contato. O whatsAppNumberId já é único e implica o
+    // dono, então não precisa filtrar por userId aqui.
     return prisma.lead.findFirst({
-      where: { userId: num.userId, phone: { in: brPhoneVariants(input.phone) } },
+      where: { whatsAppNumberId: input.whatsAppNumberId, phone: { in: brPhoneVariants(input.phone) } },
     });
   }
   if (input.userId && input.phone) {
