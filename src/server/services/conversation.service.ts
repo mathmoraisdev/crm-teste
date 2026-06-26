@@ -189,7 +189,8 @@ export async function handleInbound(
     ? await prisma.whatsAppNumber.findUnique({
         where: { id: lead.whatsAppNumberId },
         select: {
-          displayName: true, label: true, persona: true, knowledgeBase: true,
+          displayName: true, label: true, systemPromptOverride: true,
+          persona: true, knowledgeBase: true,
           businessHours: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
         },
@@ -236,6 +237,7 @@ export async function handleInbound(
       ai,
       company: {
         displayName: company?.displayName ?? company?.label ?? null,
+        systemPromptOverride: company?.systemPromptOverride ?? null,
         persona: company?.persona ?? null,
         knowledgeBase: company?.knowledgeBase ?? null,
         businessHours: company?.businessHours ?? null,

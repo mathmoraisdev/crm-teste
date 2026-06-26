@@ -24,6 +24,7 @@ const updateSchema = z
       .optional(),
     // ── config de atendimento (número = empresa) ──
     displayName: z.string().max(120).nullable().optional(),
+    systemPromptOverride: z.string().max(20000).nullable().optional(), // prompt mestre completo
     persona: z.string().max(2000).nullable().optional(),
     knowledgeBase: z.string().max(8000).nullable().optional(), // teto p/ caber no prompt
     businessHours: z.string().max(500).nullable().optional(),

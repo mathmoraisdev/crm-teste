@@ -64,6 +64,7 @@ export async function generateAttendanceReply(opts: {
   ai: AiClient;
   company: {
     displayName?: string | null;
+    systemPromptOverride?: string | null;
     persona?: string | null;
     knowledgeBase?: string | null;
     businessHours?: string | null;
@@ -71,16 +72,23 @@ export async function generateAttendanceReply(opts: {
   };
   conversation: ConversationTurn[];
 }): Promise<string> {
-  const context = buildAttendanceContext(opts.company);
-  const extra = opts.company.customInstructions
-    ? `\n\nInstruções adicionais da empresa:\n${opts.company.customInstructions}`
-    : "";
+  // Prompt mestre da empresa (quando setado) SUBSTITUI o padrão fixo. Nesse modo
+  // o operador escreve tudo inline, então NÃO injetamos o bloco de contexto
+  // (persona/base/horário/instruções) — eles ficam a cargo do próprio prompt.
+  const override = opts.company.systemPromptOverride?.trim();
+  const system = override || ATTENDANCE_SYSTEM;
+  const context = override ? "" : buildAttendanceContext(opts.company);
+  const extra =
+    !override && opts.company.customInstructions
+      ? `\n\nInstruções adicionais da empresa:\n${opts.company.customInstructions}`
+      : "";
+  const prefix = context || extra ? `${context}${extra}\n\n` : "";
   const text = await opts.ai.generateText({
     tier: "cheap",
     maxTokens: 400,
-    system: ATTENDANCE_SYSTEM,
+    system,
     user:
-      `${context}${extra}\n\n` +
+      `${prefix}` +
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem ao cliente.`,
   });

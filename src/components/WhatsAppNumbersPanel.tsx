@@ -18,6 +18,7 @@ interface NumberItem {
   sentToday: number;
   qrDataUrl: string | null;
   displayName: string | null;
+  systemPromptOverride: string | null;
   persona: string | null;
   knowledgeBase: string | null;
   businessHours: string | null;
@@ -29,6 +30,7 @@ interface NumberItem {
 
 interface ServiceConfig {
   displayName: string;
+  systemPromptOverride: string;
   persona: string;
   businessHours: string;
   knowledgeBase: string;
@@ -214,6 +216,7 @@ export function WhatsAppNumbersPanel() {
     setServiceFor(n);
     setService({
       displayName: n.displayName ?? "",
+      systemPromptOverride: n.systemPromptOverride ?? "",
       persona: n.persona ?? "",
       businessHours: n.businessHours ?? "",
       knowledgeBase: n.knowledgeBase ?? "",
@@ -233,6 +236,7 @@ export function WhatsAppNumbersPanel() {
       // strings vazias → null (limpa o campo no banco)
       await patchNumber(serviceFor.id, {
         displayName: service.displayName.trim() || null,
+        systemPromptOverride: service.systemPromptOverride.trim() || null,
         persona: service.persona.trim() || null,
         businessHours: service.businessHours.trim() || null,
         knowledgeBase: service.knowledgeBase.trim() || null,
@@ -532,6 +536,24 @@ export function WhatsAppNumbersPanel() {
                 placeholder="Ex.: Clínica Sorriso"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                System prompt (avançado)
+              </label>
+              <textarea
+                value={service.systemPromptOverride}
+                onChange={(e) =>
+                  setService({ ...service, systemPromptOverride: e.target.value })
+                }
+                rows={8}
+                placeholder="Prompt mestre completo do atendente. Quando preenchido, SUBSTITUI o comportamento padrão. Deixe vazio para usar Persona + Base de conhecimento abaixo."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {service.systemPromptOverride.length.toLocaleString("pt-BR")}/20.000 caracteres ·
+                quando preenchido, os campos abaixo (persona, base, horário) são ignorados pela IA.
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">
