@@ -5,10 +5,16 @@ import { getCurrentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({
-  leadId: z.string().min(1),
-  text: z.string().min(1, "Mensagem vazia"),
-});
+const schema = z
+  .object({
+    leadId: z.string().min(1).optional(),
+    whatsAppNumberId: z.string().min(1).optional(),
+    phone: z.string().min(1).optional(),
+    text: z.string().min(1, "Mensagem vazia"),
+  })
+  .refine((d) => !!d.leadId || (!!d.whatsAppNumberId && !!d.phone), {
+    message: "Informe leadId, ou whatsAppNumberId + phone.",
+  });
 
 /**
  * (Somente demo local) Simula o lead respondendo. Gera um providerMessageId
@@ -28,11 +34,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const providerMessageId = `sim-${parsed.data.leadId}-${Date.now()}`;
+    const { leadId, whatsAppNumberId, phone, text } = parsed.data;
+    const providerMessageId = `sim-${leadId ?? phone}-${Date.now()}`;
     const result = await handleInbound({
-      leadId: parsed.data.leadId,
+      leadId,
+      whatsAppNumberId,
+      phone,
       userId,
-      text: parsed.data.text,
+      text,
       providerMessageId,
     });
     return NextResponse.json({ ok: true, ...result });
