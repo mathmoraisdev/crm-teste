@@ -1,4 +1,5 @@
-import { CONVERSATION_SYSTEM, SLOT_CHOICE_SYSTEM } from "./prompts";
+import { ATTENDANCE_SYSTEM, CONVERSATION_SYSTEM, SLOT_CHOICE_SYSTEM } from "./prompts";
+import { buildAttendanceContext } from "./attendance-context";
 import {
   slotChoiceJsonSchema,
   slotChoiceSchema,
@@ -53,4 +54,35 @@ export async function interpretSlotChoice(opts: {
   if (input == null) return { chosenIndex: null, confident: false };
   const parsed = slotChoiceSchema.safeParse(input);
   return parsed.success ? parsed.data : { chosenIndex: null, confident: false };
+}
+
+/**
+ * Agente de ATENDIMENTO — gera a próxima mensagem respondendo o cliente no
+ * contexto da empresa (persona + base de conhecimento + horário).
+ */
+export async function generateAttendanceReply(opts: {
+  ai: AiClient;
+  company: {
+    displayName?: string | null;
+    persona?: string | null;
+    knowledgeBase?: string | null;
+    businessHours?: string | null;
+    customInstructions?: string | null;
+  };
+  conversation: ConversationTurn[];
+}): Promise<string> {
+  const context = buildAttendanceContext(opts.company);
+  const extra = opts.company.customInstructions
+    ? `\n\nInstruções adicionais da empresa:\n${opts.company.customInstructions}`
+    : "";
+  const text = await opts.ai.generateText({
+    tier: "cheap",
+    maxTokens: 400,
+    system: ATTENDANCE_SYSTEM,
+    user:
+      `${context}${extra}\n\n` +
+      `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
+      `Escreva a próxima mensagem ao cliente.`,
+  });
+  return text || "Oi! Como posso te ajudar?";
 }
