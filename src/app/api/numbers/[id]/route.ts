@@ -44,6 +44,8 @@ const updateSchema = z
     firstReplyDelaySeconds: z.number().int().min(0).max(600).optional(),
     autoPauseOnHumanReply: z.boolean().optional(),
     inactivityResumeMinutes: z.number().int().min(0).max(1440).optional(),
+    // silêncio > N min → IA zera o contexto (nova conversa). 0 = nunca zera. Teto 7 dias.
+    contextResetMinutes: z.number().int().min(0).max(10080).optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 

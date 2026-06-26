@@ -25,6 +25,7 @@ export interface WhatsAppNumberListItem {
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
   inactivityResumeMinutes: number;
+  contextResetMinutes: number;
 }
 
 /**
@@ -59,6 +60,7 @@ export async function listWhatsAppNumbers(
         firstReplyDelaySeconds: true,
         autoPauseOnHumanReply: true,
         inactivityResumeMinutes: true,
+        contextResetMinutes: true,
       },
     }),
     sentTodayByNumber(new Date()),
@@ -95,6 +97,7 @@ export async function updateWhatsAppNumber(
     firstReplyDelaySeconds?: number;
     autoPauseOnHumanReply?: boolean;
     inactivityResumeMinutes?: number;
+    contextResetMinutes?: number;
   },
 ): Promise<void> {
   const exists = await prisma.whatsAppNumber.findFirst({ where: { id, userId }, select: { id: true } });
@@ -123,6 +126,7 @@ export async function updateWhatsAppNumber(
   if (data.firstReplyDelaySeconds !== undefined) patch.firstReplyDelaySeconds = data.firstReplyDelaySeconds;
   if (data.autoPauseOnHumanReply !== undefined) patch.autoPauseOnHumanReply = data.autoPauseOnHumanReply;
   if (data.inactivityResumeMinutes !== undefined) patch.inactivityResumeMinutes = data.inactivityResumeMinutes;
+  if (data.contextResetMinutes !== undefined) patch.contextResetMinutes = data.contextResetMinutes;
   await prisma.whatsAppNumber.update({ where: { id }, data: patch });
 }
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
+import { sessionWindow } from "@/server/ai/transcript";
 import { generateAttendanceReply } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
 import { qualifyLead } from "./qualification.service";
@@ -61,19 +62,36 @@ async function resolveLead(input: InboundInput) {
 
 /** Teto de mensagens enviadas à IA por resposta — controla custo de token em
  *  conversas longas. Reenviar o histórico inteiro a cada réplica cresce de forma
- *  quadrática ao longo da vida do lead; 25 turnos cobrem o contexto recente sem
- *  fazer a IA "esquecer" leads que retornam (ao contrário de uma janela de tempo). */
+ *  quadrática ao longo da vida do lead; 25 turnos cobrem o contexto recente. É um
+ *  limite de SEGURANÇA: a janela de sessão (silêncio) costuma cortar bem antes. */
 const CONVERSATION_CONTEXT_LIMIT = 25;
 
-async function loadConversation(leadId: string): Promise<ConversationTurn[]> {
+/** Reset de contexto por silêncio (min) quando o número não define o seu. */
+const DEFAULT_CONTEXT_RESET_MINUTES = 180;
+
+/**
+ * Monta o contexto enviado à IA. Duas camadas:
+ *  1. teto de 25 turnos (custo de token);
+ *  2. janela de SESSÃO: se o lead voltou após um silêncio > resetMinutes, a IA
+ *     recebe só a conversa nova — o atendimento anterior (já resolvido) não
+ *     contamina a resposta. `resetMinutes <= 0` desliga o corte por tempo.
+ */
+async function loadConversation(
+  leadId: string,
+  resetMinutes: number = DEFAULT_CONTEXT_RESET_MINUTES,
+): Promise<ConversationTurn[]> {
   // Pega as últimas N (createdAt desc + take) e reverte p/ ordem cronológica.
   const messages = await prisma.message.findMany({
     where: { leadId },
     orderBy: { createdAt: "desc" },
     take: CONVERSATION_CONTEXT_LIMIT,
-    select: { direction: true, content: true },
+    select: { direction: true, content: true, createdAt: true },
   });
-  return messages.reverse().map((m) => ({ direction: m.direction, content: m.content }));
+  const chronological = messages.reverse();
+  return sessionWindow(chronological, resetMinutes).map((m) => ({
+    direction: m.direction,
+    content: m.content,
+  }));
 }
 
 export interface IngestResult {
@@ -270,6 +288,7 @@ export async function respondToLead(leadId: string): Promise<void> {
           persona: true, knowledgeBase: true,
           businessHours: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
+          contextResetMinutes: true,
         },
       })
     : null;
@@ -285,7 +304,10 @@ export async function respondToLead(leadId: string): Promise<void> {
   //    no número (aiModel) vale p/ TODAS as chamadas deste client (qualificação,
   //    próxima pergunta, atendimento).
   const ai = await getAiClient(lead.userId, company?.aiModel ?? undefined);
-  const conversation = await loadConversation(lead.id);
+  const conversation = await loadConversation(
+    lead.id,
+    company?.contextResetMinutes ?? DEFAULT_CONTEXT_RESET_MINUTES,
+  );
 
   let shouldSchedule = false;
   let shouldDiscard = false;

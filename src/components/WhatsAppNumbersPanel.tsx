@@ -32,6 +32,7 @@ interface NumberItem {
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
   inactivityResumeMinutes: number;
+  contextResetMinutes: number;
 }
 
 interface ServiceConfig {
@@ -49,6 +50,7 @@ interface ServiceConfig {
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
   inactivityResumeMinutes: number;
+  contextResetMinutes: number;
 }
 
 const TONE: Record<string, Tone> = {
@@ -270,6 +272,7 @@ export function WhatsAppNumbersPanel() {
       firstReplyDelaySeconds: n.firstReplyDelaySeconds,
       autoPauseOnHumanReply: n.autoPauseOnHumanReply,
       inactivityResumeMinutes: n.inactivityResumeMinutes,
+      contextResetMinutes: n.contextResetMinutes,
     });
     setServiceError(null);
   }
@@ -295,6 +298,7 @@ export function WhatsAppNumbersPanel() {
         firstReplyDelaySeconds: service.firstReplyDelaySeconds,
         autoPauseOnHumanReply: service.autoPauseOnHumanReply,
         inactivityResumeMinutes: service.inactivityResumeMinutes,
+        contextResetMinutes: service.contextResetMinutes,
       });
       setServiceFor(null);
       setService(null);
@@ -764,6 +768,29 @@ export function WhatsAppNumbersPanel() {
                 <p className="mt-1 text-xs text-slate-400">
                   Depois que um humano assume, se a conversa ficar parada por esse tempo a IA
                   volta a responder sozinha. 0 = nunca reativa automaticamente.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Zerar contexto após inatividade (min)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={10080}
+                  value={service.contextResetMinutes}
+                  onChange={(e) =>
+                    setService({
+                      ...service,
+                      contextResetMinutes: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Se o cliente voltar a falar após esse tempo de silêncio, a IA recomeça o
+                  atendimento do zero (ignora a conversa anterior já resolvida). Padrão: 180
+                  (3h). 0 = nunca zera (sempre usa o histórico recente).
                 </p>
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-700">

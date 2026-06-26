@@ -248,6 +248,7 @@ model WhatsAppNumber {
   firstReplyDelaySeconds  Int     @default(15) // espera específica da PRIMEIRA resposta da conversa
   autoPauseOnHumanReply   Boolean @default(true) // operador respondeu manual pelo zap → pausa a IA
   inactivityResumeMinutes Int     @default(0)  // 0 = desligado; >0 = reativa a IA após N min sem interação
+  contextResetMinutes     Int     @default(180) // silêncio > N min → IA zera o contexto (nova conversa); 0 = nunca zera
 
   pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
   lastError    String?
