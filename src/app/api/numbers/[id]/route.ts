@@ -22,6 +22,15 @@ const updateSchema = z
         WhatsAppNumberStatus.DISABLED,
       ])
       .optional(),
+    // ── config de atendimento (número = empresa) ──
+    displayName: z.string().max(120).nullable().optional(),
+    persona: z.string().max(2000).nullable().optional(),
+    knowledgeBase: z.string().max(8000).nullable().optional(), // teto p/ caber no prompt
+    businessHours: z.string().max(500).nullable().optional(),
+    customInstructions: z.string().max(2000).nullable().optional(),
+    autoReplyEnabled: z.boolean().optional(),
+    qualifyEnabled: z.boolean().optional(),
+    scheduleEnabled: z.boolean().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 
