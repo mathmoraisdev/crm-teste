@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Smartphone, Plus, Pause, Play, Pencil, Trash2 } from "lucide-react";
+import { Smartphone, Plus, Pause, Play, Pencil, Trash2, Settings2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
@@ -17,6 +17,25 @@ interface NumberItem {
   dailyCap: number;
   sentToday: number;
   qrDataUrl: string | null;
+  displayName: string | null;
+  persona: string | null;
+  knowledgeBase: string | null;
+  businessHours: string | null;
+  customInstructions: string | null;
+  autoReplyEnabled: boolean;
+  qualifyEnabled: boolean;
+  scheduleEnabled: boolean;
+}
+
+interface ServiceConfig {
+  displayName: string;
+  persona: string;
+  businessHours: string;
+  knowledgeBase: string;
+  customInstructions: string;
+  autoReplyEnabled: boolean;
+  qualifyEnabled: boolean;
+  scheduleEnabled: boolean;
 }
 
 const TONE: Record<string, Tone> = {
@@ -66,6 +85,12 @@ export function WhatsAppNumbersPanel() {
   const [editCap, setEditCap] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // modal de atendimento (persona/base/toggles)
+  const [serviceFor, setServiceFor] = useState<NumberItem | null>(null);
+  const [service, setService] = useState<ServiceConfig | null>(null);
+  const [serviceSubmitting, setServiceSubmitting] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -185,6 +210,46 @@ export function WhatsAppNumbersPanel() {
     }
   }
 
+  function openService(n: NumberItem) {
+    setServiceFor(n);
+    setService({
+      displayName: n.displayName ?? "",
+      persona: n.persona ?? "",
+      businessHours: n.businessHours ?? "",
+      knowledgeBase: n.knowledgeBase ?? "",
+      customInstructions: n.customInstructions ?? "",
+      autoReplyEnabled: n.autoReplyEnabled,
+      qualifyEnabled: n.qualifyEnabled,
+      scheduleEnabled: n.scheduleEnabled,
+    });
+    setServiceError(null);
+  }
+
+  async function submitService() {
+    if (!serviceFor || !service) return;
+    setServiceError(null);
+    setServiceSubmitting(true);
+    try {
+      // strings vazias → null (limpa o campo no banco)
+      await patchNumber(serviceFor.id, {
+        displayName: service.displayName.trim() || null,
+        persona: service.persona.trim() || null,
+        businessHours: service.businessHours.trim() || null,
+        knowledgeBase: service.knowledgeBase.trim() || null,
+        customInstructions: service.customInstructions.trim() || null,
+        autoReplyEnabled: service.autoReplyEnabled,
+        qualifyEnabled: service.qualifyEnabled,
+        scheduleEnabled: service.scheduleEnabled,
+      });
+      setServiceFor(null);
+      setService(null);
+    } catch (e) {
+      setServiceError(e instanceof Error ? e.message : "Erro ao salvar");
+    } finally {
+      setServiceSubmitting(false);
+    }
+  }
+
   async function remove(id: string) {
     const res = await fetch(`/api/numbers/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -285,6 +350,15 @@ export function WhatsAppNumbersPanel() {
                           {canResume ? <Play size={14} /> : <Pause size={14} />}
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openService(n)}
+                        title="Atendimento"
+                        aria-label="Configurar atendimento"
+                      >
+                        <Settings2 size={14} />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -432,6 +506,134 @@ export function WhatsAppNumbersPanel() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!serviceFor}
+        onClose={() => {
+          setServiceFor(null);
+          setService(null);
+        }}
+        title={
+          serviceFor ? `Atendimento — ${serviceFor.label}` : "Atendimento"
+        }
+      >
+        {service && (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Nome de exibição
+              </label>
+              <input
+                value={service.displayName}
+                onChange={(e) =>
+                  setService({ ...service, displayName: e.target.value })
+                }
+                placeholder="Ex.: Clínica Sorriso"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Persona da IA
+              </label>
+              <input
+                value={service.persona}
+                onChange={(e) =>
+                  setService({ ...service, persona: e.target.value })
+                }
+                placeholder="Ex.: atendente cordial e objetiva"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Horário de atendimento
+              </label>
+              <input
+                value={service.businessHours}
+                onChange={(e) =>
+                  setService({ ...service, businessHours: e.target.value })
+                }
+                placeholder="Ex.: Seg–Sex 9h às 18h"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Base de conhecimento
+              </label>
+              <textarea
+                value={service.knowledgeBase}
+                onChange={(e) =>
+                  setService({ ...service, knowledgeBase: e.target.value })
+                }
+                rows={5}
+                placeholder="Produtos, serviços, preços, FAQ… a IA usa isto pra responder."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Instruções adicionais
+              </label>
+              <textarea
+                value={service.customInstructions}
+                onChange={(e) =>
+                  setService({ ...service, customInstructions: e.target.value })
+                }
+                rows={3}
+                placeholder="Regras específicas de tom, o que evitar, etc."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+            <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2.5">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={service.autoReplyEnabled}
+                  onChange={(e) =>
+                    setService({ ...service, autoReplyEnabled: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                />
+                Responder automaticamente
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={service.qualifyEnabled}
+                  onChange={(e) =>
+                    setService({ ...service, qualifyEnabled: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                />
+                Qualificar leads
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={service.scheduleEnabled}
+                  onChange={(e) =>
+                    setService({ ...service, scheduleEnabled: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                />
+                Agendar compromissos
+              </label>
+            </div>
+            {serviceError && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {serviceError}
+              </p>
+            )}
+            <div className="flex justify-end">
+              <Button onClick={submitService} loading={serviceSubmitting}>
+                Salvar atendimento
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog
