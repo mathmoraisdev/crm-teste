@@ -55,11 +55,22 @@ async function main() {
   ];
 
   for (const l of leads) {
-    await prisma.lead.upsert({
-      where: { userId_phone: { userId: user.id, phone: l.phone } },
-      update: { name: l.name, status: "NOVO", optOut: false, campaignId: campaign.id },
-      create: { userId: user.id, name: l.name, phone: l.phone, status: "NOVO", campaignId: campaign.id },
+    // Sem composite userId_phone (identidade agora é por whatsAppNumberId+phone):
+    // idempotência manual por (userId, phone).
+    const existing = await prisma.lead.findFirst({
+      where: { userId: user.id, phone: l.phone },
+      select: { id: true },
     });
+    if (existing) {
+      await prisma.lead.update({
+        where: { id: existing.id },
+        data: { name: l.name, status: "NOVO", optOut: false, campaignId: campaign.id },
+      });
+    } else {
+      await prisma.lead.create({
+        data: { userId: user.id, name: l.name, phone: l.phone, status: "NOVO", campaignId: campaign.id },
+      });
+    }
     console.log(`  + ${l.name} — ${l.phone}`);
   }
 

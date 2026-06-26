@@ -79,11 +79,19 @@ export async function createLead(
   }
   const email = normalizeEmail(rawEmail);
   if (rawEmail?.trim() && !email) throw new Error(`E-mail inválido: ${rawEmail}`);
-  return prisma.lead.upsert({
-    where: { userId_phone: { userId, phone } },
-    update: { name, ...(email ? { email } : {}) },
-    // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
-    create: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
+  // Idempotente por (userId, phone) sem depender do unique — a identidade do
+  // contato passou a ser (whatsAppNumberId, phone), então não há mais composite
+  // userId_phone em Lead.
+  const existing = await prisma.lead.findFirst({ where: { userId, phone }, select: { id: true } });
+  if (existing) {
+    return prisma.lead.update({
+      where: { id: existing.id },
+      data: { name, ...(email ? { email } : {}) },
+    });
+  }
+  // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
+  return prisma.lead.create({
+    data: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
   });
 }
 
