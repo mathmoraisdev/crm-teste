@@ -58,7 +58,6 @@ async function main() {
 
   let lastReap = Date.now();
   let lastChipAlert = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
