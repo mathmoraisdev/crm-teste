@@ -1,8 +1,9 @@
 import { prisma } from "@/server/db/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
-import { generateNextQuestion } from "@/server/ai/conversation.agent";
+import { generateAttendanceReply } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
 import { qualifyLead } from "./qualification.service";
+import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import { sendWhatsAppMessage } from "./messaging";
@@ -184,50 +185,68 @@ export async function handleInbound(
     return { leadId: lead.id };
   }
 
-  // 4. Qualifica → decide → age
-  // BYOK: resolve o AiClient do dono do lead (chave própria ou fallback da plataforma).
+  // Config da empresa (número) dona da conversa. Default seguro se faltar número.
+  const company = lead.whatsAppNumberId
+    ? await prisma.whatsAppNumber.findUnique({
+        where: { id: lead.whatsAppNumberId },
+        select: {
+          displayName: true, label: true, persona: true, knowledgeBase: true,
+          businessHours: true, customInstructions: true,
+          autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
+        },
+      })
+    : null;
+
+  const mode = decideInboundMode({
+    autoReplyEnabled: company?.autoReplyEnabled ?? true,
+    qualifyEnabled: company?.qualifyEnabled ?? false,
+    scheduleEnabled: company?.scheduleEnabled ?? false,
+  });
+
+  // 4. Atendimento é o respondedor padrão. Qualificação/agendamento são opcionais
+  //    (toggles da empresa) e apenas pontuam/desviam o fluxo.
   const ai = await getAiClient(lead.userId);
   const conversation = await loadConversation(lead.id);
-  const qual = await qualifyLead({
-    ai,
-    leadId: lead.id,
-    leadName: lead.name,
-    conversation,
-  });
 
-  const decision = decidePipeline({
-    current: status,
-    score: qual.score,
-    nextAction: qual.nextAction,
-  });
+  let shouldSchedule = false;
+  let shouldDiscard = false;
 
-  // TRACE: prova que o inbound chegou na IA e qual a decisão (responder/agendar/
-  // descartar). Some na fonte do "silêncio sem erro".
-  console.log(
-    `[inbound] lead=${lead.id} status=${status} score=${qual.score} ` +
-      `nextAction=${qual.nextAction} → schedule=${decision.shouldSchedule} ` +
-      `reply=${decision.shouldReply} discard=${decision.shouldDiscard}`,
-  );
-
-  if (decision.status !== status) {
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { status: decision.status },
-    });
+  // 4a. Qualificação opcional — atualiza score/funil e pode pedir descarte/agenda.
+  if (mode.qualify) {
+    const qual = await qualifyLead({ ai, leadId: lead.id, leadName: lead.name, conversation });
+    const d = decidePipeline({ current: status, score: qual.score, nextAction: qual.nextAction });
+    shouldSchedule = d.shouldSchedule && mode.allowSchedule;
+    shouldDiscard = d.shouldDiscard;
+    if (d.status !== status) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { status: d.status } });
+    }
   }
 
-  if (decision.shouldSchedule) {
+  // 4b. Descartado pela qualificação → silêncio.
+  if (shouldDiscard) return { leadId: lead.id };
+
+  // 4c. Agendamento opcional tem precedência sobre a resposta livre.
+  if (shouldSchedule) {
     await proposeSlots(lead.id);
-  } else if (decision.shouldReply) {
-    const reply = await generateNextQuestion({
+    return { leadId: lead.id };
+  }
+
+  // 4d. Atendimento: responde a dúvida no contexto da empresa (sempre que autoReply).
+  if (mode.reply) {
+    const reply = await generateAttendanceReply({
       ai,
-      leadName: lead.name,
+      company: {
+        displayName: company?.displayName ?? company?.label ?? null,
+        persona: company?.persona ?? null,
+        knowledgeBase: company?.knowledgeBase ?? null,
+        businessHours: company?.businessHours ?? null,
+        customInstructions: company?.customInstructions ?? null,
+      },
       conversation,
-      qualification: qual,
     });
     await sendWhatsAppMessage(lead, reply);
   }
-  // decision.shouldDiscard → silêncio (não responde a lead descartado)
+  // !mode.reply → handoff total: só persiste o inbound (humano responde via /reply).
 
   return { leadId: lead.id };
 }
