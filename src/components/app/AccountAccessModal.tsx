@@ -7,24 +7,34 @@ import { Modal } from "@/components/ui/Modal";
 import { parseBRLToCents } from "@/lib/money";
 
 type PaymentMethod = "PIX" | "CARTAO" | "BOLETO" | "TRANSFERENCIA";
+type Plan = "INICIAL" | "PROFISSIONAL" | "ESCALA";
 
 type Action =
+  | { kind: "trial"; days: number }
   | { kind: "extend"; days: number }
   | { kind: "forceActive" }
   | { kind: "forceSuspend" }
   | { kind: "auto" }
+  | { kind: "clearPayment" }
   | {
       kind: "setInfo";
       paymentMethod: PaymentMethod | null;
       paymentDueDate: string | null;
       amountCents: number | null;
-    };
+    }
+  | { kind: "setPlan"; plan: Plan | null };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   PIX: "Pix",
   CARTAO: "Cartão",
   BOLETO: "Boleto",
   TRANSFERENCIA: "Transferência",
+};
+
+const PLAN_LABELS: Record<Plan, string> = {
+  INICIAL: "Inicial",
+  PROFISSIONAL: "Profissional",
+  ESCALA: "Escala",
 };
 
 /** ISO string | null -> "YYYY-MM-DD" para o <input type="date"> (ou ""). */
@@ -39,6 +49,7 @@ export function AccountAccessModal({
   daysLeft,
   paymentMethod,
   paymentDueDate,
+  plan,
 }: {
   accountId: string;
   active: boolean;
@@ -46,6 +57,7 @@ export function AccountAccessModal({
   daysLeft: number | null;
   paymentMethod: PaymentMethod | null;
   paymentDueDate: string | null; // ISO string (serializado do server) ou null
+  plan: Plan | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -54,6 +66,7 @@ export function AccountAccessModal({
   const [method, setMethod] = useState<PaymentMethod | "">(paymentMethod ?? "");
   const [due, setDue] = useState<string>(toDateInput(paymentDueDate));
   const [amount, setAmount] = useState<string>("");
+  const [planValue, setPlanValue] = useState<Plan | "">(plan ?? "");
 
   async function send(action: Action) {
     setBusy(true);
@@ -99,21 +112,54 @@ export function AccountAccessModal({
             {daysLeft != null && ` · ${daysLeft} dia(s) restante(s)`}
           </p>
 
-          {/* Liberar teste (trial): define o acesso em N dias a partir de hoje. */}
+          {/* Plano comercial (rótulo). Não altera acesso/limites — só registro. */}
+          <div className="space-y-2 border-b border-slate-100 pb-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Plano
+            </p>
+            <div className="flex gap-2">
+              <select
+                value={planValue}
+                onChange={(e) => setPlanValue(e.target.value as Plan | "")}
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">— não definido —</option>
+                {(Object.keys(PLAN_LABELS) as Plan[]).map((p) => (
+                  <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+                ))}
+              </select>
+              <button
+                disabled={busy}
+                onClick={() => send({ kind: "setPlan", plan: planValue || null })}
+                className="rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
+              >
+                Salvar
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Apenas organização/cobrança. Não altera acesso nem limites da conta.
+            </p>
+          </div>
+
+          {/* Liberar teste (trial): define o acesso em N dias A PARTIR DE HOJE
+              (hard reset, não soma sobre o prazo vigente) e limpa a marcação de pagamento. */}
           <div className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
               Liberar teste
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <button disabled={busy} onClick={() => send({ kind: "extend", days: 3 })}
+              <button disabled={busy} onClick={() => send({ kind: "trial", days: 3 })}
                 className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
                 Trial 3 dias
               </button>
-              <button disabled={busy} onClick={() => send({ kind: "extend", days: 7 })}
+              <button disabled={busy} onClick={() => send({ kind: "trial", days: 7 })}
                 className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
                 Trial 7 dias
               </button>
             </div>
+            <p className="text-[11px] text-slate-400">
+              Define o acesso em N dias a partir de hoje e zera a marcação de pagamento.
+            </p>
           </div>
 
           {/* Controle manual (override). */}
@@ -184,6 +230,16 @@ export function AccountAccessModal({
               className="w-full rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40">
               Lançar pagamento
             </button>
+            {(paymentMethod || paymentDueDate) && (
+              <button disabled={busy} onClick={() => send({ kind: "clearPayment" })}
+                className="w-full rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40">
+                Remover pagamento
+              </button>
+            )}
+            <p className="text-[11px] text-slate-400">
+              Remover recalcula o acesso pelos pagamentos já lançados (sem nenhum, a conta
+              fica sem prazo — suspensa).
+            </p>
           </div>
         </div>
       </Modal>

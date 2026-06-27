@@ -12,10 +12,13 @@ import { Table, Th, Td } from "@/components/ui/Table";
 import { formatDateTime } from "@/lib/utils";
 import { AccountAccessModal } from "@/components/app/AccountAccessModal";
 import { FinanceiroFilters } from "@/components/app/FinanceiroFilters";
+import { LandingToggle } from "@/components/app/LandingToggle";
+import { isLandingEnabled } from "@/server/services/settings.service";
 
 export const dynamic = "force-dynamic";
 
 const METHOD_LABELS = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" } as const;
+const PLAN_LABELS = { INICIAL: "Inicial", PROFISSIONAL: "Profissional", ESCALA: "Escala" } as const;
 
 export default async function FinanceiroPage({
   searchParams,
@@ -47,11 +50,12 @@ export default async function FinanceiroPage({
   const status = sp.status ?? "todos"; // todos | ativo | suspenso
   const { from, to } = monthRange(month);
 
-  const [accounts, revMonth, revTotal, payments] = await Promise.all([
+  const [accounts, revMonth, revTotal, payments, landingOn] = await Promise.all([
     listAccountsForAdmin(),
     revenueCents(from, to),
     revenueTotalCents(),
     listPayments(from, to),
+    isLandingEnabled(),
   ]);
 
   const filteredAccounts = accounts.filter((a) =>
@@ -91,6 +95,10 @@ export default async function FinanceiroPage({
         </Card>
       </div>
 
+      <Card className="p-4">
+        <LandingToggle initialEnabled={landingOn} />
+      </Card>
+
       <FinanceiroFilters month={month} status={status} />
 
       <Card className="overflow-hidden">
@@ -98,6 +106,7 @@ export default async function FinanceiroPage({
           <thead>
             <tr>
               <Th>Conta</Th>
+              <Th>Plano</Th>
               <Th>Chips</Th>
               <Th>Leads</Th>
               <Th>Criada</Th>
@@ -120,6 +129,13 @@ export default async function FinanceiroPage({
                     )}
                   </div>
                   <div className="text-xs text-slate-400">{a.email}</div>
+                </Td>
+                <Td>
+                  {a.plan ? (
+                    <Badge tone="blue">{PLAN_LABELS[a.plan]}</Badge>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
                 </Td>
                 <Td className="text-slate-600">{a.numbers}</Td>
                 <Td className="text-slate-600">{a.leads}</Td>
@@ -153,6 +169,7 @@ export default async function FinanceiroPage({
                     daysLeft={a.daysLeft}
                     paymentMethod={a.paymentMethod}
                     paymentDueDate={a.paymentDueDate ? a.paymentDueDate.toISOString() : null}
+                    plan={a.plan}
                   />
                 </Td>
               </tr>
