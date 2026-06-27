@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importLeadsFromCsv } from "@/server/services/lead.service";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  *  - text/csv ou text/plain no corpo cru
  */
 export async function POST(req: NextRequest) {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   let content: string | null = null;
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { setHandoff } from "@/server/services/conversation.service";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
