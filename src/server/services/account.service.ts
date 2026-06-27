@@ -14,6 +14,19 @@ export async function isAccountActiveByLead(leadId: string): Promise<boolean> {
   return lead?.user?.billingActive === true;
 }
 
+/**
+ * True se a conta (por id do usuário logado) está habilitada no painel
+ * Financeiro. Gate das ações de campanha (criar/disparar): conta suspensa só
+ * vira ativa pela liberação do admin. Fail-safe: usuário inexistente → false.
+ */
+export async function isAccountActive(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { billingActive: true },
+  });
+  return user?.billingActive === true;
+}
+
 /** Linha de conta para o painel admin (Financeiro). */
 export interface AdminAccountRow {
   id: string;

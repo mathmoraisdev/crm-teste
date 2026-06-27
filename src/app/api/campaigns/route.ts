@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createCampaign, listCampaigns } from "@/server/services/campaign.service";
+import { isAccountActive } from "@/server/services/account.service";
 import { getCurrentUserId } from "@/lib/session";
+
+const SUSPENDED_MSG =
+  "Conta aguardando liberação no painel financeiro. Fale com o suporte para ativar as campanhas.";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +30,9 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!(await isAccountActive(userId))) {
+    return NextResponse.json({ error: SUSPENDED_MSG }, { status: 403 });
+  }
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {

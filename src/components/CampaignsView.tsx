@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Play, RefreshCw, Pencil, Trash2, Search, X } from "lucide-react";
+import { Plus, Play, RefreshCw, Pencil, Trash2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -109,6 +109,9 @@ export function CampaignsView() {
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Atualizar
+          </Button>
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus size={14} /> Nova campanha
           </Button>
         </div>
       </div>
