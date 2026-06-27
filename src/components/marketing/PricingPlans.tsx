@@ -52,7 +52,7 @@ export function PricingPlans({ plans }: { plans: PricingPlan[] }) {
                       : "ml-2 rounded-full bg-brand-50 px-2 py-0.5 font-mono text-[10px] font-extrabold text-brand-700"
                   }
                 >
-                  -2 meses
+                  2 meses grátis
                 </span>
               )}
             </button>
