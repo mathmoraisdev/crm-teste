@@ -63,6 +63,29 @@ model User {
   whatsAppNumbers           WhatsAppNumber[]
   emailVerificationTokens   EmailVerificationToken[]
   passwordResetTokens       PasswordResetToken[]
+  payments                  Payment[] @relation("AccountPayments")    // pagamentos DESTA conta (receita)
+  registeredPayments        Payment[] @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
+}
+
+// Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
+// Fonte de verdade da RECEITA (o acesso continua em User.accessUntil). Reembolso,
+// no futuro, é um lançamento à parte (amountCents negativo) — não editamos linha.
+model Payment {
+  id          String         @id @default(cuid())
+  accountId   String         // conta que pagou (User.id)
+  account     User           @relation("AccountPayments", fields: [accountId], references: [id], onDelete: Cascade)
+  amountCents Int            // valor em centavos (BRL). > 0 no lançamento normal.
+  method      PaymentMethod? // forma usada NESTE pagamento (snapshot; pode diferir do padrão da conta)
+  paidAt      DateTime       @default(now()) // quando entrou (data do lançamento) — base da "receita do mês"
+  coversUntil DateTime?      // até quando este pagamento estendeu o acesso (snapshot do accessUntil resultante)
+  note        String?        // observação livre do admin (opcional)
+  // Quem lançou (admin). Nullable: lançamentos antigos / scripts podem não ter autor.
+  registeredById String?
+  registeredBy   User?       @relation("RegisteredPayments", fields: [registeredById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+
+  @@index([accountId])
+  @@index([paidAt])
 }
 
 enum LeadStatus {
