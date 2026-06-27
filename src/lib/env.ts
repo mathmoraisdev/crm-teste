@@ -34,6 +34,9 @@ const schema = z.object({
 
   // Deliverability / disparo seguro
   WHATSAPP_DAILY_CAP: z.coerce.number().int().nonnegative().default(0), // 0 = ilimitado (modo massa); cap agora é por conta
+  // Teto diário de disparo para contas SEM pagamento lançado (trial/cortesia).
+  // Cap normal segue em WHATSAPP_DAILY_CAP. 0 = desliga (trial usa o cap normal).
+  TRIAL_WHATSAPP_DAILY_CAP: z.coerce.number().int().nonnegative().default(30),
   WHATSAPP_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(8000), // ~7,5/min
   WHATSAPP_JITTER_MS: z.coerce.number().int().nonnegative().default(4000),
   WHATSAPP_SEND_START_HOUR: z.coerce.number().int().min(0).max(23).default(9),
