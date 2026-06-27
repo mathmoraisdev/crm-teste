@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
+import { parseBRLToCents } from "@/lib/money";
 
 type PaymentMethod = "PIX" | "CARTAO" | "BOLETO" | "TRANSFERENCIA";
 
@@ -12,7 +13,12 @@ type Action =
   | { kind: "forceActive" }
   | { kind: "forceSuspend" }
   | { kind: "auto" }
-  | { kind: "setInfo"; paymentMethod: PaymentMethod | null; paymentDueDate: string | null };
+  | {
+      kind: "setInfo";
+      paymentMethod: PaymentMethod | null;
+      paymentDueDate: string | null;
+      amountCents: number | null;
+    };
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   PIX: "Pix",
@@ -47,6 +53,7 @@ export function AccountAccessModal({
   // Estado local do formulário de anotação (forma de pgto + vencimento).
   const [method, setMethod] = useState<PaymentMethod | "">(paymentMethod ?? "");
   const [due, setDue] = useState<string>(toDateInput(paymentDueDate));
+  const [amount, setAmount] = useState<string>("");
 
   async function send(action: Action) {
     setBusy(true);
@@ -71,7 +78,9 @@ export function AccountAccessModal({
   function saveInfo() {
     // "YYYY-MM-DD" -> ISO datetime (meio-dia UTC evita pular de dia por fuso).
     const dueIso = due ? new Date(`${due}T12:00:00.000Z`).toISOString() : null;
-    return send({ kind: "setInfo", paymentMethod: method || null, paymentDueDate: dueIso });
+    const amountCents = amount.trim() ? parseBRLToCents(amount) : null;
+    if (amount.trim() && amountCents == null) { alert("Valor inválido. Ex.: 129,90"); return; }
+    return send({ kind: "setInfo", paymentMethod: method || null, paymentDueDate: dueIso, amountCents });
   }
 
   return (
@@ -136,7 +145,19 @@ export function AccountAccessModal({
             </p>
             <p className="text-xs text-slate-500">
               O vencimento libera o acesso até a data. Sem vencimento, só registra a forma.
+              Com valor preenchido, o pagamento entra no extrato/receita.
             </p>
+            <label className="block">
+              <span className="text-xs text-slate-500">Valor (opcional)</span>
+              <input
+                type="text" inputMode="decimal" placeholder="Ex.: 129,90"
+                value={amount} onChange={(e) => setAmount(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <span className="mt-1 block text-[11px] text-slate-400">
+                Em branco = não registra receita (cortesia/ajuste). Com valor = entra no extrato.
+              </span>
+            </label>
             <label className="block">
               <span className="text-xs text-slate-500">Forma de pagamento</span>
               <select
