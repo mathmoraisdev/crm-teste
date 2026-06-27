@@ -9,16 +9,22 @@ import { setAccountAccess, type AccessAction } from "@/server/services/account.s
 export const runtime = "nodejs";
 
 const schema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("trial"), days: z.number().int().min(1).max(365) }),
   z.object({ kind: z.literal("extend"), days: z.number().int().min(1).max(365) }),
   z.object({ kind: z.literal("setUntil"), date: z.string().datetime() }),
   z.object({ kind: z.literal("forceActive") }),
   z.object({ kind: z.literal("forceSuspend") }),
   z.object({ kind: z.literal("auto") }),
+  z.object({ kind: z.literal("clearPayment") }),
   z.object({
     kind: z.literal("setInfo"),
     paymentMethod: z.enum(["PIX", "CARTAO", "BOLETO", "TRANSFERENCIA"]).nullable(),
     paymentDueDate: z.string().datetime().nullable(),
     amountCents: z.number().int().positive().nullable(), // centavos; null = sem receita
+  }),
+  z.object({
+    kind: z.literal("setPlan"),
+    plan: z.enum(["INICIAL", "PROFISSIONAL", "ESCALA"]).nullable(),
   }),
 ]);
 
@@ -54,7 +60,7 @@ export async function POST(
 
   const { id } = await params;
   try {
-    await setAccountAccess(id, action);
+    await setAccountAccess(id, action, me.id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
