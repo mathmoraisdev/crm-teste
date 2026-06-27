@@ -17,6 +17,7 @@
 
 // Overrides ANTES de qualquer import que leia env.
 process.env.WHATSAPP_MODE = "mock";
+process.env.TRIAL_DAYS = "0"; // padrão novo: cadastro nasce suspenso
 const ADMIN_EMAIL = "smoke-fin-admin@example.com";
 process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 
@@ -48,8 +49,8 @@ async function main() {
 
   const cleanup = { userIds: [] as string[], numberId: "" };
   try {
-    // ── 1. Cadastro novo nasce com trial (accessUntil futuro, AUTO) ───────
-    console.log("① Cadastro novo nasce com trial");
+    // ── 1. Cadastro novo nasce SUSPENSO (TRIAL_DAYS=0) ────────────────────
+    console.log("① Cadastro novo nasce suspenso");
     const cli = await registerUser({
       name: "Cliente Smoke",
       email: uid("cli") + "@example.com",
@@ -66,8 +67,8 @@ async function main() {
       `billingOverride=${cliRow?.billingOverride}`,
     );
     check(
-      "registerUser grava accessUntil no futuro (trial)",
-      cliRow?.accessUntil != null && cliRow.accessUntil.getTime() > Date.now(),
+      "registerUser grava accessUntil=null (sem trial)",
+      cliRow?.accessUntil == null,
       `accessUntil=${cliRow?.accessUntil?.toISOString() ?? "null"}`,
     );
 
@@ -108,8 +109,8 @@ async function main() {
     cleanup.numberId = num.id;
     const phone = "+5511" + Math.floor(100000000 + Math.random() * 8e8);
 
-    // ── 3. Gate inbound DURANTE o trial → responde ────────────────────────
-    console.log("\n③ Gate inbound (durante o trial)");
+    // ── 3. Gate inbound: nasceu suspenso → IA silencia (mas persiste) ─────
+    console.log("\n③ Gate inbound (nasceu suspenso)");
     const r1 = await ingestInbound({
       whatsAppNumberId: num.id,
       phone,
@@ -118,65 +119,83 @@ async function main() {
       providerMessageId: uid("in1"),
     });
     check(
-      "trial → respond=true",
-      r1.respond === true && r1.leadId != null,
+      "suspenso → respond=false",
+      r1.respond === false && r1.leadId != null,
       `respond=${r1.respond} lead=${r1.leadId ? "criado" : "null"}`,
     );
-    check(
-      "isAccountActiveByLead(lead) = true (trial)",
-      (await isAccountActiveByLead(r1.leadId!)) === true,
-    );
-
-    // ── 4. forceSuspend → IA silencia (mas persiste) ──────────────────────
-    console.log("\n④ forceSuspend (kill switch)");
-    await setAccountAccess(cli.id, { kind: "forceSuspend" });
-    const r2 = await ingestInbound({
-      whatsAppNumberId: num.id,
-      phone,
-      userId: cli.id,
-      text: "ainda está aí?",
-      providerMessageId: uid("in2"),
-    });
-    check("suspenso → respond=false (mensagem NOVA)", r2.respond === false, `respond=${r2.respond}`);
     const inCount = await prisma.message.count({
       where: { leadId: r1.leadId!, direction: "INBOUND" },
     });
-    check("suspenso → mensagens inbound FORAM persistidas", inCount >= 2, `INBOUND=${inCount}`);
+    check("suspenso → mensagem inbound FOI persistida", inCount >= 1, `INBOUND=${inCount}`);
     check(
       "isAccountActiveByLead(lead) = false (suspenso)",
       (await isAccountActiveByLead(r1.leadId!)) === false,
     );
 
-    // ── 5. forceActive → volta a responder ────────────────────────────────
-    console.log("\n⑤ forceActive (cortesia)");
-    await setAccountAccess(cli.id, { kind: "forceActive" });
+    // ── 4. Admin libera trial de 7 dias → volta a responder ───────────────
+    console.log("\n④ Liberar trial 7 dias");
+    await setAccountAccess(cli.id, { kind: "extend", days: 7 });
+    const trialRow = await prisma.user.findUnique({
+      where: { id: cli.id },
+      select: { billingOverride: true, accessUntil: true },
+    });
+    const trialDays = trialRow?.accessUntil
+      ? Math.round((trialRow.accessUntil.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      : null;
+    check("trial → billingOverride=AUTO", trialRow?.billingOverride === "AUTO", `override=${trialRow?.billingOverride}`);
+    check("trial → accessUntil ~7 dias à frente", trialDays === 7, `dias=${trialDays}`);
+    const r2 = await ingestInbound({
+      whatsAppNumberId: num.id,
+      phone,
+      userId: cli.id,
+      text: "e agora?",
+      providerMessageId: uid("in2"),
+    });
+    check("trial liberado → respond=true", r2.respond === true, `respond=${r2.respond}`);
+    check(
+      "isAccountActiveByLead(lead) = true (trial)",
+      (await isAccountActiveByLead(r1.leadId!)) === true,
+    );
+
+    // ── 5. forceSuspend (kill switch) → cala mesmo com prazo futuro ───────
+    console.log("\n⑤ forceSuspend (kill switch)");
+    await setAccountAccess(cli.id, { kind: "forceSuspend" });
     const r3 = await ingestInbound({
       whatsAppNumberId: num.id,
       phone,
       userId: cli.id,
-      text: "voltou?",
+      text: "ainda aí?",
       providerMessageId: uid("in3"),
     });
-    check("forceActive → respond=true", r3.respond === true, `respond=${r3.respond}`);
+    check("suspenso → respond=false (mesmo com prazo futuro)", r3.respond === false, `respond=${r3.respond}`);
     check(
-      "isAccountActiveByLead(lead) = true (forçado ativo)",
-      (await isAccountActiveByLead(r1.leadId!)) === true,
+      "isAccountActiveByLead(lead) = false (kill switch)",
+      (await isAccountActiveByLead(r1.leadId!)) === false,
     );
 
-    // ── 6. extend 60 → accessUntil ~60 dias à frente, AUTO ────────────────
-    console.log("\n⑥ extend +60 dias");
-    await setAccountAccess(cli.id, { kind: "extend", days: 60 });
-    const extRow = await prisma.user.findUnique({
-      where: { id: cli.id },
-      select: { billingOverride: true, accessUntil: true },
+    // ── 6. Lançar pagamento (vencimento +30) → LIBERA acesso até a data ───
+    console.log("\n⑥ Lançar pagamento (vencimento +30 dias)");
+    const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await setAccountAccess(cli.id, {
+      kind: "setInfo",
+      paymentMethod: "PIX",
+      paymentDueDate: dueDate,
     });
-    const days = extRow?.accessUntil
-      ? Math.round((extRow.accessUntil.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-      : null;
-    check("extend → billingOverride volta p/ AUTO", extRow?.billingOverride === "AUTO", `override=${extRow?.billingOverride}`);
-    // addDays parte de max(prazo vigente, now): com ~7 dias de trial restantes,
-    // +60 dá ~67 (não encurta o prazo vigente). Por isso >= 60.
-    check("extend → accessUntil >= 60 dias à frente", days != null && days >= 60, `dias=${days}`);
+    const payRow = await prisma.user.findUnique({
+      where: { id: cli.id },
+      select: { billingOverride: true, accessUntil: true, paymentMethod: true, paymentDueDate: true },
+    });
+    check("pagamento → paymentMethod=PIX gravado", payRow?.paymentMethod === "PIX", `método=${payRow?.paymentMethod}`);
+    check("pagamento → billingOverride=AUTO", payRow?.billingOverride === "AUTO", `override=${payRow?.billingOverride}`);
+    check(
+      "pagamento → accessUntil = vencimento (libera acesso)",
+      payRow?.accessUntil?.getTime() === dueDate.getTime(),
+      `accessUntil=${payRow?.accessUntil?.toISOString() ?? "null"}`,
+    );
+    check(
+      "isAccountActiveByLead(lead) = true (acesso pelo pagamento)",
+      (await isAccountActiveByLead(r1.leadId!)) === true,
+    );
 
     // ── 7. Gate outbound: claim ignora job de conta suspensa ──────────────
     console.log("\n⑦ Gate outbound (claim)");

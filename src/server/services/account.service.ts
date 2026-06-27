@@ -83,7 +83,7 @@ export type AccessAction =
   | { kind: "forceActive" }                       // libera ignorando a data
   | { kind: "forceSuspend" }                      // suspende ignorando a data
   | { kind: "auto" }                              // volta a seguir a data
-  | {                                             // anotação: forma de pgto + vencimento (não afeta acesso)
+  | {                                             // lança pagamento: forma + vencimento; vencimento LIBERA acesso até a data
       kind: "setInfo";
       paymentMethod: PaymentMethod | null;
       paymentDueDate: Date | null;
@@ -131,8 +131,14 @@ export async function setAccountAccess(
       data = { billingOverride: "AUTO" };
       break;
     case "setInfo":
-      // Só anotação: não toca em billingOverride/accessUntil (acesso intacto).
+      // Lançar pagamento: registra forma + vencimento. Quando HÁ vencimento, ele
+      // também LIBERA o acesso — a conta funciona (AUTO) até a data do vencimento.
+      // Sem vencimento = só anotação (não mexe no acesso).
       data = { paymentMethod: action.paymentMethod, paymentDueDate: action.paymentDueDate };
+      if (action.paymentDueDate) {
+        data.billingOverride = "AUTO";
+        data.accessUntil = action.paymentDueDate;
+      }
       break;
   }
 

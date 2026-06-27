@@ -77,8 +77,9 @@ const schema = z.object({
   CONSULTANT_WHATSAPP: z.string().optional().default(""), // número que recebe leads do consultor
   ADMIN_EMAILS: z.string().optional().default(""), // e-mails admin (separados por vírgula)
   SENTRY_DSN: z.string().optional().default(""), // DSN do Sentry (server-side)
-  // Dias de teste grátis para cadastros novos. 0 = nasce suspenso (sem trial).
-  TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(7),
+  // Dias de teste grátis para cadastros novos. Padrão 0 = nasce SUSPENSO (sem
+  // trial automático); o admin libera o teste manualmente no /financeiro.
+  TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),
 });
 
 /**

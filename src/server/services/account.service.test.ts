@@ -88,4 +88,45 @@ describe("setAccountAccess", () => {
     expect(arg.data.billingOverride).toBe("ACTIVE");
     expect(arg.data).not.toHaveProperty("accessUntil");
   });
+
+  it("lançar pagamento COM vencimento libera acesso até a data (AUTO)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli",
+      email: "cliente@exemplo.com",
+      accessUntil: null,
+    });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", {
+      kind: "setInfo",
+      paymentMethod: "PIX",
+      paymentDueDate: FUTURE,
+    });
+    const arg = (prisma.user.update as any).mock.calls[0][0];
+    expect(arg.data.paymentMethod).toBe("PIX");
+    expect(arg.data.paymentDueDate).toBe(FUTURE);
+    expect(arg.data.billingOverride).toBe("AUTO");
+    expect(arg.data.accessUntil).toBe(FUTURE);
+  });
+
+  it("lançar pagamento SEM vencimento é só anotação (não mexe no acesso)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli",
+      email: "cliente@exemplo.com",
+      accessUntil: PAST,
+    });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", {
+      kind: "setInfo",
+      paymentMethod: "PIX",
+      paymentDueDate: null,
+    });
+    const arg = (prisma.user.update as any).mock.calls[0][0];
+    expect(arg.data.paymentMethod).toBe("PIX");
+    expect(arg.data).not.toHaveProperty("billingOverride");
+    expect(arg.data).not.toHaveProperty("accessUntil");
+  });
 });

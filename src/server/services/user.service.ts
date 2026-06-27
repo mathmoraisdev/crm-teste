@@ -46,8 +46,9 @@ export async function registerUser(
       email,
       whatsapp: input.whatsapp?.trim() || null,
       passwordHash: hashPassword(input.password),
-      // Trial automático: nasce AUTO com prazo. TRIAL_DAYS=0 → accessUntil=null
-      // (nasce suspenso, comportamento antigo). Admin estende no /financeiro.
+      // Nasce AUTO. Por padrão (TRIAL_DAYS=0) accessUntil=null → SUSPENSO: o
+      // admin libera o teste (3/7 dias) ou lança o pagamento no /financeiro.
+      // Com TRIAL_DAYS>0 ganha trial automático de N dias.
       billingOverride: "AUTO",
       accessUntil,
     },
