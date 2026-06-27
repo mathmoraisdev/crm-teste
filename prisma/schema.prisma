@@ -40,14 +40,9 @@ model User {
   passwordHash  String // scrypt$salt$hash
   emailVerified DateTime? // null = e-mail ainda não confirmado
   sessionEpoch  Int       @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
-  // Billing: conta ativa = IA responde e disparo flui. Suspensa (inadimplência)
-  // = IA silencia (só persiste o inbound) e outbound congela. Cadastros novos
-  // nascem `false` (controle do admin); contas existentes migram para `true`.
-  billingActive Boolean   @default(true)
   // Prazo de acesso (trial ou pago): a conta funciona enquanto `accessUntil` está
   // no futuro. Expira em tempo real (sem cron) — os gates comparam na hora.
   // `billingOverride` permite forçar/liberar manualmente preservando a data.
-  // `billingActive` fica como vestígio durante a transição (removido na Phase 6).
   accessUntil     DateTime?
   billingOverride BillingOverride @default(AUTO)
   // Anotação financeira (NÃO afeta o acesso — só registro do admin): como o
