@@ -52,6 +52,23 @@ export function effectiveDailyCap(hasPayment: boolean, normalCap: number, trialC
   return trialCap;
 }
 
+/**
+ * Cap diário efetivo da conta lendo o banco: sem `paymentDueDate` (trial/cortesia)
+ * → teto de trial; com pagamento → cap normal. Conta inexistente: trata como
+ * não-pagante (fail-safe conservador = aplica o teto menor).
+ */
+export async function accountDailyCap(userId: string): Promise<number> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { paymentDueDate: true },
+  });
+  return effectiveDailyCap(
+    user?.paymentDueDate != null,
+    env.WHATSAPP_DAILY_CAP,
+    env.TRIAL_WHATSAPP_DAILY_CAP,
+  );
+}
+
 /** Quantos jobs cada número já enviou hoje (p/ cap por chip — Baileys). */
 export async function sentTodayByNumber(now: Date): Promise<Record<string, number>> {
   const start = new Date(now);
