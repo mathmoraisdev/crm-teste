@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Manrope, DM_Mono } from "next/font/google";
 import "./globals.css";
 import { PostHogProvider } from "@/components/app/PostHogProvider";
@@ -28,6 +28,12 @@ export const metadata: Metadata = {
   title: "Disparador.ai — IA que qualifica e agenda seus leads no WhatsApp",
   description:
     "Dispare campanhas em massa no WhatsApp e deixe a IA responder, qualificar cada lead e marcar reuniões — tudo num CRM em tempo real.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

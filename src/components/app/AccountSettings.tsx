@@ -290,13 +290,13 @@ export function AccountSettings({
             </div>
           ) : (
             <>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <select
                   value={provider}
                   onChange={(e) =>
                     setProvider(e.target.value as "OPENAI" | "ANTHROPIC")
                   }
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
                 >
                   <option value="OPENAI">OpenAI</option>
                   <option value="ANTHROPIC">Anthropic</option>
@@ -306,7 +306,7 @@ export function AccountSettings({
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   placeholder={provider === "OPENAI" ? "sk-..." : "sk-ant-..."}
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
               {keyError && <p className="text-sm text-[#C0392B]">{keyError}</p>}

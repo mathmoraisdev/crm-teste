@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { formatDateTime } from "@/lib/utils";
 import { AccountAccessModal } from "@/components/app/AccountAccessModal";
+import { SeatsDropdown } from "@/components/app/SeatsDropdown";
 import { FinanceiroFilters } from "@/components/app/FinanceiroFilters";
 import { LandingToggle } from "@/components/app/LandingToggle";
 import { isLandingEnabled } from "@/server/services/settings.service";
@@ -29,7 +30,7 @@ export default async function FinanceiroPage({
   if (!isAdminEmail(me?.email)) {
     return (
       <div className="space-y-5">
-        <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
           Financeiro
         </h1>
         <Card className="flex flex-col items-center gap-2 px-6 py-16 text-center">
@@ -66,7 +67,7 @@ export default async function FinanceiroPage({
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
           Financeiro
         </h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -101,7 +102,91 @@ export default async function FinanceiroPage({
 
       <FinanceiroFilters month={month} status={status} />
 
-      <Card className="overflow-hidden">
+      {/* Mobile: lista de cards (a tabela rola horizontalmente demais no celular). */}
+      <div className="space-y-3 lg:hidden">
+        {filteredAccounts.map((a) => (
+          <Card key={a.id} className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+                  <span className="break-words">{a.name}</span>
+                  {a.isAdmin && <Badge tone="blue">admin</Badge>}
+                </div>
+                <div className="truncate text-xs text-slate-400">{a.email}</div>
+              </div>
+              <Badge tone={a.active ? "green" : "slate"}>
+                {a.active ? "Ativo" : "Suspenso"}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+              <div>
+                <p className="text-xs text-slate-400">Plano</p>
+                {a.plan ? (
+                  <Badge tone="blue">{PLAN_LABELS[a.plan]}</Badge>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Usuários</p>
+                <SeatsDropdown
+                  seatsUsed={a.seatsUsed}
+                  maxSeats={a.maxSeats}
+                  seats={a.seats}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Chips</p>
+                <p className="text-slate-600">{a.numbers}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Leads</p>
+                <p className="text-slate-600">{a.leads}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Criada</p>
+                <p className="text-slate-500">{formatDateTime(a.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Validade</p>
+                <p className="text-slate-500">
+                  {a.accessUntil ? formatDateTime(a.accessUntil) : "—"}
+                  {a.daysLeft != null && (
+                    <span className="ml-1 text-xs text-slate-400">({a.daysLeft}d)</span>
+                  )}
+                </p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-slate-400">Pagamento</p>
+                <p className="text-slate-500">
+                  {a.paymentMethod ? METHOD_LABELS[a.paymentMethod] : "—"}
+                  {a.paymentDueDate && (
+                    <span className="ml-1 text-xs text-slate-400">
+                      vence {formatDateTime(a.paymentDueDate)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3">
+              <AccountAccessModal
+                accountId={a.id}
+                active={a.active}
+                isAdmin={a.isAdmin}
+                daysLeft={a.daysLeft}
+                paymentMethod={a.paymentMethod}
+                paymentDueDate={a.paymentDueDate ? a.paymentDueDate.toISOString() : null}
+                plan={a.plan}
+              />
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Desktop: tabela completa. */}
+      <Card className="hidden overflow-hidden lg:block">
         <Table>
           <thead>
             <tr>
@@ -139,7 +224,11 @@ export default async function FinanceiroPage({
                   )}
                 </Td>
                 <Td className="whitespace-nowrap text-slate-600">
-                  {a.maxSeats != null ? `${a.seatsUsed}/${a.maxSeats}` : a.seatsUsed}
+                  <SeatsDropdown
+                    seatsUsed={a.seatsUsed}
+                    maxSeats={a.maxSeats}
+                    seats={a.seats}
+                  />
                 </Td>
                 <Td className="text-slate-600">{a.numbers}</Td>
                 <Td className="text-slate-600">{a.leads}</Td>
@@ -182,7 +271,52 @@ export default async function FinanceiroPage({
         </Table>
       </Card>
 
-      <Card className="overflow-hidden">
+      {/* Mobile: extrato como cards. */}
+      <Card className="overflow-hidden lg:hidden">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <p className="text-sm font-bold text-ink">Extrato — {month}</p>
+        </div>
+        {payments.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-400">
+            Nenhum pagamento neste período.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {payments.map((p) => (
+              <li key={p.id} className="space-y-2 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-ink">{p.accountName}</div>
+                    <div className="truncate text-xs text-slate-400">{p.accountEmail}</div>
+                  </div>
+                  <span className="shrink-0 font-semibold text-ink">
+                    {formatCentsBRL(p.amountCents)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p className="text-slate-400">Data</p>
+                    <p className="text-slate-500">{formatDateTime(p.paidAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Forma</p>
+                    <p className="text-slate-600">{p.method ? METHOD_LABELS[p.method] : "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Cobre até</p>
+                    <p className="text-slate-500">
+                      {p.coversUntil ? formatDateTime(p.coversUntil) : "—"}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Desktop: extrato como tabela. */}
+      <Card className="hidden overflow-hidden lg:block">
         <div className="border-b border-slate-100 px-4 py-3">
           <p className="text-sm font-bold text-ink">Extrato — {month}</p>
         </div>

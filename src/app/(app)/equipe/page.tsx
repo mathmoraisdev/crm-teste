@@ -14,7 +14,7 @@ export default async function EquipePage() {
   if (!ctx || ctx.role !== "ADMIN") {
     return (
       <div className="space-y-5">
-        <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+        <h1 className="font-display text-2xl sm:text-[30px] font-bold tracking-[-0.025em] text-ink">
           Equipe
         </h1>
         <Card className="flex flex-col items-center gap-2 px-6 py-16 text-center">
@@ -45,7 +45,7 @@ export default async function EquipePage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+        <h1 className="font-display text-2xl sm:text-[30px] font-bold tracking-[-0.025em] text-ink">
           Equipe
         </h1>
         <p className="mt-1 text-sm text-slate-500">

@@ -96,9 +96,9 @@ export function CampaignsView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+          <h1 className="font-display text-2xl sm:text-[30px] font-bold tracking-[-0.025em] text-ink">
             Campanhas
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -106,7 +106,7 @@ export function CampaignsView() {
             inicial.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Atualizar
           </Button>
@@ -179,7 +179,90 @@ export function CampaignsView() {
           </div>
         </Card>
       ) : (
-        <Card>
+        <>
+          {/* Mobile: cards */}
+          <div className="space-y-3 lg:hidden">
+            {filtered.map((c) => {
+              const started = c.status === "RUNNING" || c.status === "PAUSED";
+              const canStart = !started && c.pendingCount > 0;
+              return (
+                <Card key={c.id}>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="block font-bold text-ink">{c.name}</span>
+                        <span className="mt-0.5 block truncate text-xs text-slate-400">
+                          {c.messageTemplate}
+                        </span>
+                      </div>
+                      <Badge tone={STATUS_TONE[c.status as keyof typeof STATUS_TONE]}>
+                        {STATUS_LABEL[c.status as keyof typeof STATUS_LABEL] ??
+                          c.status}
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span className="tabular-nums">
+                        Leads: <strong className="text-ink">{c.leadCount}</strong>
+                      </span>
+                      <span className="tabular-nums">
+                        Pendentes:{" "}
+                        <strong className="text-ink">{c.pendingCount}</strong>
+                      </span>
+                    </div>
+
+                    {c.jobs.total > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                        <span className="text-green-700">{c.jobs.sent} enviados</span>
+                        {c.jobs.pending > 0 && (
+                          <span className="text-amber-700">
+                            {c.jobs.pending} na fila
+                          </span>
+                        )}
+                        {c.jobs.failed > 0 && (
+                          <span className="text-red-700">{c.jobs.failed} falhas</span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        size="sm"
+                        onClick={() => start(c.id)}
+                        loading={startingId === c.id}
+                        disabled={!canStart}
+                      >
+                        <Play size={13} />
+                        {canStart ? "Iniciar" : "Disparada"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditing(c)}
+                        aria-label="Editar campanha"
+                        title="Editar"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleting(c)}
+                        aria-label="Apagar campanha"
+                        title="Apagar"
+                        className="text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Desktop: table */}
+          <Card className="hidden lg:block">
           <Table>
             <thead>
               <tr>
@@ -269,7 +352,8 @@ export function CampaignsView() {
               })}
             </tbody>
           </Table>
-        </Card>
+          </Card>
+        </>
       )}
 
       <Modal open={formOpen} onClose={() => setFormOpen(false)} title="Nova campanha">

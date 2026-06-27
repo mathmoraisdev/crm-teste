@@ -173,17 +173,25 @@ export function TeamManager({
             </div>
           ) : (
             members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div
+                key={m.id}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+              >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 font-semibold text-ink">
-                    {m.name}
+                  <div className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+                    <span className="break-all">{m.name}</span>
                     <Badge tone="slate">operador</Badge>
                   </div>
-                  <div className="text-xs text-slate-400">
+                  <div className="break-all text-xs text-slate-400">
                     {m.email} · desde {formatDateTime(m.createdAt)}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setToRemove(m)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="self-start sm:self-auto"
+                  onClick={() => setToRemove(m)}
+                >
                   <Trash2 size={15} /> Remover
                 </Button>
               </div>

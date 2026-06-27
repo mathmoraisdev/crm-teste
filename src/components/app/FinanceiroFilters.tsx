@@ -15,14 +15,14 @@ export function FinanceiroFilters({ month, status }: { month: string; status: st
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
       <label className="block">
         <span className="text-xs text-slate-500">Mês</span>
         <input
           type="month"
           value={month}
           onChange={(e) => e.target.value && push({ month: e.target.value })}
-          className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
         />
       </label>
       <label className="block">
@@ -30,7 +30,7 @@ export function FinanceiroFilters({ month, status }: { month: string; status: st
         <select
           value={status}
           onChange={(e) => push({ status: e.target.value })}
-          className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
         >
           <option value="todos">Todos</option>
           <option value="ativo">Ativas</option>

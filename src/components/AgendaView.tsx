@@ -83,9 +83,9 @@ export function AgendaView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
             Agenda
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -93,7 +93,7 @@ export function AgendaView() {
             de data.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Atualizar
           </Button>
@@ -105,7 +105,7 @@ export function AgendaView() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-auto"
         >
           <option value="ALL">Todos os status</option>
           {STATUS_OPTIONS.map((s) => (
@@ -163,7 +163,7 @@ function AgendaRow({ item }: { item: AgendaItem }) {
   return (
     <li
       className={cn(
-        "flex items-start gap-3 py-3.5 pr-1",
+        "flex flex-wrap items-start gap-x-3 gap-y-2 py-3.5 pr-1 sm:flex-nowrap",
         relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3" : "px-1",
       )}
     >
@@ -200,7 +200,7 @@ function AgendaRow({ item }: { item: AgendaItem }) {
           href={item.meetingLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-0.5 inline-flex flex-none items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-50"
+          className="ml-9 inline-flex w-full flex-none items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-50 sm:ml-0 sm:mt-0.5 sm:w-auto sm:justify-start sm:py-1.5"
         >
           <Video size={13} /> Entrar <ExternalLink size={11} />
         </a>

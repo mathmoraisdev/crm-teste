@@ -329,13 +329,85 @@ export function WhatsAppNumbersPanel() {
     await load();
   }
 
+  // Botões de ação compartilhados entre os cartões (celular) e a tabela (desktop).
+  function renderActions(n: NumberItem) {
+    const canPause = n.status === "CONNECTED" || n.status === "WARMING";
+    const canResume = n.status === "PAUSED";
+    const canReconnect = RECONNECTABLE.has(n.status);
+    return (
+      <>
+        {canReconnect && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => reconnectNumber(n)}
+            loading={busyId === n.id}
+            title={
+              n.status === "CONNECTING"
+                ? "Mostrar/atualizar o QR de pareamento (mantém as configs)"
+                : "Reconectar (reescanear QR, mantém as configs)"
+            }
+            aria-label={
+              n.status === "CONNECTING"
+                ? "Mostrar QR de pareamento"
+                : "Reconectar chip"
+            }
+            className="text-brand-600 hover:bg-brand-50"
+          >
+            <RefreshCw size={14} />
+          </Button>
+        )}
+        {(canPause || canResume) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleStatus(n)}
+            loading={busyId === n.id}
+            title={canResume ? "Reativar" : "Pausar"}
+            aria-label={canResume ? "Reativar chip" : "Pausar chip"}
+          >
+            {canResume ? <Play size={14} /> : <Pause size={14} />}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openService(n)}
+          title="Atendimento"
+          aria-label="Configurar atendimento"
+        >
+          <Settings2 size={14} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openEdit(n)}
+          title="Editar"
+          aria-label="Editar chip"
+        >
+          <Pencil size={14} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setDeleting(n)}
+          title="Remover"
+          aria-label="Remover chip"
+          className="text-red-600 hover:bg-red-50"
+        >
+          <Trash2 size={14} />
+        </Button>
+      </>
+    );
+  }
+
   // Só faz sentido no modo baileys (multi-número). Em mock/cloud-api fica oculto.
   if (numbers === null || mode !== "baileys") return null;
 
   return (
     <Card>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <Smartphone size={16} className="text-slate-500" />
           <h2 className="text-sm font-semibold text-slate-800">
             Números WhatsApp (Baileys)
@@ -344,12 +416,12 @@ export function WhatsAppNumbersPanel() {
             {numbers.length} chip(s) · rotação por menos carregado
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {numbers.length > 0 && (
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:flex-none"
             >
               <option value="ALL">Todos os status</option>
               {STATUS_OPTIONS.map((s) => (
@@ -375,108 +447,82 @@ export function WhatsAppNumbersPanel() {
           Nenhum chip com esse status.
         </div>
       ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Chip</Th>
-              <Th>Número</Th>
-              <Th>Status</Th>
-              <Th className="text-center">Enviados hoje</Th>
-              <Th className="text-right">Ações</Th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* Cartões empilhados no celular */}
+          <div className="space-y-3 lg:hidden">
             {filtered.map((n) => {
               const atCap = n.sentToday >= n.dailyCap;
-              const canPause = n.status === "CONNECTED" || n.status === "WARMING";
-              const canResume = n.status === "PAUSED";
-              const canReconnect = RECONNECTABLE.has(n.status);
               return (
-                <tr key={n.id} className="hover:bg-slate-50">
-                  <Td>
-                    <span className="font-medium text-slate-800">{n.label}</span>
-                  </Td>
-                  <Td className="text-slate-500 tabular-nums">{n.phone}</Td>
-                  <Td>
+                <div
+                  key={n.id}
+                  className="rounded-lg border border-slate-200 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-800">{n.label}</p>
+                      <p className="text-sm text-slate-500 tabular-nums">{n.phone}</p>
+                    </div>
                     <Badge tone={TONE[n.status] ?? "slate"}>
                       {LABEL[n.status] ?? n.status}
                     </Badge>
-                  </Td>
-                  <Td className="text-center tabular-nums">
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Enviados hoje:{" "}
                     <span className={atCap ? "text-amber-700" : "text-slate-700"}>
                       {n.sentToday}/{n.dailyCap}
                     </span>
-                  </Td>
-                  <Td className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {canReconnect && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => reconnectNumber(n)}
-                          loading={busyId === n.id}
-                          title={
-                            n.status === "CONNECTING"
-                              ? "Mostrar/atualizar o QR de pareamento (mantém as configs)"
-                              : "Reconectar (reescanear QR, mantém as configs)"
-                          }
-                          aria-label={
-                            n.status === "CONNECTING"
-                              ? "Mostrar QR de pareamento"
-                              : "Reconectar chip"
-                          }
-                          className="text-brand-600 hover:bg-brand-50"
-                        >
-                          <RefreshCw size={14} />
-                        </Button>
-                      )}
-                      {(canPause || canResume) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleStatus(n)}
-                          loading={busyId === n.id}
-                          title={canResume ? "Reativar" : "Pausar"}
-                          aria-label={canResume ? "Reativar chip" : "Pausar chip"}
-                        >
-                          {canResume ? <Play size={14} /> : <Pause size={14} />}
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openService(n)}
-                        title="Atendimento"
-                        aria-label="Configurar atendimento"
-                      >
-                        <Settings2 size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(n)}
-                        title="Editar"
-                        aria-label="Editar chip"
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleting(n)}
-                        title="Remover"
-                        aria-label="Remover chip"
-                        className="text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </Td>
-                </tr>
+                  </p>
+                  <div className="mt-2 flex flex-wrap justify-end gap-1 border-t border-slate-100 pt-2">
+                    {renderActions(n)}
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </Table>
+          </div>
+
+          {/* Tabela no desktop */}
+          <div className="hidden lg:block">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Chip</Th>
+                  <Th>Número</Th>
+                  <Th>Status</Th>
+                  <Th className="text-center">Enviados hoje</Th>
+                  <Th className="text-right">Ações</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((n) => {
+                  const atCap = n.sentToday >= n.dailyCap;
+                  return (
+                    <tr key={n.id} className="hover:bg-slate-50">
+                      <Td>
+                        <span className="font-medium text-slate-800">{n.label}</span>
+                      </Td>
+                      <Td className="text-slate-500 tabular-nums">{n.phone}</Td>
+                      <Td>
+                        <Badge tone={TONE[n.status] ?? "slate"}>
+                          {LABEL[n.status] ?? n.status}
+                        </Badge>
+                      </Td>
+                      <Td className="text-center tabular-nums">
+                        <span className={atCap ? "text-amber-700" : "text-slate-700"}>
+                          {n.sentToday}/{n.dailyCap}
+                        </span>
+                      </Td>
+                      <Td className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {renderActions(n)}
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+        </>
       )}
 
       <Modal open={open} onClose={reset} title="Adicionar número (parear por QR)">
@@ -537,7 +583,7 @@ export function WhatsAppNumbersPanel() {
                 <img
                   src={pairing.qrDataUrl}
                   alt="QR de pareamento"
-                  className="mx-auto rounded-lg border border-slate-200"
+                  className="mx-auto h-auto w-full max-w-[240px] rounded-lg border border-slate-200"
                   width={240}
                   height={240}
                 />
@@ -725,7 +771,7 @@ export function WhatsAppNumbersPanel() {
               <p className="text-xs font-semibold text-slate-600">
                 Tempo de resposta &amp; handoff
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">
                     Espera p/ responder (s)
