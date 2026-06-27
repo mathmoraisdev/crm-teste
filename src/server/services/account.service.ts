@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { isAdminEmail } from "@/lib/admin";
 import { accountActive, daysRemaining, addDays, type BillingOverride } from "@/lib/billing";
+import { PLAN_LIMITS } from "@/lib/plans";
 import type { PaymentMethod, Plan } from "@prisma/client";
 
 /**
@@ -41,12 +42,18 @@ export interface AdminAccountRow {
   isAdmin: boolean;
   numbers: number;
   leads: number;
+  seatsUsed: number;         // dono + operadores
+  maxSeats: number | null;   // teto do plano (null = sem plano definido)
   createdAt: Date;
 }
 
-/** Lista todas as contas com status calculado, para o painel Financeiro. */
+/**
+ * Lista as contas faturáveis (só DONOS: `ownerId = null`) com status calculado,
+ * para o painel Financeiro. Operadores não são contas faturáveis — não aparecem.
+ */
 export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
   const users = await prisma.user.findMany({
+    where: { ownerId: null },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -58,7 +65,7 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       paymentDueDate: true,
       plan: true,
       createdAt: true,
-      _count: { select: { whatsAppNumbers: true, leads: true } },
+      _count: { select: { whatsAppNumbers: true, leads: true, members: true } },
     },
   });
   return users.map((u) => ({
@@ -75,6 +82,8 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     isAdmin: isAdminEmail(u.email),
     numbers: u._count.whatsAppNumbers,
     leads: u._count.leads,
+    seatsUsed: 1 + u._count.members, // o próprio dono + operadores
+    maxSeats: u.plan ? PLAN_LIMITS[u.plan].maxSeats : null,
     createdAt: u.createdAt,
   }));
 }

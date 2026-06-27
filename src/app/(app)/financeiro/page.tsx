@@ -107,6 +107,7 @@ export default async function FinanceiroPage({
             <tr>
               <Th>Conta</Th>
               <Th>Plano</Th>
+              <Th>Usuários</Th>
               <Th>Chips</Th>
               <Th>Leads</Th>
               <Th>Criada</Th>
@@ -136,6 +137,9 @@ export default async function FinanceiroPage({
                   ) : (
                     <span className="text-xs text-slate-400">—</span>
                   )}
+                </Td>
+                <Td className="whitespace-nowrap text-slate-600">
+                  {a.maxSeats != null ? `${a.seatsUsed}/${a.maxSeats}` : a.seatsUsed}
                 </Td>
                 <Td className="text-slate-600">{a.numbers}</Td>
                 <Td className="text-slate-600">{a.leads}</Td>
