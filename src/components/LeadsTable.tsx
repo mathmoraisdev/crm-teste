@@ -7,19 +7,24 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { ScoreBadge } from "@/components/ScoreBadge";
+import { TagChip } from "@/components/TagChip";
 import { formatPhone } from "@/lib/phone";
 import { timeAgo } from "@/lib/utils";
+import { resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { LeadListItem } from "@/server/services/lead.service";
 
 export function LeadsTable({
   leads,
   onEdit,
   onDelete,
+  labels,
 }: {
   leads: LeadListItem[];
   onEdit: (lead: LeadListItem) => void;
   onDelete: (lead: LeadListItem) => void;
+  labels?: PipelineLabels | null;
 }) {
+  const statusMeta = resolveStatusMeta(labels);
   if (leads.length === 0) {
     return (
       <div className="py-10 text-center text-sm text-slate-500">
@@ -29,7 +34,74 @@ export function LeadsTable({
   }
 
   return (
-    <Table>
+    <>
+      {/* Mobile: cards */}
+      <ul className="divide-y divide-slate-100 lg:hidden">
+        {leads.map((l) => (
+          <li key={l.id} className="px-4 py-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <Link href={`/leads/${l.id}`} className="min-w-0 flex-1">
+                <span className="block font-bold text-ink">{l.name}</span>
+                <span className="block font-mono text-[11.5px] text-slate-400">
+                  {formatPhone(l.phone)}
+                </span>
+              </Link>
+              <ScoreBadge score={l.score} />
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <LeadStatusBadge status={l.status} label={statusMeta[l.status].label} />
+              {l.optOut && <Badge tone="red">Opt-out</Badge>}
+              {l.campaignName && (
+                <span className="text-xs text-slate-500">· {l.campaignName}</span>
+              )}
+            </div>
+
+            {l.lastMessage && (
+              <p className="mt-2 line-clamp-2 text-xs text-slate-500">
+                {l.lastMessage}
+              </p>
+            )}
+
+            {l.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {l.tags.map((t) => (
+                  <TagChip key={t.id} name={t.name} color={t.color} />
+                ))}
+              </div>
+            )}
+
+            <div className="mt-2.5 flex items-center justify-between">
+              <span className="text-xs text-slate-400">{timeAgo(l.updatedAt)}</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onEdit(l)}
+                  aria-label="Editar lead"
+                  title="Editar"
+                >
+                  <Pencil size={14} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDelete(l)}
+                  aria-label="Apagar lead"
+                  title="Apagar"
+                  className="text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop: tabela */}
+      <div className="hidden lg:block">
+        <Table>
       <thead>
         <tr>
           <Th>Lead</Th>
@@ -53,10 +125,17 @@ export function LeadsTable({
                   {formatPhone(l.phone)}
                 </span>
               </Link>
+              {l.tags.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {l.tags.map((t) => (
+                    <TagChip key={t.id} name={t.name} color={t.color} />
+                  ))}
+                </div>
+              )}
             </Td>
             <Td>
               <div className="flex flex-wrap items-center gap-1.5">
-                <LeadStatusBadge status={l.status} />
+                <LeadStatusBadge status={l.status} label={statusMeta[l.status].label} />
                 {l.optOut && <Badge tone="red">Opt-out</Badge>}
               </div>
             </Td>
@@ -102,6 +181,8 @@ export function LeadsTable({
           </tr>
         ))}
       </tbody>
-    </Table>
+        </Table>
+      </div>
+    </>
   );
 }

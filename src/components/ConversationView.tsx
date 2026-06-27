@@ -25,12 +25,15 @@ export function ConversationView({
   onReplied,
   canReply,
   aiPaused,
+  hideHandoff = false,
 }: {
   leadId: string;
   messages: Message[];
   onReplied: () => void;
   canReply: boolean;
   aiPaused: boolean;
+  /** Oculta o toggle de handoff embutido (o inbox tem ações próprias no header). */
+  hideHandoff?: boolean;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -114,7 +117,7 @@ export function ConversationView({
   }
 
   return (
-    <div className="flex h-[60vh] flex-col">
+    <div className="flex h-[70vh] max-h-[600px] flex-col sm:h-[60vh]">
       <div className="scroll-thin flex-1 space-y-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
@@ -137,6 +140,7 @@ export function ConversationView({
         ) : (
           <>
             {/* Handoff humano: assumir conversa (pausar IA) / devolver à IA. */}
+            {!hideHandoff && (
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span
                 className={cn(
@@ -164,14 +168,15 @@ export function ConversationView({
                 )}
               </Button>
             </div>
-            {handoffError && (
+            )}
+            {!hideHandoff && handoffError && (
               <p className="mb-2 text-xs text-red-600">{handoffError}</p>
             )}
 
             {aiPaused ? (
               /* Caixa de resposta manual do operador (envia ao lead pelo chip). */
               <>
-                <div className="flex items-end gap-2">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   <textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
@@ -183,9 +188,14 @@ export function ConversationView({
                     }}
                     rows={1}
                     placeholder="Responder manualmente ao lead…"
-                    className="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    className="w-full flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />
-                  <Button onClick={sendReply} loading={replying} disabled={!reply.trim()}>
+                  <Button
+                    onClick={sendReply}
+                    loading={replying}
+                    disabled={!reply.trim()}
+                    className="w-full justify-center sm:w-auto"
+                  >
                     <Send size={16} /> Enviar
                   </Button>
                 </div>
@@ -198,7 +208,7 @@ export function ConversationView({
             ) : (
               /* Caixa "responder como o lead" (demo local / simula o inbound). */
               <>
-                <div className="flex items-end gap-2">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
@@ -210,9 +220,14 @@ export function ConversationView({
                     }}
                     rows={1}
                     placeholder="Responder como o lead… (demo local)"
-                    className="flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    className="w-full flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />
-                  <Button onClick={send} loading={sending} disabled={!text.trim()}>
+                  <Button
+                    onClick={send}
+                    loading={sending}
+                    disabled={!text.trim()}
+                    className="w-full justify-center sm:w-auto"
+                  >
                     <Send size={16} /> Enviar
                   </Button>
                 </div>
@@ -235,7 +250,7 @@ function Bubble({ message }: { message: Message }) {
     <div className={cn("flex", inbound ? "justify-start" : "justify-end")}>
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+          "max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm",
           inbound
             ? "rounded-bl-sm bg-white text-slate-800"
             : "rounded-br-sm bg-brand-500 text-white",

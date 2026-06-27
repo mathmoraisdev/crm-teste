@@ -1,33 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { LeadStatus } from "@prisma/client";
-import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
+import { CustomFieldType } from "@prisma/client";
+import { deleteDef, updateDef } from "@/server/services/custom-field.service";
 import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const { id } = await params;
-  const lead = await getLeadDetail(id, userId);
-  if (!lead) {
-    return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
-  }
-  return NextResponse.json({ lead });
-}
-
 const updateSchema = z
   .object({
-    name: z.string().min(1, "Nome obrigatório").optional(),
-    phone: z.string().min(1, "Telefone obrigatório").optional(),
-    email: z.string().optional(),
-    status: z.nativeEnum(LeadStatus).optional(),
-    optOut: z.boolean().optional(),
-    customFields: z.record(z.string(), z.unknown()).optional(),
+    label: z.string().min(1, "Rótulo obrigatório").optional(),
+    type: z.nativeEnum(CustomFieldType).optional(),
+    options: z.array(z.string()).optional(),
+    order: z.number().int().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 
@@ -47,11 +31,11 @@ export async function PATCH(
     );
   }
   try {
-    const lead = await updateLead(id, userId, parsed.data);
-    return NextResponse.json({ lead });
+    const def = await updateDef(userId, id, parsed.data);
+    return NextResponse.json({ def });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao atualizar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao atualizar campo" },
       { status: 400 },
     );
   }
@@ -65,11 +49,11 @@ export async function DELETE(
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteLead(id, userId);
+    await deleteDef(userId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao apagar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao apagar campo" },
       { status: 400 },
     );
   }

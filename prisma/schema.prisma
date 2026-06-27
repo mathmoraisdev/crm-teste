@@ -65,6 +65,9 @@ model User {
   plan            Plan?
   // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
   role            AccountRole @default(ADMIN)
+  // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
+  // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
+  pipelineLabels  Json?
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId         String?
@@ -80,6 +83,9 @@ model User {
   aiKeyVerifiedAt DateTime? // última validação bem-sucedida contra a API
 
   leads                     Lead[]
+  assignedLeads             Lead[]   @relation("AssignedLeads")
+  tags                      Tag[]
+  customFieldDefs           CustomFieldDef[]
   campaigns                 Campaign[]
   whatsAppNumbers           WhatsAppNumber[]
   emailVerificationTokens   EmailVerificationToken[]
@@ -151,6 +157,15 @@ enum MeetingStatus {
   CANCELLED
 }
 
+// Camada de workflow humano sobre a conversa (derivada de aiPaused + atribuição).
+enum AttendanceStatus {
+  IA          // IA atende (fora do inbox humano)
+  FILA        // aguardando um atendente assumir
+  ATENDENDO   // operador atribuído, em atendimento
+  AGUARDANDO  // operador respondeu, aguardando o cliente
+  RESOLVIDA   // encerrada
+}
+
 enum WhatsAppNumberStatus {
   CONNECTING    // pareando / subindo socket
   CONNECTED     // saudável, pode enviar
@@ -178,9 +193,18 @@ model Lead {
   optOut        Boolean        @default(false)
   optOutAt      DateTime?
   consentSource String? // origem do opt-in (LGPD)
+  tags          Tag[]          @relation("LeadTags")
+  customFields  Json?          // valores dos CustomFieldDef da conta (chaveado por `key`)
   // IA pausada manualmente p/ este lead (handover humano)
   aiPaused      Boolean        @default(false)
   aiPausedAt    DateTime?
+  // ── Atendimento humano (inbox / multiatendimento) ──────────────────────
+  attendanceStatus AttendanceStatus @default(IA)
+  assignedTo       User?            @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId     String?
+  queuedAt        DateTime?  // entrou na FILA (base do SLA)
+  firstResponseAt DateTime?  // 1ª resposta humana após a fila (fecha o SLA)
+  lastReadAt      DateTime?  // leitura (inbox compartilhado)
   outboundJobs  OutboundJob[]
   // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
   whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
@@ -194,6 +218,47 @@ model Lead {
   @@index([userId])
   @@index([userId, status])
   @@index([status])
+  @@index([userId, attendanceStatus])
+  @@index([assignedToId])
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  BOOLEAN
+}
+
+// Definição de um campo customizado por conta. O valor vive em `Lead.customFields`
+// (Json), chaveado por `key`.
+model CustomFieldDef {
+  id        String          @id @default(cuid())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  key       String // slug estável (chave no Json)
+  label     String
+  type      CustomFieldType @default(TEXT)
+  options   Json? // SELECT: ["A","B"]
+  order     Int             @default(0)
+  createdAt DateTime        @default(now())
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+// Etiqueta colorida por conta, atribuível a vários leads (N:N).
+model Tag {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  color     String   @default("slate") // chave de Tone (Badge)
+  leads     Lead[]   @relation("LeadTags")
+  createdAt DateTime @default(now())
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 model Message {

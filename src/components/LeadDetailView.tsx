@@ -13,7 +13,9 @@ import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { LeadForm } from "@/components/LeadForm";
 import { ConversationView } from "@/components/ConversationView";
 import { QualificationPanel } from "@/components/QualificationPanel";
+import { TagPicker } from "@/components/TagPicker";
 import { formatPhone } from "@/lib/phone";
+import { resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 export function LeadDetailView({ leadId }: { leadId: string }) {
@@ -22,6 +24,14 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [pipelineLabels, setPipelineLabels] = useState<PipelineLabels>({});
+
+  useEffect(() => {
+    fetch("/api/account/pipeline-labels", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setPipelineLabels((d.labels as PipelineLabels) ?? {}))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -74,9 +84,9 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         <ArrowLeft size={15} /> Voltar para leads
       </Link>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink sm:text-[28px]">
             {lead.name}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -85,8 +95,11 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             {lead.campaign && <> · {lead.campaign.name}</>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <LeadStatusBadge status={lead.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <LeadStatusBadge
+            status={lead.status}
+            label={resolveStatusMeta(pipelineLabels)[lead.status].label}
+          />
           <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil size={14} /> Editar
           </Button>
@@ -100,6 +113,12 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           </Button>
         </div>
       </div>
+
+      <TagPicker
+        leadId={lead.id}
+        value={lead.tags}
+        onChange={(tags) => setLead((prev) => (prev ? { ...prev, tags } : prev))}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -118,6 +137,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           <QualificationPanel
             qualification={lead.qualification}
             meeting={lead.meeting}
+            customFields={lead.customFields}
           />
         </div>
       </div>
@@ -132,6 +152,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             status: lead.status,
             optOut: lead.optOut,
           }}
+          labels={pipelineLabels}
           onSaved={() => {
             load();
             setEditOpen(false);

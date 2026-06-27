@@ -1,33 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { LeadStatus } from "@prisma/client";
-import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
+import { deleteTag, updateTag } from "@/server/services/tag.service";
 import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const { id } = await params;
-  const lead = await getLeadDetail(id, userId);
-  if (!lead) {
-    return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
-  }
-  return NextResponse.json({ lead });
-}
-
 const updateSchema = z
   .object({
     name: z.string().min(1, "Nome obrigatório").optional(),
-    phone: z.string().min(1, "Telefone obrigatório").optional(),
-    email: z.string().optional(),
-    status: z.nativeEnum(LeadStatus).optional(),
-    optOut: z.boolean().optional(),
-    customFields: z.record(z.string(), z.unknown()).optional(),
+    color: z.string().min(1, "Cor obrigatória").optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 
@@ -47,11 +28,11 @@ export async function PATCH(
     );
   }
   try {
-    const lead = await updateLead(id, userId, parsed.data);
-    return NextResponse.json({ lead });
+    const tag = await updateTag(userId, id, parsed.data);
+    return NextResponse.json({ tag });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao atualizar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao atualizar tag" },
       { status: 400 },
     );
   }
@@ -65,11 +46,11 @@ export async function DELETE(
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteLead(id, userId);
+    await deleteTag(userId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao apagar lead" },
+      { error: e instanceof Error ? e.message : "Erro ao apagar tag" },
       { status: 400 },
     );
   }

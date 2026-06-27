@@ -2,7 +2,45 @@ import { prisma } from "@/server/db/client";
 import { isAdminEmail } from "@/lib/admin";
 import { accountActive, daysRemaining, addDays, type BillingOverride } from "@/lib/billing";
 import { PLAN_LIMITS } from "@/lib/plans";
-import type { PaymentMethod, Plan } from "@prisma/client";
+import type { AccountRole, LeadStatus, PaymentMethod, Plan } from "@prisma/client";
+import { PIPELINE_ORDER, type PipelineLabels } from "@/lib/leadStatus";
+
+/** Lê os rótulos renomeados das etapas do funil da conta (ou {} se não houver). */
+export async function getPipelineLabels(userId: string): Promise<PipelineLabels> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { pipelineLabels: true },
+  });
+  const raw = u?.pipelineLabels;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as PipelineLabels;
+  }
+  return {};
+}
+
+/**
+ * Grava os rótulos renomeados. Só aceita chaves de `LeadStatus`; rótulo vazio
+ * remove o override (volta ao default). O enum NUNCA muda.
+ */
+export async function setPipelineLabels(
+  userId: string,
+  labels: Record<string, unknown>,
+): Promise<PipelineLabels> {
+  const valid = new Set<string>(PIPELINE_ORDER);
+  const clean: PipelineLabels = {};
+  for (const [key, value] of Object.entries(labels)) {
+    if (!valid.has(key)) continue;
+    if (typeof value === "string" && value.trim()) {
+      clean[key as LeadStatus] = value.trim();
+    }
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { pipelineLabels: clean },
+    select: { id: true },
+  });
+  return clean;
+}
 
 /**
  * True se a conta dona do lead está ativa (prazo no futuro OU forçada ativa).
@@ -27,6 +65,15 @@ export async function isAccountActive(userId: string): Promise<boolean> {
   return accountActive(user);
 }
 
+/** Um assento (seat) da conta: o próprio dono (ADMIN) ou um operador. */
+export interface AccountSeat {
+  id: string;
+  name: string;
+  email: string;
+  role: AccountRole;  // ADMIN = dono da conta; OPERADOR = operador
+  isOwner: boolean;   // true só no dono (tenant)
+}
+
 /** Linha de conta para o painel admin (Financeiro). */
 export interface AdminAccountRow {
   id: string;
@@ -44,6 +91,7 @@ export interface AdminAccountRow {
   leads: number;
   seatsUsed: number;         // dono + operadores
   maxSeats: number | null;   // teto do plano (null = sem plano definido)
+  seats: AccountSeat[];      // dono (primeiro) + operadores, p/ o dropdown de usuários
   createdAt: Date;
 }
 
@@ -59,12 +107,17 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       id: true,
       name: true,
       email: true,
+      role: true,
       billingOverride: true,
       accessUntil: true,
       paymentMethod: true,
       paymentDueDate: true,
       plan: true,
       createdAt: true,
+      members: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, email: true, role: true },
+      },
       _count: { select: { whatsAppNumbers: true, leads: true, members: true } },
     },
   });
@@ -84,6 +137,17 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     leads: u._count.leads,
     seatsUsed: 1 + u._count.members, // o próprio dono + operadores
     maxSeats: u.plan ? PLAN_LIMITS[u.plan].maxSeats : null,
+    // Dono primeiro (é o ADMIN da conta), depois os operadores.
+    seats: [
+      { id: u.id, name: u.name, email: u.email, role: u.role, isOwner: true },
+      ...u.members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        isOwner: false,
+      })),
+    ],
     createdAt: u.createdAt,
   }));
 }

@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import type { AttendanceStatus } from "@prisma/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
 import { generateAttendanceReply } from "@/server/ai/conversation.agent";
@@ -249,9 +250,10 @@ export async function respondToLead(leadId: string): Promise<void> {
     const since = lead.aiPausedAt?.getTime() ?? 0;
     const idleMs = since ? Date.now() - since : 0;
     if (mins > 0 && since && idleMs >= mins * 60_000) {
+      // Resume por inatividade: devolve o controle à IA e tira do inbox humano.
       await prisma.lead.update({
         where: { id: lead.id },
-        data: { aiPaused: false, aiPausedAt: null },
+        data: { aiPaused: false, aiPausedAt: null, attendanceStatus: "IA", assignedToId: null },
       });
       lead.aiPaused = false;
     } else {
@@ -382,12 +384,26 @@ async function aiStillActive(leadId: string): Promise<boolean> {
 export async function setHandoff(leadId: string, userId: string, paused: boolean) {
   const exists = await prisma.lead.findFirst({
     where: { id: leadId, userId },
-    select: { id: true },
+    select: { id: true, queuedAt: true },
   });
   if (!exists) throw new Error("Lead não encontrado");
+  // Handoff também movimenta a camada de atendimento (inbox): pausar = entra na
+  // FILA (marcando o início do SLA); retomar = volta à IA e libera a atribuição.
   return prisma.lead.update({
     where: { id: leadId },
-    data: { aiPaused: paused, aiPausedAt: paused ? new Date() : null },
+    data: paused
+      ? {
+          aiPaused: true,
+          aiPausedAt: new Date(),
+          attendanceStatus: "FILA",
+          ...(exists.queuedAt ? {} : { queuedAt: new Date() }),
+        }
+      : {
+          aiPaused: false,
+          aiPausedAt: null,
+          attendanceStatus: "IA",
+          assignedToId: null,
+        },
   });
 }
 
@@ -399,15 +415,35 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
 export async function sendManualReply(leadId: string, userId: string, content: string) {
   const lead = await prisma.lead.findFirst({
     where: { id: leadId, userId },
-    select: { id: true, phone: true, userId: true, whatsAppNumberId: true, aiPaused: true },
+    select: {
+      id: true, phone: true, userId: true, whatsAppNumberId: true, aiPaused: true,
+      queuedAt: true, firstResponseAt: true, attendanceStatus: true,
+    },
   });
   if (!lead) throw new Error("Lead não encontrado");
   await sendWhatsAppMessage(lead, content);
   // Operador respondeu pela tela do CRM: renova o relógio de inatividade p/ o
-  // resume automático medir o silêncio a partir de agora (não desde a pausa).
-  if (lead.aiPaused) {
-    await prisma.lead.update({ where: { id: lead.id }, data: { aiPausedAt: new Date() } });
+  // resume automático medir o silêncio a partir de agora (não desde a pausa) e
+  // atualiza a camada de atendimento (SLA + estado).
+  const data: Record<string, unknown> = {};
+  if (lead.aiPaused) data.aiPausedAt = new Date();
+  applyManualResponseAttendance(lead, data);
+  if (Object.keys(data).length > 0) {
+    await prisma.lead.update({ where: { id: lead.id }, data });
   }
+}
+
+/**
+ * Efeitos de uma resposta humana sobre a camada de atendimento (mutável `data`):
+ *  - fecha o SLA (firstResponseAt) na 1ª resposta após entrar na fila;
+ *  - ATENDENDO → AGUARDANDO (operador respondeu, bola com o cliente).
+ */
+function applyManualResponseAttendance(
+  lead: { queuedAt: Date | null; firstResponseAt: Date | null; attendanceStatus: AttendanceStatus },
+  data: Record<string, unknown>,
+) {
+  if (lead.queuedAt && !lead.firstResponseAt) data.firstResponseAt = new Date();
+  if (lead.attendanceStatus === "ATENDENDO") data.attendanceStatus = "AGUARDANDO";
 }
 
 /**
@@ -469,16 +505,17 @@ export async function handleOperatorMessage(input: {
   //  - renovar o relógio de inatividade SEMPRE que o humano falar com um lead já
   //    pausado (senão o resume automático reativaria a IA no meio do atendimento
   //    humano feito pelo zap). Espelha sendManualReply.
+  // Resposta humana pelo zap conta no inbox: fecha o SLA e move ATENDENDO→AGUARDANDO.
+  const data: Record<string, unknown> = {};
   if (num?.autoPauseOnHumanReply) {
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { aiPaused: true, aiPausedAt: new Date() },
-    });
+    data.aiPaused = true;
+    data.aiPausedAt = new Date();
   } else if (lead.aiPaused) {
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { aiPausedAt: new Date() },
-    });
+    data.aiPausedAt = new Date();
+  }
+  applyManualResponseAttendance(lead, data);
+  if (Object.keys(data).length > 0) {
+    await prisma.lead.update({ where: { id: lead.id }, data });
   }
   return { leadId: lead.id };
 }

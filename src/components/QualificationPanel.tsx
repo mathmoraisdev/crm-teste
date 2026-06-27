@@ -1,8 +1,12 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { formatSlot } from "@/lib/utils";
 import type { LeadDetail } from "@/server/services/lead.service";
+import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 import {
   CalendarCheck,
   CalendarClock,
@@ -12,6 +16,7 @@ import {
   UserCheck,
   Gauge,
   Wallet,
+  ListChecks,
 } from "lucide-react";
 
 function Field({
@@ -44,12 +49,73 @@ const ACTION_LABEL: Record<string, string> = {
   discard: "Descartar",
 };
 
+function formatCfValue(type: CustomFieldDefItem["type"], value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  switch (type) {
+    case "BOOLEAN":
+      return value ? "Sim" : "Não";
+    case "DATE": {
+      const d = new Date(String(value));
+      return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("pt-BR");
+    }
+    default:
+      return String(value);
+  }
+}
+
+function CustomFieldsCard({ customFields }: { customFields: unknown }) {
+  const [defs, setDefs] = useState<CustomFieldDefItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/custom-fields", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setDefs((d.defs as CustomFieldDefItem[]) ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (defs.length === 0) return null;
+  const values =
+    customFields && typeof customFields === "object" && !Array.isArray(customFields)
+      ? (customFields as Record<string, unknown>)
+      : {};
+
+  return (
+    <Card>
+      <CardHeader
+        title={
+          <span className="flex items-center gap-1.5">
+            <ListChecks size={15} className="text-slate-500" /> Campos customizados
+          </span>
+        }
+      />
+      <div className="grid grid-cols-1 gap-x-4 px-4 py-2 sm:grid-cols-2">
+        {defs.map((d) => (
+          <Field
+            key={d.id}
+            icon={<ListChecks size={14} />}
+            label={d.label}
+            value={formatCfValue(d.type, values[d.key])}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export function QualificationPanel({
   qualification,
   meeting,
+  customFields,
 }: {
   qualification: LeadDetail["qualification"];
   meeting: LeadDetail["meeting"];
+  customFields?: unknown;
 }) {
   return (
     <div className="space-y-4">
@@ -127,6 +193,8 @@ export function QualificationPanel({
           )}
         </div>
       </Card>
+
+      <CustomFieldsCard customFields={customFields} />
 
       {meeting && (
         <Card>

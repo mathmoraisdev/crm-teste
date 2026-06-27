@@ -14,6 +14,30 @@ export const LEAD_STATUS_META: Record<
   DESCARTADO: { label: "Descartado", tone: "red", order: 5 },
 };
 
+export type PipelineLabels = Partial<Record<LeadStatus, string>>;
+
+/**
+ * Mescla rótulos renomeados por conta sobre os defaults (só o `label`; tom/ordem
+ * permanecem). `labels` aceita o Json bruto do `User.pipelineLabels`.
+ */
+export function resolveStatusMeta(
+  labels?: PipelineLabels | null,
+): typeof LEAD_STATUS_META {
+  if (!labels) return LEAD_STATUS_META;
+  const out = {} as typeof LEAD_STATUS_META;
+  for (const status of Object.keys(LEAD_STATUS_META) as LeadStatus[]) {
+    const override = labels[status];
+    out[status] = {
+      ...LEAD_STATUS_META[status],
+      label:
+        typeof override === "string" && override.trim()
+          ? override.trim()
+          : LEAD_STATUS_META[status].label,
+    };
+  }
+  return out;
+}
+
 /** Ordem das colunas do kanban. */
 export const PIPELINE_ORDER: LeadStatus[] = [
   "NOVO",

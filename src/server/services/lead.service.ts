@@ -3,6 +3,13 @@ import type { Lead, LeadStatus, Prisma } from "@prisma/client";
 import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
+import { mergeCustomFields } from "@/server/services/custom-field.service";
+
+export interface LeadTag {
+  id: string;
+  name: string;
+  color: string;
+}
 
 export interface LeadListItem {
   id: string;
@@ -15,6 +22,7 @@ export interface LeadListItem {
   campaignName: string | null;
   lastMessage: string | null;
   lastMessageAt: Date | null;
+  tags: LeadTag[];
   updatedAt: Date;
 }
 
@@ -28,6 +36,7 @@ export async function listLeads(userId: string): Promise<LeadListItem[]> {
     orderBy: { updatedAt: "desc" },
     include: {
       campaign: { select: { name: true } },
+      tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -47,6 +56,7 @@ export async function listLeads(userId: string): Promise<LeadListItem[]> {
     campaignName: l.campaign?.name ?? null,
     lastMessage: l.messages[0]?.content ?? null,
     lastMessageAt: l.messages[0]?.createdAt ?? null,
+    tags: l.tags,
     updatedAt: l.updatedAt,
   }));
 }
@@ -57,6 +67,7 @@ export async function getLeadDetail(id: string, userId: string) {
     where: { id, userId },
     include: {
       campaign: { select: { id: true, name: true } },
+      tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
       messages: { orderBy: { createdAt: "asc" } },
       qualification: true,
       meeting: true,
@@ -102,14 +113,31 @@ export async function createLead(
 export async function updateLead(
   id: string,
   userId: string,
-  data: { name?: string; phone?: string; email?: string; status?: LeadStatus; optOut?: boolean },
+  data: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    status?: LeadStatus;
+    optOut?: boolean;
+    customFields?: Record<string, unknown>;
+  },
 ): Promise<Lead> {
-  const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
+  const exists = await prisma.lead.findFirst({
+    where: { id, userId },
+    select: { id: true, customFields: true },
+  });
   if (!exists) throw new Error("Lead não encontrado");
 
   const patch: Prisma.LeadUpdateInput = {};
   if (data.name !== undefined) patch.name = data.name;
   if (data.status !== undefined) patch.status = data.status;
+  if (data.customFields !== undefined) {
+    patch.customFields = (await mergeCustomFields(
+      userId,
+      exists.customFields,
+      data.customFields,
+    )) as Prisma.InputJsonValue;
+  }
   if (data.email !== undefined) {
     // string vazia limpa o e-mail; valor preenchido precisa ser válido.
     const email = data.email.trim() ? normalizeEmail(data.email) : null;

@@ -3,6 +3,8 @@ import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
 import { getAiCredentialStatus } from "@/server/services/ai-credential.service";
 import { AccountSettings } from "@/components/app/AccountSettings";
+import { CustomFieldsManager } from "@/components/CustomFieldsManager";
+import { PipelineLabelsManager } from "@/components/PipelineLabelsManager";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,7 @@ export default async function ConfiguracoesPage() {
   return (
     <div className="mx-auto max-w-[720px]">
       <header className="mb-7">
-        <h1 className="font-display text-[26px] font-bold tracking-[-0.02em] text-ink">Configurações</h1>
+        <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink sm:text-[26px]">Configurações</h1>
         <p className="mt-1 text-sm text-slate-500">Gerencie sua conta, seus dados e suas preferências.</p>
       </header>
 
@@ -32,6 +34,14 @@ export default async function ConfiguracoesPage() {
         }}
         aiKey={aiKey}
       />
+
+      <div className="mt-6">
+        <CustomFieldsManager />
+      </div>
+
+      <div className="mt-6">
+        <PipelineLabelsManager />
+      </div>
     </div>
   );
 }
