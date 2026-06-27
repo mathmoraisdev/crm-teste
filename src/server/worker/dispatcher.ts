@@ -224,6 +224,22 @@ export async function processNextJob(now: Date): Promise<boolean> {
   });
   if (claim.count === 0) return false; // outro worker pegou
 
+  // Cap por conta (trial/cortesia): se a conta dona do job já bateu o teto efetivo
+  // hoje, devolve o job p/ amanhã (sem contar tentativa) e segue. Mantém o custo
+  // do fallback Cloud API sob controle no teste grátis.
+  const userId = candidate.lead.userId;
+  const cap = await accountDailyCap(userId);
+  if (!underAccountCap(await sentTodayByUser(userId, now), cap)) {
+    const tomorrow = new Date(now);
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await prisma.outboundJob.update({
+      where: { id: candidate.id },
+      data: { status: "PENDING", attempts: { decrement: 1 }, claimedAt: null, scheduledFor: tomorrow },
+    });
+    return false;
+  }
+
   // Baileys: escolhe um chip da conta dona do job.
   let numberId: string | undefined;
   if (env.WHATSAPP_MODE === "baileys") {
