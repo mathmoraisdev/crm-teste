@@ -1,30 +1,29 @@
 import { prisma } from "@/server/db/client";
 import { isAdminEmail } from "@/lib/admin";
+import { accountActive, daysRemaining, addDays, type BillingOverride } from "@/lib/billing";
+import type { PaymentMethod } from "@prisma/client";
 
 /**
- * True se a conta dona do lead está ativa (pagamento em dia). Fail-safe: se o
- * lead/conta não for encontrado, devolve `false` — preferimos silenciar a IA a
- * responder em nome de uma conta indefinida.
+ * True se a conta dona do lead está ativa (prazo no futuro OU forçada ativa).
+ * Fail-safe: lead/conta inexistente → false (preferimos silenciar a IA).
  */
 export async function isAccountActiveByLead(leadId: string): Promise<boolean> {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { user: { select: { billingActive: true } } },
+    select: { user: { select: { billingOverride: true, accessUntil: true } } },
   });
-  return lead?.user?.billingActive === true;
+  if (!lead?.user) return false;
+  return accountActive(lead.user);
 }
 
-/**
- * True se a conta (por id do usuário logado) está habilitada no painel
- * Financeiro. Gate das ações de campanha (criar/disparar): conta suspensa só
- * vira ativa pela liberação do admin. Fail-safe: usuário inexistente → false.
- */
+/** True se a conta (por id do usuário logado) está ativa. Fail-safe: inexistente → false. */
 export async function isAccountActive(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { billingActive: true },
+    select: { billingOverride: true, accessUntil: true },
   });
-  return user?.billingActive === true;
+  if (!user) return false;
+  return accountActive(user);
 }
 
 /** Linha de conta para o painel admin (Financeiro). */
@@ -32,14 +31,19 @@ export interface AdminAccountRow {
   id: string;
   name: string;
   email: string;
-  billingActive: boolean;
+  active: boolean;
+  billingOverride: BillingOverride;
+  accessUntil: Date | null;
+  daysLeft: number | null;
+  paymentMethod: PaymentMethod | null;
+  paymentDueDate: Date | null;
   isAdmin: boolean;
   numbers: number;
   leads: number;
   createdAt: Date;
 }
 
-/** Lista todas as contas com contadores, para o painel Financeiro. */
+/** Lista todas as contas com status calculado, para o painel Financeiro. */
 export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "asc" },
@@ -47,7 +51,10 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       id: true,
       name: true,
       email: true,
-      billingActive: true,
+      billingOverride: true,
+      accessUntil: true,
+      paymentMethod: true,
+      paymentDueDate: true,
       createdAt: true,
       _count: { select: { whatsAppNumbers: true, leads: true } },
     },
@@ -56,7 +63,12 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     id: u.id,
     name: u.name,
     email: u.email,
-    billingActive: u.billingActive,
+    active: accountActive(u),
+    billingOverride: u.billingOverride as BillingOverride,
+    accessUntil: u.accessUntil,
+    daysLeft: daysRemaining(u.accessUntil),
+    paymentMethod: u.paymentMethod,
+    paymentDueDate: u.paymentDueDate,
     isAdmin: isAdminEmail(u.email),
     numbers: u._count.whatsAppNumbers,
     leads: u._count.leads,
@@ -64,25 +76,66 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
   }));
 }
 
+/** Ação do admin sobre o prazo/override de uma conta. */
+export type AccessAction =
+  | { kind: "extend"; days: number }              // +N dias a partir de max(prazo, hoje); volta p/ AUTO
+  | { kind: "setUntil"; date: Date }              // define a validade exata; volta p/ AUTO
+  | { kind: "forceActive" }                       // libera ignorando a data
+  | { kind: "forceSuspend" }                      // suspende ignorando a data
+  | { kind: "auto" }                              // volta a seguir a data
+  | {                                             // anotação: forma de pgto + vencimento (não afeta acesso)
+      kind: "setInfo";
+      paymentMethod: PaymentMethod | null;
+      paymentDueDate: Date | null;
+    };
+
 /**
- * Ativa/suspende uma conta. Trava de segurança: NUNCA suspende uma conta admin
- * (evita o operador se cortar por engano). Devolve o novo estado.
+ * Aplica uma ação de acesso. Trava: NUNCA suspende/expira uma conta admin
+ * (forceSuspend bloqueado). Devolve `{ id }`.
  */
-export async function setAccountBilling(
+export async function setAccountAccess(
   userId: string,
-  active: boolean,
-): Promise<{ id: string; billingActive: boolean }> {
+  action: AccessAction,
+): Promise<{ id: string }> {
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, accessUntil: true },
   });
   if (!target) throw new Error("Conta não encontrada.");
-  if (!active && isAdminEmail(target.email)) {
+
+  const isAdmin = isAdminEmail(target.email);
+  if (isAdmin && action.kind === "forceSuspend") {
     throw new Error("Não é possível suspender uma conta admin.");
   }
-  return prisma.user.update({
-    where: { id: userId },
-    data: { billingActive: active },
-    select: { id: true, billingActive: true },
-  });
+
+  let data: {
+    billingOverride?: BillingOverride;
+    accessUntil?: Date;
+    paymentMethod?: PaymentMethod | null;
+    paymentDueDate?: Date | null;
+  };
+  switch (action.kind) {
+    case "extend":
+      data = { billingOverride: "AUTO", accessUntil: addDays(target.accessUntil, action.days) };
+      break;
+    case "setUntil":
+      data = { billingOverride: "AUTO", accessUntil: action.date };
+      break;
+    case "forceActive":
+      data = { billingOverride: "ACTIVE" };
+      break;
+    case "forceSuspend":
+      data = { billingOverride: "SUSPENDED" };
+      break;
+    case "auto":
+      data = { billingOverride: "AUTO" };
+      break;
+    case "setInfo":
+      // Só anotação: não toca em billingOverride/accessUntil (acesso intacto).
+      data = { paymentMethod: action.paymentMethod, paymentDueDate: action.paymentDueDate };
+      break;
+  }
+
+  await prisma.user.update({ where: { id: userId }, data, select: { id: true } });
+  return { id: userId };
 }
