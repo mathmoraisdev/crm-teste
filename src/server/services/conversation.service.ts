@@ -11,6 +11,7 @@ import { sendWhatsAppMessage } from "./messaging";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
 import { shouldCreateContact } from "./inbound-resolve";
+import { isAccountActiveByLead } from "@/server/services/account.service";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -180,6 +181,14 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
         data: { status: "CANCELLED", lastError: "opt-out do lead" },
       }),
     ]);
+    return { leadId: lead.id, respond: false, delayMs: 0 };
+  }
+
+  // Gate de billing: conta suspensa (inadimplência) → a IA silencia. O inbound
+  // JÁ foi persistido acima (operador continua vendo o que chegou); só não
+  // geramos resposta automática. Reativar volta a responder mensagens NOVAS,
+  // sem responder retroativamente o acúmulo.
+  if (!(await isAccountActiveByLead(lead.id))) {
     return { leadId: lead.id, respond: false, delayMs: 0 };
   }
 

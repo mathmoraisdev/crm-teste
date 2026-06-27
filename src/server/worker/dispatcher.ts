@@ -114,7 +114,9 @@ export async function claimNextJobForAccount(userId: string, now: Date): Promise
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      lead: { is: { userId } },
+      // billingActive: conta suspensa não dispara (job fica PENDING, volta a
+      // fluir sozinho ao reativar).
+      lead: { is: { userId, user: { is: { billingActive: true } } } },
       OR: [
         { campaignId: null },
         {
@@ -158,6 +160,9 @@ export async function processNextJob(now: Date): Promise<boolean> {
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
+      // billingActive: conta suspensa não dispara (job fica PENDING, volta a
+      // fluir sozinho ao reativar).
+      lead: { is: { user: { is: { billingActive: true } } } },
       OR: [
         { campaignId: null },
         {

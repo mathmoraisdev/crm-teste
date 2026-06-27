@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { env } from "@/lib/env";
+import { isAdminEmail } from "@/lib/admin";
 import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
 import { listConsultantLeads } from "@/server/services/consultant.service";
@@ -10,19 +10,10 @@ import { formatDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-/** E-mails admin do env (separados por vírgula), normalizados. */
-function adminEmails(): Set<string> {
-  return new Set(
-    env.ADMIN_EMAILS.split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
 export default async function ConsultoresPage() {
   const userId = await getCurrentUserId();
   const user = userId ? await getUserById(userId) : null;
-  const isAdmin = !!user && adminEmails().has(user.email.toLowerCase());
+  const isAdmin = isAdminEmail(user?.email);
 
   if (!isAdmin) {
     return (
