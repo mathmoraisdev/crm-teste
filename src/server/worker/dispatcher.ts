@@ -1,8 +1,22 @@
 import { prisma } from "@/server/db/client";
+import type { Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
 import { dispatchOutboundJob } from "@/server/services/messaging";
 import { selectNumber } from "@/server/whatsapp/baileys/selection";
 import { decideNoChipAction } from "./nochip";
+
+/**
+ * Filtro Prisma "conta ativa AGORA" (espelha accountActive): override ACTIVE,
+ * OU AUTO com accessUntil no futuro. SUSPENDED cai fora naturalmente.
+ */
+function activeAccountWhere(now: Date): Prisma.UserWhereInput {
+  return {
+    OR: [
+      { billingOverride: "ACTIVE" },
+      { billingOverride: "AUTO", accessUntil: { gt: now } },
+    ],
+  };
+}
 
 /** Conta quantos jobs já foram enviados hoje (cap diário / warm-up). */
 export async function sentToday(now: Date): Promise<number> {
@@ -114,9 +128,8 @@ export async function claimNextJobForAccount(userId: string, now: Date): Promise
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      // billingActive: conta suspensa não dispara (job fica PENDING, volta a
-      // fluir sozinho ao reativar).
-      lead: { is: { userId, user: { is: { billingActive: true } } } },
+      // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
+      lead: { is: { userId, user: { is: activeAccountWhere(now) } } },
       OR: [
         { campaignId: null },
         {
@@ -160,9 +173,8 @@ export async function processNextJob(now: Date): Promise<boolean> {
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      // billingActive: conta suspensa não dispara (job fica PENDING, volta a
-      // fluir sozinho ao reativar).
-      lead: { is: { user: { is: { billingActive: true } } } },
+      // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
+      lead: { is: { user: { is: activeAccountWhere(now) } } },
       OR: [
         { campaignId: null },
         {
