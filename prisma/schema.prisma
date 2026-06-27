@@ -38,6 +38,11 @@ enum Plan {
   ESCALA
 }
 
+enum AccountRole {
+  ADMIN     // dono da conta — billing, equipe, números
+  OPERADOR  // atende/CRM; sem billing nem gestão de equipe
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -55,9 +60,16 @@ model User {
   // cliente paga e quando vence a próxima mensalidade. Ambos opcionais.
   paymentMethod   PaymentMethod?
   paymentDueDate  DateTime?
-  // Plano comercial atribuído pelo admin (rótulo organizacional — NÃO altera
-  // acesso nem limites). null = ainda não definido. O admin define no /financeiro.
+  // Plano comercial do DONO (null = não definido → entitlements não aplicados).
+  // O admin define no /financeiro. Só faz sentido no dono (ownerId = null).
   plan            Plan?
+  // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
+  role            AccountRole @default(ADMIN)
+  // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
+  // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
+  ownerId         String?
+  owner           User?       @relation("AccountMembers", fields: [ownerId], references: [id], onDelete: Cascade)
+  members         User[]      @relation("AccountMembers")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
