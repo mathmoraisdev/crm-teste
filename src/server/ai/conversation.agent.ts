@@ -58,6 +58,25 @@ export async function interpretSlotChoice(opts: {
 }
 
 /**
+ * Linha "Data de hoje" injetada no prompt de atendimento. O modelo não recebe
+ * timestamps no transcript, então sem isto ele não sabe que dia é hoje — o que
+ * quebra avisos com validade ("válido até DD/MM") e perguntas tipo "abrem hoje?".
+ * Só a DATA (não a hora): o atendimento nunca decide "aberto agora" — isso é regra
+ * do próprio prompt. Timezone padrão Brasília; a data só diverge de outros fusos
+ * BR na janela de ~1h em torno da meia-noite, irrelevante p/ validade de aviso.
+ */
+function brazilTodayLine(): string {
+  const hoje = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date());
+  return `Data de hoje: ${hoje}.`;
+}
+
+/**
  * Agente de ATENDIMENTO — gera a próxima mensagem respondendo o cliente no
  * contexto da empresa (persona + base de conhecimento + horário).
  */
@@ -86,9 +105,10 @@ export async function generateAttendanceReply(opts: {
   const prefix = context || extra ? `${context}${extra}\n\n` : "";
   const text = await opts.ai.generateText({
     tier: "cheap",
-    maxTokens: 400,
+    maxTokens: 700,
     system,
     user:
+      `${brazilTodayLine()}\n\n` +
       `${prefix}` +
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem ao cliente.`,

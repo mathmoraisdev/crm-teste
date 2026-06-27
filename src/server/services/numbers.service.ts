@@ -138,8 +138,12 @@ export async function updateWhatsAppNumber(
   await prisma.whatsAppNumber.update({ where: { id }, data: patch });
 }
 
-// Status offline a partir dos quais um chip pode ser forçado a reparear.
+// Status a partir dos quais um chip pode ser forçado a reparear. Inclui
+// CONNECTING: um número preso "pareando" (QR fechado sem escanear) não cai
+// sozinho p/ um status offline — sem isto ficava sem saída na UI (nenhum botão
+// reabria o QR). Reparear a partir de CONNECTING apenas reinicia o pareamento.
 const RECONNECTABLE_STATUSES = new Set<WhatsAppNumberStatus>([
+  "CONNECTING",
   "BANNED",
   "LOGGED_OUT",
   "DISABLED",
@@ -166,7 +170,7 @@ export async function reconnectWhatsAppNumber(
   if (!rec) throw new Error("Número não encontrado");
   if (!RECONNECTABLE_STATUSES.has(rec.status)) {
     throw new Error(
-      "Só dá pra reconectar um número offline (banido/deslogado/desativado).",
+      "Só dá pra reconectar um número offline ou ainda em pareamento (não um já conectado).",
     );
   }
   // Apaga as creds mortas → o Baileys gera um QR novo em vez de tentar reusar a

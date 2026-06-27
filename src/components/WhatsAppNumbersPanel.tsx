@@ -78,7 +78,9 @@ const LABEL: Record<string, string> = {
 };
 
 // Status offline a partir dos quais o operador pode forçar um re-pareamento.
-const RECONNECTABLE = new Set(["BANNED", "LOGGED_OUT", "DISABLED"]);
+// CONNECTING incluso: um chip preso "pareando" (QR fechado sem escanear) não
+// cai sozinho p/ offline — sem isto não havia botão p/ reabrir o QR.
+const RECONNECTABLE = new Set(["CONNECTING", "BANNED", "LOGGED_OUT", "DISABLED"]);
 
 const STATUS_OPTIONS = Object.keys(LABEL);
 
@@ -208,9 +210,10 @@ export function WhatsAppNumbersPanel() {
     }
   }
 
-  // Reconecta um chip offline (banido/deslogado/desativado): apaga as creds
-  // mortas no servidor, volta p/ CONNECTING e abre o modal de QR apontando p/
-  // este número. As configs (system prompt, modelo…) são preservadas.
+  // Reconecta um chip offline (banido/deslogado/desativado) OU preso em
+  // CONNECTING (QR fechado sem escanear): apaga as creds mortas no servidor,
+  // volta p/ CONNECTING e abre o modal de QR apontando p/ este número. As
+  // configs (system prompt, modelo…) são preservadas.
   async function reconnectNumber(n: NumberItem) {
     setBusyId(n.id);
     try {
@@ -412,8 +415,16 @@ export function WhatsAppNumbersPanel() {
                           size="sm"
                           onClick={() => reconnectNumber(n)}
                           loading={busyId === n.id}
-                          title="Reconectar (reescanear QR, mantém as configs)"
-                          aria-label="Reconectar chip"
+                          title={
+                            n.status === "CONNECTING"
+                              ? "Mostrar/atualizar o QR de pareamento (mantém as configs)"
+                              : "Reconectar (reescanear QR, mantém as configs)"
+                          }
+                          aria-label={
+                            n.status === "CONNECTING"
+                              ? "Mostrar QR de pareamento"
+                              : "Reconectar chip"
+                          }
                           className="text-brand-600 hover:bg-brand-50"
                         >
                           <RefreshCw size={14} />
