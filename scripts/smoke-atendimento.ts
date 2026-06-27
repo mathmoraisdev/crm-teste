@@ -16,6 +16,10 @@
 // para a resposta da IA ser só persistida — nunca enviada por um chip real.
 process.env.WHATSAPP_MODE = "mock";
 
+// Marca o arquivo como módulo (escopo próprio) — sem isto, `uid` colide com a
+// declaração homônima de smoke-financeiro.ts no type-check do build.
+export {};
+
 const KB =
   "Vendemos guarda-chuvas e capas de chuva. Frete grátis acima de R$100. " +
   "Entregamos em todo o estado de SP em até 3 dias úteis. " +

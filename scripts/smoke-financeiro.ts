@@ -19,6 +19,10 @@ process.env.WHATSAPP_MODE = "mock";
 const ADMIN_EMAIL = "smoke-fin-admin@example.com";
 process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 
+// Marca o arquivo como módulo (escopo próprio) — sem isto, `uid` colide com a
+// declaração homônima de smoke-atendimento.ts no type-check do build.
+export {};
+
 function uid(tag: string) {
   return `smoke-fin-${tag}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
