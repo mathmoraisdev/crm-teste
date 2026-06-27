@@ -18,6 +18,7 @@ const schema = z.discriminatedUnion("kind", [
     kind: z.literal("setInfo"),
     paymentMethod: z.enum(["PIX", "CARTAO", "BOLETO", "TRANSFERENCIA"]).nullable(),
     paymentDueDate: z.string().datetime().nullable(),
+    amountCents: z.number().int().positive().nullable(), // centavos; null = sem receita
   }),
 ]);
 
@@ -45,6 +46,7 @@ export async function POST(
       kind: "setInfo",
       paymentMethod: parsed.data.paymentMethod,
       paymentDueDate: parsed.data.paymentDueDate ? new Date(parsed.data.paymentDueDate) : null,
+      amountCents: parsed.data.amountCents,
     };
   } else {
     action = parsed.data as AccessAction;
