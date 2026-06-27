@@ -5,13 +5,13 @@ import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { normalizePhone } from "@/lib/phone";
 import { listWhatsAppNumbers } from "@/server/services/numbers.service";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const [numbers, user] = await Promise.all([
     listWhatsAppNumbers(userId),
@@ -35,7 +35,7 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   if (env.WHATSAPP_MODE !== "baileys") {
     return NextResponse.json(

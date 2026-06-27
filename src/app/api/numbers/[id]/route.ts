@@ -5,7 +5,7 @@ import {
   deleteWhatsAppNumber,
   updateWhatsAppNumber,
 } from "@/server/services/numbers.service";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantUserId } from "@/lib/tenant";
 import { ALL_AI_MODEL_VALUES } from "@/lib/ai-models";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +56,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -82,7 +82,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
