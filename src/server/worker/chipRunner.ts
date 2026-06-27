@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow } from "@/lib/sendWindow";
 import { sleep } from "@/lib/humanize";
 import { dispatchOutboundJob } from "@/server/services/messaging";
-import { claimNextJobForAccount, sentTodayByUser, underAccountCap } from "./dispatcher";
+import { claimNextJobForAccount, sentTodayByUser, underAccountCap, accountDailyCap } from "./dispatcher";
 import { perChipDelayMs } from "./pacing";
 
 /**
@@ -22,7 +22,9 @@ export async function runChip(
       await sleep(60_000);
       continue;
     }
-    if (!underAccountCap(await sentTodayByUser(chip.userId, now), env.WHATSAPP_DAILY_CAP)) {
+    // Cap por conta: trial/cortesia (sem pagamento lançado) usa teto menor.
+    const cap = await accountDailyCap(chip.userId);
+    if (!underAccountCap(await sentTodayByUser(chip.userId, now), cap)) {
       await sleep(60_000);
       continue;
     }
