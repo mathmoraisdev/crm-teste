@@ -41,6 +41,17 @@ export function underAccountCap(sentToday: number, cap: number): boolean {
   return cap <= 0 || sentToday < cap;
 }
 
+/**
+ * Cap diário EFETIVO de uma conta. Conta com pagamento lançado usa o cap normal
+ * (`normalCap`, podendo ser 0 = ilimitado/modo massa). Conta sem pagamento (trial
+ * ou cortesia) usa o teto de trial (`trialCap`) — mesmo quando o normal é ilimitado.
+ * `trialCap <= 0` desliga o recurso (cai no normal). Convenção 0=ilimitado mantida.
+ */
+export function effectiveDailyCap(hasPayment: boolean, normalCap: number, trialCap: number): number {
+  if (hasPayment || trialCap <= 0) return normalCap;
+  return trialCap;
+}
+
 /** Quantos jobs cada número já enviou hoje (p/ cap por chip — Baileys). */
 export async function sentTodayByNumber(now: Date): Promise<Record<string, number>> {
   const start = new Date(now);

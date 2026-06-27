@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cappedCampaignIds, underAccountCap } from "./dispatcher";
+import { cappedCampaignIds, underAccountCap, effectiveDailyCap } from "./dispatcher";
 
 describe("cappedCampaignIds", () => {
   it("marca como no teto a campanha que já enviou >= dailyCap hoje", () => {
@@ -36,5 +36,20 @@ describe("underAccountCap", () => {
   it("respeita o teto quando positivo", () => {
     expect(underAccountCap(999, 1000)).toBe(true);
     expect(underAccountCap(1000, 1000)).toBe(false);
+  });
+});
+
+describe("effectiveDailyCap", () => {
+  it("conta com pagamento lançado usa o cap normal", () => {
+    expect(effectiveDailyCap(true, 0, 30)).toBe(0);   // pago em modo massa = ilimitado
+    expect(effectiveDailyCap(true, 500, 30)).toBe(500);
+  });
+  it("conta sem pagamento (trial/cortesia) usa o teto de trial", () => {
+    expect(effectiveDailyCap(false, 0, 30)).toBe(30);   // mesmo com normal ilimitado, trial trava em 30
+    expect(effectiveDailyCap(false, 500, 30)).toBe(30);
+  });
+  it("teto de trial <= 0 desliga o recurso (cai no normal)", () => {
+    expect(effectiveDailyCap(false, 500, 0)).toBe(500);
+    expect(effectiveDailyCap(false, 0, 0)).toBe(0);
   });
 });
