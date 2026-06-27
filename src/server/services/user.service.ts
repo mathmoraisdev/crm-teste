@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { normalizeEmail, sendEmail } from "@/lib/email";
 import { generateToken, hashToken } from "@/lib/tokens";
+import { env } from "@/lib/env";
 
 /** Base para os links nos e-mails (sem barra final). */
 function appUrl(): string {
@@ -35,15 +36,20 @@ export async function registerUser(
   });
   if (existing) throw new Error("Já existe uma conta com este e-mail.");
 
+  const trialDays = env.TRIAL_DAYS;
+  const accessUntil =
+    trialDays > 0 ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000) : null;
+
   const user = await prisma.user.create({
     data: {
       name: input.name.trim(),
       email,
       whatsapp: input.whatsapp?.trim() || null,
       passwordHash: hashPassword(input.password),
-      // Self-registration nasce SUSPENSA: o admin libera no painel Financeiro
-      // (protege a chave de IA da plataforma e dá controle de inadimplência).
-      billingActive: false,
+      // Trial automático: nasce AUTO com prazo. TRIAL_DAYS=0 → accessUntil=null
+      // (nasce suspenso, comportamento antigo). Admin estende no /financeiro.
+      billingOverride: "AUTO",
+      accessUntil,
     },
     select: { id: true, sessionEpoch: true },
   });
