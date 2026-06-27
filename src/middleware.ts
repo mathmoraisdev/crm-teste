@@ -15,6 +15,7 @@ import { SESSION_COOKIE, isAuthEnabled, verifySession } from "@/lib/auth";
  */
 const PUBLIC_PREFIXES = [
   "/",
+  "/landing", // preview da landing (sempre acessível, mesmo com a raiz indo pro login)
   "/signup",
   "/login",
   "/api/auth",

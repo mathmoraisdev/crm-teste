@@ -2,8 +2,15 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/app/Logo";
+
+// Selos honestos (sem métricas/depoimentos inventados): termos comerciais reais.
+const PERKS = [
+  "Sem fidelidade — cancele quando quiser",
+  "Conecte seu WhatsApp em 30 segundos",
+];
 
 function LoginForm() {
   const router = useRouter();
@@ -132,15 +139,16 @@ export default function LoginPage() {
           <p className="mt-4 max-w-[360px] text-[16px] leading-relaxed text-[#9FBCAF]">
             Acesse seu painel, acompanhe seus leads e dispare a próxima campanha em segundos.
           </p>
-          <div className="mt-8 flex max-w-[380px] items-center gap-2.5 rounded-[14px] border border-white/10 bg-white/5 px-4.5 py-4">
-            <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] bg-mint font-extrabold text-forest">★</div>
-            <div>
-              <div className="text-sm font-bold leading-tight text-white">
-                &ldquo;Aumentei minhas vendas em 40% no primeiro mês.&rdquo;
-              </div>
-              <div className="mt-0.5 text-[12.5px] text-[#9FBCAF]">Marina C. · Loja de roupas</div>
-            </div>
-          </div>
+          <ul className="mt-8 flex max-w-[380px] flex-col gap-3">
+            {PERKS.map((perk) => (
+              <li key={perk} className="flex items-center gap-2.5 text-[14.5px] font-semibold text-[#D8E6DE]">
+                <span className="flex h-6 w-6 flex-none items-center justify-center rounded-lg bg-white/10 text-mint">
+                  <Check size={14} />
+                </span>
+                {perk}
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="relative text-[12.5px] text-[#6E8579]">© 2026 Disparador.ai</div>
       </div>
