@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet } from "lucide-react";
+import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
@@ -15,13 +15,22 @@ const BASE_NAV = [
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+export function Sidebar({
+  isAdmin = false,
+  isAccountAdmin = false,
+}: {
+  isAdmin?: boolean; // admin DA PLATAFORMA (Financeiro)
+  isAccountAdmin?: boolean; // dono/ADMIN DA CONTA (Equipe)
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
-  const nav = isAdmin
-    ? [...BASE_NAV, { href: "/financeiro", label: "Financeiro", icon: Wallet }]
-    : BASE_NAV;
+  // Equipe é do dono da conta; Financeiro é do admin da plataforma.
+  const nav = [
+    ...BASE_NAV,
+    ...(isAccountAdmin ? [{ href: "/equipe", label: "Equipe", icon: UsersRound }] : []),
+    ...(isAdmin ? [{ href: "/financeiro", label: "Financeiro", icon: Wallet }] : []),
+  ];
 
   async function logout() {
     setLoggingOut(true);
