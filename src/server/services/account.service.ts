@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { isAdminEmail } from "@/lib/admin";
 import { accountActive, daysRemaining, addDays, type BillingOverride } from "@/lib/billing";
-import type { PaymentMethod } from "@prisma/client";
+import type { PaymentMethod, Plan } from "@prisma/client";
 
 /**
  * True se a conta dona do lead está ativa (prazo no futuro OU forçada ativa).
@@ -78,17 +78,20 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
 
 /** Ação do admin sobre o prazo/override de uma conta. */
 export type AccessAction =
+  | { kind: "trial"; days: number }               // teste: acesso = HOJE + N (hard reset, não soma) + limpa pagamento; AUTO
   | { kind: "extend"; days: number }              // +N dias a partir de max(prazo, hoje); volta p/ AUTO
   | { kind: "setUntil"; date: Date }              // define a validade exata; volta p/ AUTO
   | { kind: "forceActive" }                       // libera ignorando a data
   | { kind: "forceSuspend" }                      // suspende ignorando a data
   | { kind: "auto" }                              // volta a seguir a data
+  | { kind: "clearPayment" }                      // remove a marcação de pagamento e RECALCULA o acesso pelos pgtos restantes
   | {                                             // lança pagamento: forma + vencimento; vencimento LIBERA acesso até a data
       kind: "setInfo";
       paymentMethod: PaymentMethod | null;
       paymentDueDate: Date | null;
       amountCents: number | null; // null/0 = não registra receita; >0 = cria Payment
-    };
+    }
+  | { kind: "setPlan"; plan: Plan | null }; // rótulo comercial; não toca em acesso/override
 
 /**
  * Aplica uma ação de acesso. Trava: NUNCA suspende/expira uma conta admin
@@ -97,6 +100,7 @@ export type AccessAction =
 export async function setAccountAccess(
   userId: string,
   action: AccessAction,
+  registeredById?: string | null, // admin que lançou (gravado no Payment; null = desconhecido)
 ): Promise<{ id: string }> {
   const target = await prisma.user.findUnique({
     where: { id: userId },
@@ -114,8 +118,24 @@ export async function setAccountAccess(
     accessUntil?: Date;
     paymentMethod?: PaymentMethod | null;
     paymentDueDate?: Date | null;
+    plan?: Plan | null;
   };
   switch (action.kind) {
+    case "setPlan":
+      // Só o rótulo. Não mexe em billingOverride/accessUntil de propósito.
+      data = { plan: action.plan };
+      break;
+    case "trial":
+      // Teste: prazo = HOJE + N, sem somar sobre o vigente (hard reset). Limpa a
+      // marcação de pagamento — trial ≠ pago (e `paymentDueDate=null` faz a conta
+      // voltar a respeitar o teto de disparo do trial). `addDays(null, n)` = now + n.
+      data = {
+        billingOverride: "AUTO",
+        accessUntil: addDays(null, action.days),
+        paymentMethod: null,
+        paymentDueDate: null,
+      };
+      break;
     case "extend":
       data = { billingOverride: "AUTO", accessUntil: addDays(target.accessUntil, action.days) };
       break;
@@ -153,6 +173,7 @@ export async function setAccountAccess(
               amountCents: action.amountCents!,
               method: action.paymentMethod,
               coversUntil: action.paymentDueDate, // snapshot do prazo que este pgto cobriu
+              registeredById: registeredById ?? null, // quem lançou (admin logado)
             },
           });
         });
@@ -160,6 +181,23 @@ export async function setAccountAccess(
       }
       // Sem valor: comportamento de hoje, só o update.
       await prisma.user.update({ where: { id: userId }, data: infoData, select: { id: true } });
+      return { id: userId };
+    }
+    case "clearPayment": {
+      // Remover lançamento: zera a anotação (forma/vencimento) E recalcula o acesso
+      // a partir do pagamento restante mais recente (snapshot em `coversUntil`). Sem
+      // pagamento sobrando → accessUntil = null (AUTO + null = suspenso). Não força
+      // override: respeita ACTIVE/SUSPENDED manual; só corrige a DATA derivada do pgto.
+      const lastPaid = await prisma.payment.findFirst({
+        where: { accountId: userId, coversUntil: { not: null } },
+        orderBy: { coversUntil: "desc" },
+        select: { coversUntil: true },
+      });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { paymentMethod: null, paymentDueDate: null, accessUntil: lastPaid?.coversUntil ?? null },
+        select: { id: true },
+      });
       return { id: userId };
     }
   }

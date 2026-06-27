@@ -11,7 +11,7 @@ vi.mock("@/server/db/client", () => ({
   prisma: {
     lead: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
-    payment: { create: vi.fn() },
+    payment: { create: vi.fn(), findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -59,6 +59,94 @@ describe("setAccountAccess", () => {
       setAccountAccess("u-admin", { kind: "forceSuspend" }),
     ).rejects.toThrow(/admin/i);
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("trial: define HOJE+N (não soma sobre prazo futuro) e limpa pagamento", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli",
+      email: "cliente@exemplo.com",
+      accessUntil: FUTURE, // prazo futuro existente: trial NÃO deve somar em cima dele
+    });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    const before = Date.now();
+    await setAccountAccess("u-cli", { kind: "trial", days: 3 });
+    const arg = (prisma.user.update as any).mock.calls[0][0];
+    expect(arg.data.billingOverride).toBe("AUTO");
+    expect(arg.data.paymentMethod).toBeNull();
+    expect(arg.data.paymentDueDate).toBeNull();
+    // ~3 dias a partir de AGORA (e bem antes de FUTURE = 10/07), provando que não somou.
+    const ms = (arg.data.accessUntil as Date).getTime();
+    expect(ms).toBeGreaterThanOrEqual(before + 3 * 86400_000 - 5000);
+    expect(ms).toBeLessThan(FUTURE.getTime());
+  });
+
+  it("setPlan: grava o plano sem tocar em acesso/override", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli",
+      email: "cliente@exemplo.com",
+      accessUntil: FUTURE,
+    });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+
+    await setAccountAccess("u-cli", { kind: "setPlan", plan: "PROFISSIONAL" });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "u-cli" },
+      data: { plan: "PROFISSIONAL" },
+      select: { id: true },
+    });
+  });
+
+  it("setPlan: aceita null (remover plano)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli",
+      email: "cliente@exemplo.com",
+      accessUntil: FUTURE,
+    });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+
+    await setAccountAccess("u-cli", { kind: "setPlan", plan: null });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "u-cli" },
+      data: { plan: null },
+      select: { id: true },
+    });
+  });
+
+  it("clearPayment: recalcula accessUntil pelo pgto restante mais recente", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli", email: "cliente@exemplo.com", accessUntil: FUTURE,
+    });
+    (prisma.payment.findFirst as any).mockResolvedValue({ coversUntil: PAST });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", { kind: "clearPayment" });
+    const arg = (prisma.user.update as any).mock.calls[0][0];
+    expect(arg.data.paymentMethod).toBeNull();
+    expect(arg.data.paymentDueDate).toBeNull();
+    expect(arg.data.accessUntil).toBe(PAST);
+    expect(arg.data).not.toHaveProperty("billingOverride"); // não força override
+  });
+
+  it("clearPayment: sem pgto restante zera o acesso (accessUntil=null)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      id: "u-cli", email: "cliente@exemplo.com", accessUntil: FUTURE,
+    });
+    (prisma.payment.findFirst as any).mockResolvedValue(null);
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", { kind: "clearPayment" });
+    const arg = (prisma.user.update as any).mock.calls[0][0];
+    expect(arg.data.accessUntil).toBeNull();
   });
 
   it("estende N dias e zera override p/ AUTO", async () => {
@@ -134,21 +222,44 @@ describe("setAccountAccess", () => {
     expect(arg.data).not.toHaveProperty("accessUntil");
   });
 
-  it("setInfo COM valor cria Payment + estende acesso (transação)", async () => {
+  it("setInfo COM valor cria Payment (gravando o admin que lançou) + estende acesso", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ id: "u-cli", email: "c@x.com", accessUntil: null });
+    const paymentCreate = vi.fn().mockResolvedValue({ id: "pay-1" });
     (prisma.$transaction as any).mockImplementation(async (fn: any) =>
       fn({
         user: { update: vi.fn().mockResolvedValue({ id: "u-cli" }) },
-        payment: { create: vi.fn().mockResolvedValue({ id: "pay-1" }) },
+        payment: { create: paymentCreate },
       }),
     );
     const { setAccountAccess } = await import("./account.service");
     const due = new Date("2026-07-27T12:00:00Z");
-    await setAccountAccess("u-cli", {
-      kind: "setInfo", paymentMethod: "PIX", paymentDueDate: due, amountCents: 12990,
-    });
+    await setAccountAccess(
+      "u-cli",
+      { kind: "setInfo", paymentMethod: "PIX", paymentDueDate: due, amountCents: 12990 },
+      "admin-1",
+    );
     expect(prisma.$transaction).toHaveBeenCalled();
+    expect(paymentCreate.mock.calls[0][0].data).toMatchObject({
+      accountId: "u-cli", amountCents: 12990, method: "PIX", coversUntil: due, registeredById: "admin-1",
+    });
+  });
+
+  it("setInfo COM valor sem admin informado grava registeredById null", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ id: "u-cli", email: "c@x.com", accessUntil: null });
+    const paymentCreate = vi.fn().mockResolvedValue({ id: "pay-2" });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        user: { update: vi.fn().mockResolvedValue({ id: "u-cli" }) },
+        payment: { create: paymentCreate },
+      }),
+    );
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", {
+      kind: "setInfo", paymentMethod: "PIX", paymentDueDate: null, amountCents: 9900,
+    });
+    expect(paymentCreate.mock.calls[0][0].data.registeredById).toBe(null);
   });
 
   it("setInfo SEM valor não cria Payment (só update da conta)", async () => {
