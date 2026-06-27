@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { normalizePhone } from "@/lib/phone";
-import { listWhatsAppNumbers } from "@/server/services/numbers.service";
+import { listWhatsAppNumbers, assertNumberQuota } from "@/server/services/numbers.service";
 import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +61,15 @@ export async function POST(req: NextRequest) {
   const phone = normalizePhone(parsed.data.phone);
   if (!phone) {
     return NextResponse.json({ error: "Número inválido (use E.164, ex.: +5511...)" }, { status: 400 });
+  }
+  // Entitlements: respeita o teto de números do plano (grandfather/admin = sem limite).
+  try {
+    await assertNumberQuota(userId, phone);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Limite de números atingido." },
+      { status: 400 },
+    );
   }
   const label = parsed.data.label.trim();
   const slug = label.replace(/[^a-z0-9-]/gi, "_").toLowerCase();

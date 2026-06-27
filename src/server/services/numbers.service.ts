@@ -1,6 +1,40 @@
 import { prisma } from "@/server/db/client";
 import type { WhatsAppNumberStatus, Prisma } from "@prisma/client";
 import { sentTodayByNumber } from "@/server/worker/dispatcher";
+import { isAdminEmail } from "@/lib/admin";
+import { PLAN_LIMITS } from "@/lib/plans";
+
+/**
+ * Entitlements: garante que o tenant pode adicionar mais um número.
+ *
+ * - `plan == null` (grandfather) ou admin da plataforma → sem limite.
+ * - Re-pareamento de um número que JÁ existe (mesmo phone) não conta como novo.
+ * - Caso contrário, bloqueia quando os números existentes já atingiram
+ *   `PLAN_LIMITS[plan].maxNumbers`.
+ */
+export async function assertNumberQuota(userId: string, phone: string): Promise<void> {
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true },
+  });
+  if (!owner) throw new Error("Conta não encontrada");
+  if (!owner.plan || isAdminEmail(owner.email)) return; // grandfather / admin
+
+  // Upsert por (userId, phone): se já existe, é re-pareamento — não é número novo.
+  const existing = await prisma.whatsAppNumber.findUnique({
+    where: { userId_phone: { userId, phone } },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const max = PLAN_LIMITS[owner.plan].maxNumbers;
+  const count = await prisma.whatsAppNumber.count({ where: { userId } });
+  if (count >= max) {
+    throw new Error(
+      `Seu plano permite ${max} ${max === 1 ? "número" : "números"} de WhatsApp.`,
+    );
+  }
+}
 
 export interface WhatsAppNumberListItem {
   id: string;
