@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { formatDateTime } from "@/lib/utils";
-import { AccountBillingToggle } from "@/components/app/AccountBillingToggle";
+import { AccountAccessModal } from "@/components/app/AccountAccessModal";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +43,9 @@ export default async function FinanceiroPage() {
           Financeiro
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Ative ou suspenda contas conforme o pagamento. Conta suspensa: a IA não
-          responde e o disparo congela até a reativação.
+          Gerencie o prazo de acesso de cada conta. O acesso expira sozinho na
+          validade (trial ou pago); suspensa/vencida: a IA não responde e o
+          disparo congela até estender ou forçar ativo.
         </p>
       </div>
 
@@ -56,6 +57,8 @@ export default async function FinanceiroPage() {
               <Th>Chips</Th>
               <Th>Leads</Th>
               <Th>Criada</Th>
+              <Th>Validade</Th>
+              <Th>Pagamento</Th>
               <Th>Status</Th>
               <Th>Ação</Th>
             </tr>
@@ -79,16 +82,35 @@ export default async function FinanceiroPage() {
                 <Td className="whitespace-nowrap text-slate-500">
                   {formatDateTime(a.createdAt)}
                 </Td>
+                <Td className="whitespace-nowrap text-slate-500">
+                  {a.accessUntil ? formatDateTime(a.accessUntil) : "—"}
+                  {a.daysLeft != null && (
+                    <span className="ml-1 text-xs text-slate-400">({a.daysLeft}d)</span>
+                  )}
+                </Td>
+                <Td className="whitespace-nowrap text-slate-500">
+                  {a.paymentMethod
+                    ? ({ PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" }[a.paymentMethod])
+                    : "—"}
+                  {a.paymentDueDate && (
+                    <span className="ml-1 text-xs text-slate-400">
+                      vence {formatDateTime(a.paymentDueDate)}
+                    </span>
+                  )}
+                </Td>
                 <Td>
-                  <Badge tone={a.billingActive ? "green" : "slate"}>
-                    {a.billingActive ? "Ativo" : "Suspenso"}
+                  <Badge tone={a.active ? "green" : "slate"}>
+                    {a.active ? "Ativo" : "Suspenso"}
                   </Badge>
                 </Td>
                 <Td>
-                  <AccountBillingToggle
+                  <AccountAccessModal
                     accountId={a.id}
-                    active={a.billingActive}
-                    disabled={a.isAdmin}
+                    active={a.active}
+                    isAdmin={a.isAdmin}
+                    daysLeft={a.daysLeft}
+                    paymentMethod={a.paymentMethod}
+                    paymentDueDate={a.paymentDueDate ? a.paymentDueDate.toISOString() : null}
                   />
                 </Td>
               </tr>
