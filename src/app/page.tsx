@@ -33,7 +33,7 @@ const STEPS = [
 const FEATURES = [
   {
     title: "IA que qualifica e agenda",
-    desc: "A IA responde cada lead, faz as perguntas certas, dá um score de 0 a 100 e marca a reunião na sua agenda — sozinha.",
+    desc: "A IA responde cada lead, faz as perguntas certas, dá um score de 0 a 100 e propõe o horário da reunião com base nas respostas.",
   },
   {
     title: "Disparo em massa",
@@ -48,8 +48,8 @@ const FEATURES = [
     desc: "Programe disparos para o melhor horário. Sua campanha sai sozinha, mesmo com o computador desligado.",
   },
   {
-    title: "Proteção anti-bloqueio",
-    desc: "Aquecimento de número e envio com cadência humana para proteger sua conta de bloqueios.",
+    title: "Envio com cadência humana",
+    desc: "Aquecimento de número, intervalos ajustáveis e fila com ritmo humano para reduzir o risco de bloqueio.",
   },
   {
     title: "Relatórios em tempo real",
@@ -62,21 +62,23 @@ const PLANS = [
     name: "Inicial",
     desc: "Para começar a vender no WhatsApp.",
     price: "R$97",
-    cta: "Falar com um consultor",
+    cta: "Começar grátis",
+    selfServe: true,
     features: ["1 número de WhatsApp", "1.000 disparos / mês", "CRM básico", "Importação por CSV"],
   },
   {
     name: "Profissional",
     desc: "Para escalar de verdade as vendas.",
     price: "R$197",
-    cta: "Falar com um consultor",
+    cta: "Começar grátis",
+    selfServe: true,
     featured: true,
     features: [
       "1 número de WhatsApp",
       "10.000 disparos / mês",
       "CRM completo + Kanban",
       "Campanhas e agendamento",
-      "Proteção anti-bloqueio",
+      "Cadência humana e aquecimento",
     ],
   },
   {
@@ -84,14 +86,14 @@ const PLANS = [
     desc: "Para agências e times de vendas.",
     price: "R$397",
     cta: "Falar com um consultor",
-    features: ["3 números de WhatsApp", "Disparos ilimitados", "Acesso à API", "Multiusuário", "Suporte prioritário"],
+    features: ["3 números de WhatsApp", "Volume sob medida", "Acesso à API", "Multiusuário", "Suporte prioritário"],
   },
 ];
 
 const FAQ = [
   {
     q: "Vou tomar bloqueio no meu WhatsApp?",
-    a: "Usamos aquecimento de número e envio com cadência humana para reduzir drasticamente o risco. Você controla o intervalo e a quantidade por hora, tudo com segurança.",
+    a: "Nenhuma ferramenta de disparo elimina o risco — ele existe. O que fazemos é reduzi-lo ao máximo: aquecimento de número, cadência humana e limites por hora que você controla. Quanto mais natural for o ritmo de envio, menor o risco.",
   },
   {
     q: "Preciso instalar algum programa?",
@@ -168,7 +170,7 @@ export default function LandingPage() {
             </h1>
             <p className="mt-5 max-w-[600px] text-[17px] leading-relaxed text-slate-600 md:text-[19px]">
               Envie campanhas para milhares de contatos no WhatsApp e deixe a IA responder cada
-              resposta, qualificar o lead com um score e marcar a reunião — tudo num CRM em tempo real.
+              resposta, qualificar o lead com um score e propor o horário da reunião — tudo num CRM em tempo real.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -237,6 +239,9 @@ export default function LandingPage() {
               <div className="mt-0.5 font-display text-[20px] font-bold text-brand-500">+2.500 ✓</div>
             </div>
           </div>
+          <p className="mt-5 text-center font-mono text-[11px] uppercase tracking-[0.1em] text-slate-400">
+            Imagem ilustrativa da tela do produto · dados de exemplo
+          </p>
         </div>
       </section>
 
@@ -334,21 +339,34 @@ export default function LandingPage() {
                   <span className={`font-display text-[46px] font-bold leading-none tracking-[-0.03em] ${p.featured ? "text-white" : ""}`}>{p.price}</span>
                   <span className={`mb-1.5 text-sm font-semibold ${p.featured ? "text-[#9FBCAF]" : "text-slate-500"}`}>/mês</span>
                 </div>
-                <ConsultantModal
-                  plan={p.name}
-                  trigger={
-                    <button
-                      type="button"
-                      className={
-                        p.featured
-                          ? "relative mt-6 rounded-xl bg-brand-500 py-3.5 text-center text-[15px] font-bold text-white shadow-[0_12px_26px_-10px_rgba(14,164,107,.7)] transition-colors hover:bg-brand-400"
-                          : "relative mt-6 rounded-xl border border-[#E0E7E3] bg-[#F1F5F3] py-3.5 text-center text-[15px] font-bold text-ink transition-colors hover:border-brand-100 hover:bg-brand-50"
-                      }
-                    >
-                      {p.cta}
-                    </button>
-                  }
-                />
+                {p.selfServe ? (
+                  <Link
+                    href="/signup"
+                    className={
+                      p.featured
+                        ? "relative mt-6 block rounded-xl bg-brand-500 py-3.5 text-center text-[15px] font-bold text-white shadow-[0_12px_26px_-10px_rgba(14,164,107,.7)] transition-colors hover:bg-brand-400"
+                        : "relative mt-6 block rounded-xl border border-[#E0E7E3] bg-[#F1F5F3] py-3.5 text-center text-[15px] font-bold text-ink transition-colors hover:border-brand-100 hover:bg-brand-50"
+                    }
+                  >
+                    {p.cta}
+                  </Link>
+                ) : (
+                  <ConsultantModal
+                    plan={p.name}
+                    trigger={
+                      <button
+                        type="button"
+                        className={
+                          p.featured
+                            ? "relative mt-6 rounded-xl bg-brand-500 py-3.5 text-center text-[15px] font-bold text-white shadow-[0_12px_26px_-10px_rgba(14,164,107,.7)] transition-colors hover:bg-brand-400"
+                            : "relative mt-6 rounded-xl border border-[#E0E7E3] bg-[#F1F5F3] py-3.5 text-center text-[15px] font-bold text-ink transition-colors hover:border-brand-100 hover:bg-brand-50"
+                        }
+                      >
+                        {p.cta}
+                      </button>
+                    }
+                  />
+                )}
                 <div className={`relative my-6 h-px ${p.featured ? "bg-[#1E3A2C]" : "bg-[#F0F3F1]"}`} />
                 <div className="relative flex flex-col gap-3">
                   {p.features.map((f) => (
