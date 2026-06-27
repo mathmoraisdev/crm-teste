@@ -20,7 +20,9 @@ export interface RegisterInput {
 }
 
 /** Cria uma conta. Lança erro amigável em e-mail inválido/duplicado. */
-export async function registerUser(input: RegisterInput): Promise<{ id: string }> {
+export async function registerUser(
+  input: RegisterInput,
+): Promise<{ id: string; sessionEpoch: number }> {
   const email = normalizeEmail(input.email);
   if (!email) throw new Error("E-mail inválido.");
   if (input.password.length < 8) {
@@ -39,22 +41,27 @@ export async function registerUser(input: RegisterInput): Promise<{ id: string }
       email,
       whatsapp: input.whatsapp?.trim() || null,
       passwordHash: hashPassword(input.password),
+      // Self-registration nasce SUSPENSA: o admin libera no painel Financeiro
+      // (protege a chave de IA da plataforma e dá controle de inadimplência).
+      billingActive: false,
     },
-    select: { id: true },
+    select: { id: true, sessionEpoch: true },
   });
-  return { id: user.id };
+  return { id: user.id, sessionEpoch: user.sessionEpoch };
 }
 
-/** Verifica credenciais; devolve o id do usuário ou null. */
+/** Verifica credenciais; devolve `{ id, sessionEpoch }` do usuário ou null. */
 export async function authenticateUser(
   rawEmail: string,
   password: string,
-): Promise<string | null> {
+): Promise<{ id: string; sessionEpoch: number } | null> {
   const email = normalizeEmail(rawEmail);
   if (!email) return null;
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return null;
-  return verifyPassword(password, user.passwordHash) ? user.id : null;
+  return verifyPassword(password, user.passwordHash)
+    ? { id: user.id, sessionEpoch: user.sessionEpoch }
+    : null;
 }
 
 /** Dados públicos do usuário (para a UI). */
@@ -124,13 +131,51 @@ export async function resetPassword(token: string, newPassword: string): Promise
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash: hashPassword(newPassword) },
+      // Incrementa o epoch: desloga qualquer sessão antiga após o reset.
+      data: { passwordHash: hashPassword(newPassword), sessionEpoch: { increment: 1 } },
     }),
     prisma.passwordResetToken.update({
       where: { id: record.id },
       data: { usedAt: new Date() },
     }),
   ]);
+}
+
+/**
+ * Troca a senha do usuário LOGADO, exigindo a senha atual (self-service no app,
+ * sem token/e-mail). Lança erro amigável se a senha atual estiver errada, a nova
+ * for curta ou igual à atual.
+ */
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ sessionEpoch: number }> {
+  if (newPassword.length < 8) {
+    throw new Error("A nova senha precisa ter ao menos 8 caracteres.");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true },
+  });
+  if (!user) throw new Error("Conta não encontrada.");
+
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    throw new Error("Senha atual incorreta.");
+  }
+  if (verifyPassword(newPassword, user.passwordHash)) {
+    throw new Error("A nova senha precisa ser diferente da atual.");
+  }
+
+  // Incrementa o epoch: invalida as outras sessões. O chamador re-assina o
+  // cookie do dispositivo atual com o novo epoch para não se deslogar.
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: hashPassword(newPassword), sessionEpoch: { increment: 1 } },
+    select: { sessionEpoch: true },
+  });
+  return { sessionEpoch: updated.sessionEpoch };
 }
 
 // ──────────────────── Verificação de e-mail ────────────────────

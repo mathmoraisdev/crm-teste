@@ -72,18 +72,28 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-/** Gera o token de sessão assinado para o id do usuário. */
-export async function signSession(userId: string): Promise<string> {
-  const payload = { u: userId, exp: nowSeconds() + SESSION_TTL_SECONDS };
+/**
+ * Gera o token de sessão assinado para o id do usuário.
+ *
+ * `epoch` é a versão da sessão (campo `sessionEpoch` do usuário): vai no payload
+ * (`v`) e é conferida contra o banco em `getCurrentUserId`. Incrementar o epoch
+ * (ao trocar/resetar a senha) invalida todos os tokens emitidos antes.
+ */
+export async function signSession(userId: string, epoch = 0): Promise<string> {
+  const payload = { u: userId, v: epoch, exp: nowSeconds() + SESSION_TTL_SECONDS };
   const body = bytesToBase64Url(encoder.encode(JSON.stringify(payload)));
   const sig = bytesToBase64Url(await hmac(body));
   return `${body}.${sig}`;
 }
 
-/** Valida o token; retorna o payload ou `null` se inválido/expirado. */
+/**
+ * Valida a assinatura/expiração do token (HMAC, sem banco — Edge-safe) e retorna
+ * `{ u, v }`. A conferência do epoch (`v`) contra o banco fica em
+ * `getCurrentUserId` (Node). Token legado sem `v` conta como epoch 0.
+ */
 export async function verifySession(
   token: string | undefined | null,
-): Promise<{ u: string } | null> {
+): Promise<{ u: string; v: number } | null> {
   if (!token) return null;
   const [body, sig] = token.split(".");
   if (!body || !sig) return null;
@@ -94,9 +104,9 @@ export async function verifySession(
   try {
     const payload = JSON.parse(
       new TextDecoder().decode(base64UrlToBytes(body)),
-    ) as { u: string; exp: number };
+    ) as { u: string; v?: number; exp: number };
     if (!payload.exp || payload.exp < nowSeconds()) return null;
-    return { u: payload.u };
+    return { u: payload.u, v: payload.v ?? 0 };
   } catch {
     return null;
   }

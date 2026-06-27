@@ -19,15 +19,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
 
-  const userId = await authenticateUser(email, password);
-  if (!userId) {
+  const auth = await authenticateUser(email, password);
+  if (!auth) {
     return NextResponse.json(
       { error: "E-mail ou senha inválidos." },
       { status: 401 },
     );
   }
 
-  const token = await signSession(userId);
+  const token = await signSession(auth.id, auth.sessionEpoch);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

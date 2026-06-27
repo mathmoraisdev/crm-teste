@@ -23,12 +23,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { id } = await registerUser(parsed.data);
+    const { id, sessionEpoch } = await registerUser(parsed.data);
     // Dispara o e-mail de confirmação (best-effort: não bloqueia o cadastro).
     void createEmailVerification(id).catch((e) =>
       console.error("[register] falha ao enviar verificação de e-mail:", e),
     );
-    const token = await signSession(id);
+    const token = await signSession(id, sessionEpoch);
     const res = NextResponse.json({ ok: true }, { status: 201 });
     res.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,

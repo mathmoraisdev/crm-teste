@@ -38,6 +38,14 @@ export function AccountSettings({
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Troca de senha (self-service, exige a senha atual).
+  const [curPwd, setCurPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdDone, setPwdDone] = useState(false);
+
   // BYOK: chave de API do usuário.
   const [status, setStatus] = useState<AiKeyStatus>(aiKey);
   const [provider, setProvider] = useState<"OPENAI" | "ANTHROPIC">(
@@ -70,6 +78,40 @@ export function AccountSettings({
   async function removeKey() {
     await fetch("/api/account/ai-key", { method: "DELETE" });
     setStatus({ configured: false, provider: null, last4: null, verifiedAt: null });
+  }
+
+  async function changePwd() {
+    setPwdError(null);
+    setPwdDone(false);
+    if (newPwd.length < 8) {
+      setPwdError("A nova senha precisa ter ao menos 8 caracteres.");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setPwdError("As senhas não conferem.");
+      return;
+    }
+    setPwdSaving(true);
+    try {
+      const res = await fetch("/api/account/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: curPwd, newPassword: newPwd }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPwdError(data?.error || "Não foi possível alterar a senha.");
+        return;
+      }
+      setPwdDone(true);
+      setCurPwd("");
+      setNewPwd("");
+      setConfirmPwd("");
+    } catch {
+      setPwdError("Erro de rede. Tente novamente.");
+    } finally {
+      setPwdSaving(false);
+    }
   }
 
   async function resendVerification() {
@@ -161,6 +203,50 @@ export function AccountSettings({
             )}
           </div>
         )}
+      </Card>
+
+      {/* Senha */}
+      <Card>
+        <CardHeader title="Senha" subtitle="Altere sua senha de acesso ao painel." />
+        <div className="space-y-3 px-5 py-4">
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={curPwd}
+            onChange={(e) => setCurPwd(e.target.value)}
+            placeholder="Senha atual"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPwd}
+            onChange={(e) => setNewPwd(e.target.value)}
+            placeholder="Nova senha (mín. 8 caracteres)"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirmPwd}
+            onChange={(e) => setConfirmPwd(e.target.value)}
+            placeholder="Confirmar nova senha"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+          {pwdError && <p className="text-sm text-[#C0392B]">{pwdError}</p>}
+          {pwdDone && (
+            <p className="text-sm text-brand-700">Senha alterada com sucesso.</p>
+          )}
+          <div className="flex justify-end">
+            <Button
+              onClick={changePwd}
+              loading={pwdSaving}
+              disabled={!curPwd || newPwd.length < 8 || !confirmPwd}
+            >
+              Alterar senha
+            </Button>
+          </div>
+        </div>
       </Card>
 
       {/* Privacidade / LGPD */}
