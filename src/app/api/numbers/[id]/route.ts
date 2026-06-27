@@ -5,7 +5,7 @@ import {
   deleteWhatsAppNumber,
   updateWhatsAppNumber,
 } from "@/server/services/numbers.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 import { ALL_AI_MODEL_VALUES } from "@/lib/ai-models";
 
 export const dynamic = "force-dynamic";
@@ -82,11 +82,17 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (ctx.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Apenas o administrador da conta gerencia os números." },
+      { status: 403 },
+    );
+  }
   const { id } = await params;
   try {
-    await deleteWhatsAppNumber(id, userId);
+    await deleteWhatsAppNumber(id, ctx.tenantUserId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

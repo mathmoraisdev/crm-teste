@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { normalizePhone } from "@/lib/phone";
 import { listWhatsAppNumbers } from "@/server/services/numbers.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,8 +35,15 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (ctx.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Apenas o administrador da conta gerencia os números." },
+      { status: 403 },
+    );
+  }
+  const userId = ctx.tenantUserId;
   if (env.WHATSAPP_MODE !== "baileys") {
     return NextResponse.json(
       { error: "Pareamento por QR só está disponível com WHATSAPP_MODE=baileys." },
