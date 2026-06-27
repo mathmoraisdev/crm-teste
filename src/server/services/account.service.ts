@@ -37,6 +37,7 @@ export interface AdminAccountRow {
   daysLeft: number | null;
   paymentMethod: PaymentMethod | null;
   paymentDueDate: Date | null;
+  plan: Plan | null;
   isAdmin: boolean;
   numbers: number;
   leads: number;
@@ -55,6 +56,7 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       accessUntil: true,
       paymentMethod: true,
       paymentDueDate: true,
+      plan: true,
       createdAt: true,
       _count: { select: { whatsAppNumbers: true, leads: true } },
     },
@@ -69,6 +71,7 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     daysLeft: daysRemaining(u.accessUntil),
     paymentMethod: u.paymentMethod,
     paymentDueDate: u.paymentDueDate,
+    plan: u.plan,
     isAdmin: isAdminEmail(u.email),
     numbers: u._count.whatsAppNumbers,
     leads: u._count.leads,
