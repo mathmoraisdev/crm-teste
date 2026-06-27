@@ -87,6 +87,7 @@ export type AccessAction =
       kind: "setInfo";
       paymentMethod: PaymentMethod | null;
       paymentDueDate: Date | null;
+      amountCents: number | null; // null/0 = não registra receita; >0 = cria Payment
     };
 
 /**
@@ -130,16 +131,37 @@ export async function setAccountAccess(
     case "auto":
       data = { billingOverride: "AUTO" };
       break;
-    case "setInfo":
+    case "setInfo": {
       // Lançar pagamento: registra forma + vencimento. Quando HÁ vencimento, ele
       // também LIBERA o acesso — a conta funciona (AUTO) até a data do vencimento.
       // Sem vencimento = só anotação (não mexe no acesso).
-      data = { paymentMethod: action.paymentMethod, paymentDueDate: action.paymentDueDate };
+      const infoData: typeof data = {
+        paymentMethod: action.paymentMethod,
+        paymentDueDate: action.paymentDueDate,
+      };
       if (action.paymentDueDate) {
-        data.billingOverride = "AUTO";
-        data.accessUntil = action.paymentDueDate;
+        infoData.billingOverride = "AUTO";
+        infoData.accessUntil = action.paymentDueDate;
       }
-      break;
+      // Com valor: grava o update E o Payment atomicamente (ledger não diverge do acesso).
+      if (action.amountCents && action.amountCents > 0) {
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({ where: { id: userId }, data: infoData, select: { id: true } });
+          await tx.payment.create({
+            data: {
+              accountId: userId,
+              amountCents: action.amountCents!,
+              method: action.paymentMethod,
+              coversUntil: action.paymentDueDate, // snapshot do prazo que este pgto cobriu
+            },
+          });
+        });
+        return { id: userId };
+      }
+      // Sem valor: comportamento de hoje, só o update.
+      await prisma.user.update({ where: { id: userId }, data: infoData, select: { id: true } });
+      return { id: userId };
+    }
   }
 
   await prisma.user.update({ where: { id: userId }, data, select: { id: true } });

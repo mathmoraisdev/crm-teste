@@ -11,6 +11,8 @@ vi.mock("@/server/db/client", () => ({
   prisma: {
     lead: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
+    payment: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -102,6 +104,7 @@ describe("setAccountAccess", () => {
       kind: "setInfo",
       paymentMethod: "PIX",
       paymentDueDate: FUTURE,
+      amountCents: null,
     });
     const arg = (prisma.user.update as any).mock.calls[0][0];
     expect(arg.data.paymentMethod).toBe("PIX");
@@ -123,10 +126,40 @@ describe("setAccountAccess", () => {
       kind: "setInfo",
       paymentMethod: "PIX",
       paymentDueDate: null,
+      amountCents: null,
     });
     const arg = (prisma.user.update as any).mock.calls[0][0];
     expect(arg.data.paymentMethod).toBe("PIX");
     expect(arg.data).not.toHaveProperty("billingOverride");
     expect(arg.data).not.toHaveProperty("accessUntil");
+  });
+
+  it("setInfo COM valor cria Payment + estende acesso (transação)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ id: "u-cli", email: "c@x.com", accessUntil: null });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        user: { update: vi.fn().mockResolvedValue({ id: "u-cli" }) },
+        payment: { create: vi.fn().mockResolvedValue({ id: "pay-1" }) },
+      }),
+    );
+    const { setAccountAccess } = await import("./account.service");
+    const due = new Date("2026-07-27T12:00:00Z");
+    await setAccountAccess("u-cli", {
+      kind: "setInfo", paymentMethod: "PIX", paymentDueDate: due, amountCents: 12990,
+    });
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it("setInfo SEM valor não cria Payment (só update da conta)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ id: "u-cli", email: "c@x.com", accessUntil: null });
+    (prisma.user.update as any).mockResolvedValue({ id: "u-cli" });
+    const { setAccountAccess } = await import("./account.service");
+    await setAccountAccess("u-cli", {
+      kind: "setInfo", paymentMethod: "PIX", paymentDueDate: null, amountCents: null,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalled();
   });
 });

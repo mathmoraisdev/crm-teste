@@ -180,6 +180,7 @@ async function main() {
       kind: "setInfo",
       paymentMethod: "PIX",
       paymentDueDate: dueDate,
+      amountCents: null,
     });
     const payRow = await prisma.user.findUnique({
       where: { id: cli.id },
