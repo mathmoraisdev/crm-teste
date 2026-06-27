@@ -35,6 +35,9 @@ vi.mock("@/server/db/client", () => ({
   },
 }));
 
+// Gate de entitlements é coberto em entitlements.test.ts; aqui vira no-op.
+vi.mock("@/server/services/entitlements", () => ({ assertFeature: vi.fn() }));
+
 import { startCampaign } from "./campaign.service";
 
 describe("startCampaign (enfileiramento)", () => {

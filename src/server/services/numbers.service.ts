@@ -3,6 +3,7 @@ import type { WhatsAppNumberStatus, Prisma } from "@prisma/client";
 import { sentTodayByNumber } from "@/server/worker/dispatcher";
 import { isAdminEmail } from "@/lib/admin";
 import { PLAN_LIMITS } from "@/lib/plans";
+import { assertFeature } from "@/server/services/entitlements";
 
 /**
  * Entitlements: garante que o tenant pode adicionar mais um número.
@@ -145,6 +146,10 @@ export async function updateWhatsAppNumber(
   if (data.status !== undefined && !MANUAL_STATUSES.has(data.status)) {
     throw new Error("Status não permitido por aqui (use pausar/reativar/desativar).");
   }
+  // Entitlements: só deixa LIGAR qualificação/agendamento se o plano permite
+  // (desligar é sempre livre). Grandfather/admin passam direto no assertFeature.
+  if (data.qualifyEnabled === true) await assertFeature(userId, "qualify");
+  if (data.scheduleEnabled === true) await assertFeature(userId, "schedule");
   // Monta o patch só com o que veio (undefined = não mexe; null limpa o campo).
   // Build explícito p/ satisfazer Prisma.WhatsAppNumberUpdateInput (Object.fromEntries
   // perde a tipagem e quebra o tsc).

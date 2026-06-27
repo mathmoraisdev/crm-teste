@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import type { LeadStatus } from "@prisma/client";
 import { env } from "@/lib/env";
 import { renderSpintax } from "@/lib/spintax";
+import { assertFeature } from "@/server/services/entitlements";
 
 /**
  * Status que podem (re)entrar numa campanha. Inclui CONTATADO (permite redisparo
@@ -102,6 +103,7 @@ export async function createCampaign(
     leadIds?: string[];
   },
 ): Promise<{ id: string; associated: number }> {
+  await assertFeature(userId, "campaigns"); // entitlements: plano permite campanha?
   const campaign = await prisma.campaign.create({
     data: {
       userId,
@@ -134,6 +136,7 @@ export async function startCampaign(
   campaignId: string,
   userId: string,
 ): Promise<{ enqueued: number }> {
+  await assertFeature(userId, "campaigns"); // entitlements: plano permite campanha?
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, userId },
     include: {
