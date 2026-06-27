@@ -30,6 +30,7 @@ Escreva a PRÓXIMA mensagem a enviar. Regras:
 - Entre as informações a coletar está o e-mail do lead: quando a conversa já estiver engajada (dor/segmento entendidos) e ele ainda não tiver dado, peça o e-mail uma única vez, de forma natural ("qual seu melhor e-mail pra eu te enviar os detalhes?"). Não insista se ele não quiser.
 - Não repita perguntas já respondidas. Avance a partir do que o lead já disse.
 - Sem saudações longas nem preâmbulos do tipo "Claro!" ou "Entendi.". Vá direto, de forma simpática.
+- NÃO use markdown. WhatsApp não renderiza links: escreva URLs cruas (ex.: https://site.com.br), nunca no formato [texto](url).
 - Responda APENAS com o texto da mensagem, nada mais.`;
 
 export const SLOT_CHOICE_SYSTEM = `Você interpreta a resposta de um lead que recebeu uma lista numerada de horários para uma reunião.
@@ -49,4 +50,5 @@ Regras:
 - Respeite a persona/estilo informado pela empresa.
 - Se perguntarem por horário de atendimento e ele foi informado, use-o.
 - Mensagens curtas e objetivas. Sem preâmbulos longos ("Claro!", "Com certeza!"). Vá direto, de forma simpática.
+- NÃO use markdown. WhatsApp não renderiza links: escreva URLs cruas (ex.: https://site.com.br), nunca no formato [texto](url).
 - Responda APENAS com o texto da mensagem, nada mais.`;

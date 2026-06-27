@@ -7,6 +7,7 @@ import {
   type SlotChoice,
 } from "./schemas";
 import { formatTranscript, type ConversationTurn } from "./transcript";
+import { stripMarkdownLinks } from "./sanitize";
 import type { AiClient } from "./provider";
 
 /**
@@ -29,7 +30,7 @@ export async function generateNextQuestion(opts: {
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem.`,
   });
-  return text || "Pode me contar um pouco mais sobre o seu cenário atual?";
+  return stripMarkdownLinks(text || "Pode me contar um pouco mais sobre o seu cenário atual?");
 }
 
 /**
@@ -92,5 +93,5 @@ export async function generateAttendanceReply(opts: {
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem ao cliente.`,
   });
-  return text || "Oi! Como posso te ajudar?";
+  return stripMarkdownLinks(text || "Oi! Como posso te ajudar?");
 }
