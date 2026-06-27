@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { startCampaign } from "@/server/services/campaign.service";
 import { isAccountActive } from "@/server/services/account.service";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantUserId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   if (process.env.ENABLE_DISPATCH !== "1") return NextResponse.json({ error: "Disparo desativado nesta instalação." }, { status: 403 });
-  const userId = await getCurrentUserId();
+  const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   if (!(await isAccountActive(userId))) {
     return NextResponse.json(
