@@ -28,6 +28,8 @@ interface NumberItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  reminderDayBeforeTemplate: string | null;
+  reminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -46,6 +48,8 @@ interface ServiceConfig {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  reminderDayBeforeTemplate: string;
+  reminderHourBeforeTemplate: string;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -268,6 +272,8 @@ export function WhatsAppNumbersPanel() {
       autoReplyEnabled: n.autoReplyEnabled,
       qualifyEnabled: n.qualifyEnabled,
       scheduleEnabled: n.scheduleEnabled,
+      reminderDayBeforeTemplate: n.reminderDayBeforeTemplate ?? "",
+      reminderHourBeforeTemplate: n.reminderHourBeforeTemplate ?? "",
       replyDelaySeconds: n.replyDelaySeconds,
       firstReplyDelaySeconds: n.firstReplyDelaySeconds,
       autoPauseOnHumanReply: n.autoPauseOnHumanReply,
@@ -294,6 +300,8 @@ export function WhatsAppNumbersPanel() {
         autoReplyEnabled: service.autoReplyEnabled,
         qualifyEnabled: service.qualifyEnabled,
         scheduleEnabled: service.scheduleEnabled,
+        reminderDayBeforeTemplate: service.reminderDayBeforeTemplate.trim() || null,
+        reminderHourBeforeTemplate: service.reminderHourBeforeTemplate.trim() || null,
         replyDelaySeconds: service.replyDelaySeconds,
         firstReplyDelaySeconds: service.firstReplyDelaySeconds,
         autoPauseOnHumanReply: service.autoPauseOnHumanReply,
@@ -840,6 +848,49 @@ export function WhatsAppNumbersPanel() {
                 Agendar compromissos
               </label>
             </div>
+
+            {service.scheduleEnabled && (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <p className="text-xs font-semibold text-slate-600">
+                  Lembretes da reunião (WhatsApp do lead)
+                </p>
+                <p className="text-xs text-slate-400">
+                  Enviados automaticamente na véspera (~24h antes) e em cima da hora
+                  (~1h antes). Placeholders:{" "}
+                  <code>{"{{nome}}"}</code> <code>{"{{quando}}"}</code>{" "}
+                  <code>{"{{link}}"}</code>. Deixe vazio para usar o texto padrão.
+                </p>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Lembrete da véspera
+                  </label>
+                  <textarea
+                    value={service.reminderDayBeforeTemplate}
+                    onChange={(e) =>
+                      setService({ ...service, reminderDayBeforeTemplate: e.target.value })
+                    }
+                    rows={3}
+                    placeholder={"Oi, {{nome}}! Passando pra lembrar da nossa conversa de amanhã.\n📅 {{quando}}\n{{link}}"}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Lembrete de 1 hora antes
+                  </label>
+                  <textarea
+                    value={service.reminderHourBeforeTemplate}
+                    onChange={(e) =>
+                      setService({ ...service, reminderHourBeforeTemplate: e.target.value })
+                    }
+                    rows={3}
+                    placeholder={"Oi, {{nome}}! Nossa conversa é daqui a pouco.\n📅 {{quando}}\n{{link}}"}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+              </div>
+            )}
+
             {serviceError && (
               <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
                 {serviceError}

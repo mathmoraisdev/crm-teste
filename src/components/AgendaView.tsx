@@ -1,0 +1,210 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  RefreshCw,
+  CalendarCheck,
+  CalendarClock,
+  CalendarX,
+  ExternalLink,
+  Video,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { LoadingBlock } from "@/components/ui/Spinner";
+import { cn, formatSlot } from "@/lib/utils";
+import type { AgendaItem } from "@/server/services/meeting.service";
+
+const STATUS_TONE = {
+  CONFIRMED: "green",
+  PROPOSED: "amber",
+  CANCELLED: "red",
+} as const;
+
+const STATUS_LABEL = {
+  CONFIRMED: "Confirmada",
+  PROPOSED: "Proposta",
+  CANCELLED: "Cancelada",
+} as const;
+
+type Status = keyof typeof STATUS_LABEL;
+const STATUS_OPTIONS = Object.keys(STATUS_LABEL) as Status[];
+
+const STATUS_ICON: Record<Status, React.ReactNode> = {
+  CONFIRMED: <CalendarCheck size={18} className="text-emerald-500" />,
+  PROPOSED: <CalendarClock size={18} className="text-amber-500" />,
+  CANCELLED: <CalendarX size={18} className="text-red-400" />,
+};
+
+/** Rótulo relativo (Hoje / Amanhã) p/ a data agendada, comparando por dia local. */
+function relativeDayLabel(iso: string): "Hoje" | "Amanhã" | null {
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round(
+    (startOfDay(new Date(iso)) - startOfDay(new Date())) / 86_400_000,
+  );
+  if (diffDays === 0) return "Hoje";
+  if (diffDays === 1) return "Amanhã";
+  return null;
+}
+
+export function AgendaView() {
+  const [meetings, setMeetings] = useState<AgendaItem[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/meetings", { cache: "no-store" });
+      const data = await res.json();
+      setMeetings(data.meetings as AgendaItem[]);
+    } catch {
+      /* mantém estado anterior */
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const filtered = useMemo(() => {
+    if (!meetings) return null;
+    if (statusFilter === "ALL") return meetings;
+    return meetings.filter((m) => m.status === statusFilter);
+  }, [meetings, statusFilter]);
+
+  const confirmedCount = useMemo(
+    () => meetings?.filter((m) => m.status === "CONFIRMED").length ?? 0,
+    [meetings],
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[30px] font-bold tracking-[-0.025em] text-ink">
+            Agenda
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Compromissos marcados pela IA com os seus leads — lembretes em ordem
+            de data.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={load}>
+            <RefreshCw size={14} /> Atualizar
+          </Button>
+        </div>
+      </div>
+
+      {/* Filtro de status */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        >
+          <option value="ALL">Todos os status</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </option>
+          ))}
+        </select>
+        {confirmedCount > 0 && (
+          <span className="text-sm text-slate-500">
+            <strong className="text-emerald-600">{confirmedCount}</strong>{" "}
+            confirmada{confirmedCount > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {filtered === null ? (
+        <Card>
+          <LoadingBlock label="Carregando agenda…" />
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <div className="py-10 text-center text-sm text-slate-500">
+            {meetings && meetings.length === 0
+              ? "Nenhum compromisso ainda. Quando a IA agendar uma reunião, ela aparece aqui."
+              : "Nenhum compromisso corresponde ao filtro."}
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <ul className="divide-y divide-slate-100">
+            {filtered.map((m) => (
+              <AgendaRow key={m.id} item={m} />
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function AgendaRow({ item }: { item: AgendaItem }) {
+  const status = item.status as Status;
+  const relDay =
+    status === "CONFIRMED" && item.scheduledAt
+      ? relativeDayLabel(item.scheduledAt)
+      : null;
+  const when =
+    item.scheduledAt != null
+      ? formatSlot(item.scheduledAt)
+      : item.proposedSlots.length > 0
+        ? `${item.proposedSlots.length} horário(s) proposto(s)`
+        : "—";
+
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-3 py-3.5 pr-1",
+        relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3" : "px-1",
+      )}
+    >
+      <span className="mt-0.5">{STATUS_ICON[status]}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/leads/${item.lead.id}`}
+            className="font-bold text-ink hover:text-brand-600 hover:underline"
+          >
+            {item.lead.name}
+          </Link>
+          <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
+          {relDay && (
+            <span className="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-bold text-white">
+              {relDay}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-sm text-slate-600">{when}</p>
+        {status === "PROPOSED" && item.proposedSlots.length > 0 && (
+          <ul className="mt-1 space-y-0.5 text-xs text-slate-400">
+            {item.proposedSlots.map((s) => (
+              <li key={s}>{formatSlot(s)}</li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-0.5 font-mono text-xs text-slate-400">
+          {item.lead.phone}
+        </p>
+      </div>
+      {item.meetingLink && (
+        <a
+          href={item.meetingLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 inline-flex flex-none items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-50"
+        >
+          <Video size={13} /> Entrar <ExternalLink size={11} />
+        </a>
+      )}
+    </li>
+  );
+}

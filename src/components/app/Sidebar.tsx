@@ -3,20 +3,25 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Building2, Smartphone, Settings, LogOut } from "lucide-react";
+import { Users, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
-const NAV = [
+const BASE_NAV = [
   { href: "/leads", label: "Conversas", icon: Users },
+  { href: "/campaigns", label: "Campanhas", icon: Send },
+  { href: "/agenda", label: "Agenda", icon: CalendarClock },
   { href: "/empresas", label: "Empresas", icon: Building2 },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const nav = isAdmin
+    ? [...BASE_NAV, { href: "/financeiro", label: "Financeiro", icon: Wallet }]
+    : BASE_NAV;
 
   async function logout() {
     setLoggingOut(true);
@@ -36,7 +41,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex flex-col gap-1">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link

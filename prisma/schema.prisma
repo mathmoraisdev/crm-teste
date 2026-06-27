@@ -26,6 +26,11 @@ model User {
   whatsapp      String? // telefone informado no cadastro (opcional)
   passwordHash  String // scrypt$salt$hash
   emailVerified DateTime? // null = e-mail ainda não confirmado
+  sessionEpoch  Int       @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
+  // Billing: conta ativa = IA responde e disparo flui. Suspensa (inadimplência)
+  // = IA silencia (só persiste o inbound) e outbound congela. Cadastros novos
+  // nascem `false` (controle do admin); contas existentes migram para `true`.
+  billingActive Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -189,6 +194,9 @@ model Meeting {
   scheduledAt     DateTime?
   calendarEventId String?
   meetingLink     String?
+  // Lembretes já enviados ao lead (anti-duplicidade): véspera (~24h) e em cima da hora (~1h).
+  remindedDayBeforeAt  DateTime?
+  remindedHourBeforeAt DateTime?
   createdAt       DateTime      @default(now())
 }
 
@@ -242,6 +250,10 @@ model WhatsAppNumber {
   autoReplyEnabled  Boolean  @default(true)  // IA responde automaticamente o inbound
   qualifyEnabled    Boolean  @default(false) // roda qualificação/score (funil de vendas)
   scheduleEnabled   Boolean  @default(false) // permite propor/agendar reunião
+  // Texto dos lembretes de reunião ao lead (placeholders {{nome}} {{quando}} {{link}});
+  // null/vazio = usa o texto padrão. Véspera (~24h) e em cima da hora (~1h).
+  reminderDayBeforeTemplate  String?
+  reminderHourBeforeTemplate String?
 
   // ── Timing & handoff do atendimento ────────────────────────────────────
   replyDelaySeconds       Int     @default(10) // janela de espera (debounce) antes de responder; junta msgs picadas

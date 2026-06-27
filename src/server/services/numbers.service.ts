@@ -21,6 +21,8 @@ export interface WhatsAppNumberListItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  reminderDayBeforeTemplate: string | null;
+  reminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -56,6 +58,8 @@ export async function listWhatsAppNumbers(
         autoReplyEnabled: true,
         qualifyEnabled: true,
         scheduleEnabled: true,
+        reminderDayBeforeTemplate: true,
+        reminderHourBeforeTemplate: true,
         replyDelaySeconds: true,
         firstReplyDelaySeconds: true,
         autoPauseOnHumanReply: true,
@@ -93,6 +97,8 @@ export async function updateWhatsAppNumber(
     autoReplyEnabled?: boolean;
     qualifyEnabled?: boolean;
     scheduleEnabled?: boolean;
+    reminderDayBeforeTemplate?: string | null;
+    reminderHourBeforeTemplate?: string | null;
     replyDelaySeconds?: number;
     firstReplyDelaySeconds?: number;
     autoPauseOnHumanReply?: boolean;
@@ -122,6 +128,8 @@ export async function updateWhatsAppNumber(
   if (data.autoReplyEnabled !== undefined) patch.autoReplyEnabled = data.autoReplyEnabled;
   if (data.qualifyEnabled !== undefined) patch.qualifyEnabled = data.qualifyEnabled;
   if (data.scheduleEnabled !== undefined) patch.scheduleEnabled = data.scheduleEnabled;
+  if (data.reminderDayBeforeTemplate !== undefined) patch.reminderDayBeforeTemplate = data.reminderDayBeforeTemplate;
+  if (data.reminderHourBeforeTemplate !== undefined) patch.reminderHourBeforeTemplate = data.reminderHourBeforeTemplate;
   if (data.replyDelaySeconds !== undefined) patch.replyDelaySeconds = data.replyDelaySeconds;
   if (data.firstReplyDelaySeconds !== undefined) patch.firstReplyDelaySeconds = data.firstReplyDelaySeconds;
   if (data.autoPauseOnHumanReply !== undefined) patch.autoPauseOnHumanReply = data.autoPauseOnHumanReply;

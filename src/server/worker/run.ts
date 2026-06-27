@@ -4,6 +4,7 @@ import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
 import { processNextJob } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
+import { dispatchDueReminders } from "@/server/services/meeting-reminders";
 import { sleep } from "@/lib/humanize";
 
 type Pool = typeof import("@/server/whatsapp/baileys/pool");
@@ -83,6 +84,7 @@ async function main() {
 
   let lastReap = Date.now();
   let lastChipAlert = 0;
+  let lastReminder = 0;
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
@@ -100,6 +102,18 @@ async function main() {
       const n = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
       if (n > 0) console.log("[worker] reaper: %d jobs recuperados", n);
       lastReap = Date.now();
+    }
+
+    // Lembretes de reunião ao lead (véspera / 1h antes). Throttle de 60s: a
+    // granularidade do lembrete é minuto, não precisa rodar a cada poll.
+    if (Date.now() - lastReminder >= 60_000) {
+      try {
+        const r = await dispatchDueReminders(new Date());
+        if (r > 0) console.log("[worker] lembretes de reunião enviados: %d", r);
+      } catch (err) {
+        console.error("[worker] dispatchDueReminders falhou:", err);
+      }
+      lastReminder = Date.now();
     }
 
     if (env.WHATSAPP_MODE === "baileys") {
