@@ -3,15 +3,23 @@ import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
 import { isAdminEmail } from "@/lib/admin";
 import { listAccountsForAdmin } from "@/server/services/account.service";
+import { revenueCents, revenueTotalCents, listPayments } from "@/server/services/payment.service";
+import { monthRange, currentMonth } from "@/lib/period";
+import { formatCentsBRL } from "@/lib/money";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { formatDateTime } from "@/lib/utils";
 import { AccountAccessModal } from "@/components/app/AccountAccessModal";
+import { FinanceiroFilters } from "@/components/app/FinanceiroFilters";
 
 export const dynamic = "force-dynamic";
 
-export default async function FinanceiroPage() {
+const METHOD_LABELS = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" } as const;
+
+export default async function FinanceiroPage({
+  searchParams,
+}: { searchParams: Promise<{ month?: string; status?: string }> }) {
   const userId = await getCurrentUserId();
   const me = userId ? await getUserById(userId) : null;
 
@@ -34,7 +42,22 @@ export default async function FinanceiroPage() {
     );
   }
 
-  const accounts = await listAccountsForAdmin();
+  const sp = await searchParams;
+  const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : currentMonth();
+  const status = sp.status ?? "todos"; // todos | ativo | suspenso
+  const { from, to } = monthRange(month);
+
+  const [accounts, revMonth, revTotal, payments] = await Promise.all([
+    listAccountsForAdmin(),
+    revenueCents(from, to),
+    revenueTotalCents(),
+    listPayments(from, to),
+  ]);
+
+  const filteredAccounts = accounts.filter((a) =>
+    status === "ativo" ? a.active : status === "suspenso" ? !a.active : true,
+  );
+  const activeCount = accounts.filter((a) => a.active).length;
 
   return (
     <div className="space-y-5">
@@ -48,6 +71,27 @@ export default async function FinanceiroPage() {
           disparo congela até estender ou forçar ativo.
         </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs text-slate-400">Receita ({month})</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{formatCentsBRL(revMonth)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-slate-400">Receita total</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{formatCentsBRL(revTotal)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-slate-400">Pagamentos no mês</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{payments.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-slate-400">Contas ativas</p>
+          <p className="mt-1 text-2xl font-bold text-ink">{activeCount}</p>
+        </Card>
+      </div>
+
+      <FinanceiroFilters month={month} status={status} />
 
       <Card className="overflow-hidden">
         <Table>
@@ -64,7 +108,7 @@ export default async function FinanceiroPage() {
             </tr>
           </thead>
           <tbody>
-            {accounts.map((a) => (
+            {filteredAccounts.map((a) => (
               <tr key={a.id}>
                 <Td>
                   <div className="font-semibold text-ink">
@@ -89,9 +133,7 @@ export default async function FinanceiroPage() {
                   )}
                 </Td>
                 <Td className="whitespace-nowrap text-slate-500">
-                  {a.paymentMethod
-                    ? ({ PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" }[a.paymentMethod])
-                    : "—"}
+                  {a.paymentMethod ? METHOD_LABELS[a.paymentMethod] : "—"}
                   {a.paymentDueDate && (
                     <span className="ml-1 text-xs text-slate-400">
                       vence {formatDateTime(a.paymentDueDate)}
@@ -115,6 +157,47 @@ export default async function FinanceiroPage() {
                 </Td>
               </tr>
             ))}
+          </tbody>
+        </Table>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <p className="text-sm font-bold text-ink">Extrato — {month}</p>
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Data</Th>
+              <Th>Conta</Th>
+              <Th>Forma</Th>
+              <Th>Cobre até</Th>
+              <Th>Valor</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="border-b border-slate-100 px-5 py-8 text-center text-slate-400">
+                  Nenhum pagamento neste período.
+                </td>
+              </tr>
+            ) : (
+              payments.map((p) => (
+                <tr key={p.id}>
+                  <Td className="whitespace-nowrap text-slate-500">{formatDateTime(p.paidAt)}</Td>
+                  <Td>
+                    <div className="font-semibold text-ink">{p.accountName}</div>
+                    <div className="text-xs text-slate-400">{p.accountEmail}</div>
+                  </Td>
+                  <Td className="text-slate-600">{p.method ? METHOD_LABELS[p.method] : "—"}</Td>
+                  <Td className="whitespace-nowrap text-slate-500">
+                    {p.coversUntil ? formatDateTime(p.coversUntil) : "—"}
+                  </Td>
+                  <Td className="whitespace-nowrap font-semibold text-ink">{formatCentsBRL(p.amountCents)}</Td>
+                </tr>
+              ))
+            )}
           </tbody>
         </Table>
       </Card>
