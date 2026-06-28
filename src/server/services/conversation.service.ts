@@ -205,8 +205,12 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
         select: { replyDelaySeconds: true, firstReplyDelaySeconds: true },
       })
     : null;
-  const hasOutbound =
-    (await prisma.message.count({ where: { leadId: lead.id, direction: "OUTBOUND" } })) > 0;
+  // Existe pelo menos 1 OUTBOUND? findFirst para na 1ª linha (count varre tudo).
+  const firstOutbound = await prisma.message.findFirst({
+    where: { leadId: lead.id, direction: "OUTBOUND" },
+    select: { id: true },
+  });
+  const hasOutbound = !!firstOutbound;
   const seconds = hasOutbound ? num?.replyDelaySeconds ?? 0 : num?.firstReplyDelaySeconds ?? 0;
   return { leadId: lead.id, respond: true, delayMs: Math.max(0, seconds) * 1000 };
 }
