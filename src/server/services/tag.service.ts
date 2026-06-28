@@ -99,18 +99,17 @@ export async function setLeadTags(
   leadId: string,
   tagIds: string[],
 ): Promise<void> {
-  const lead = await prisma.lead.findFirst({ where: { id: leadId, userId }, select: { id: true } });
-  if (!lead) throw new Error("Lead não encontrado.");
-
   const ids = [...new Set(tagIds)];
-  if (ids.length > 0) {
-    const owned = await prisma.tag.findMany({
-      where: { id: { in: ids }, userId },
-      select: { id: true },
-    });
-    if (owned.length !== ids.length) {
-      throw new Error("Uma ou mais tags não pertencem à sua conta.");
-    }
+  // Lead e tags são checagens independentes → paralelizar.
+  const [lead, owned] = await Promise.all([
+    prisma.lead.findFirst({ where: { id: leadId, userId }, select: { id: true } }),
+    ids.length > 0
+      ? prisma.tag.findMany({ where: { id: { in: ids }, userId }, select: { id: true } })
+      : Promise.resolve([] as { id: string }[]),
+  ]);
+  if (!lead) throw new Error("Lead não encontrado.");
+  if (ids.length > 0 && owned.length !== ids.length) {
+    throw new Error("Uma ou mais tags não pertencem à sua conta.");
   }
 
   await prisma.lead.update({
