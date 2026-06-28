@@ -7,6 +7,11 @@ describe("PLAN_LIMITS", () => {
     expect(PLAN_LIMITS.PROFISSIONAL).toMatchObject({ maxNumbers: 2, maxSeats: 5, campaigns: true });
     expect(PLAN_LIMITS.ESCALA).toMatchObject({ maxNumbers: 4, maxSeats: 10, campaigns: true });
   });
+  it("define a cota mensal de IA por plano", () => {
+    expect(PLAN_LIMITS.INICIAL.aiMonthlyQuota).toBe(300);
+    expect(PLAN_LIMITS.PROFISSIONAL.aiMonthlyQuota).toBe(1500);
+    expect(PLAN_LIMITS.ESCALA.aiMonthlyQuota).toBe(5000);
+  });
   it("planLabel devolve o rótulo PT-BR", () => {
     expect(planLabel("PROFISSIONAL")).toBe("Profissional");
     expect(planLabel(null)).toBe("—");
