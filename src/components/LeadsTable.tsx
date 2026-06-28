@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import { Table, Th, Td } from "@/components/ui/Table";
@@ -13,7 +14,10 @@ import { timeAgo } from "@/lib/utils";
 import { resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { LeadListItem } from "@/server/services/lead.service";
 
-export function LeadsTable({
+// memo: digitar na busca muda só estados do pai (query) sem trocar a referência
+// de `leads` → a tabela inteira não re-renderiza. onEdit/onDelete são setters
+// estáveis de useState; `labels` é estado estável.
+export const LeadsTable = memo(function LeadsTable({
   leads,
   onEdit,
   onDelete,
@@ -185,4 +189,4 @@ export function LeadsTable({
       </div>
     </>
   );
-}
+});

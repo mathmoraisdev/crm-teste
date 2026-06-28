@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { env } from "@/lib/env";
 import { handleInbound } from "@/server/services/conversation.service";
 import { applyStatuses, applyQualityUpdate } from "@/server/services/webhook.service";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     // Webhooks devem responder 200 mesmo com erro pontual, p/ evitar reentrega
     // em loop; logamos para depuração.
-    console.error("Erro processando webhook WhatsApp:", e);
+    logger.error({ err: e }, "Erro processando webhook WhatsApp");
   }
 
   return NextResponse.json({ received: true });

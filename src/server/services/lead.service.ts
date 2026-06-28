@@ -4,6 +4,7 @@ import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
+import { invalidateLeadCaches } from "@/server/cache/keys";
 
 export interface LeadTag {
   id: string;
@@ -26,45 +27,100 @@ export interface LeadListItem {
   updatedAt: Date;
 }
 
-/**
- * Lista leads para o dashboard, já com a última mensagem e nome da campanha.
- * Ordena por atividade recente (updatedAt desc). Escopo: conta do usuário.
- */
-export async function listLeads(userId: string): Promise<LeadListItem[]> {
-  const leads = await prisma.lead.findMany({
-    where: { userId },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      campaign: { select: { name: true } },
-      tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
-      messages: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { content: true, createdAt: true },
-      },
-    },
-  });
+export interface ListLeadsParams {
+  assignedToId?: string;
+  skip?: number; // default 0
+  take?: number; // default 50, cap 100
+  query?: string; // busca em name/phone
+  status?: LeadStatus;
+  campaignId?: string | null; // null = sem campanha
+  optOut?: boolean;
+  tagId?: string;
+}
 
-  return leads.map((l) => ({
-    id: l.id,
-    name: l.name,
-    phone: l.phone,
-    email: l.email,
-    status: l.status,
-    score: l.score,
-    optOut: l.optOut,
-    campaignName: l.campaign?.name ?? null,
-    lastMessage: l.messages[0]?.content ?? null,
-    lastMessageAt: l.messages[0]?.createdAt ?? null,
-    tags: l.tags,
-    updatedAt: l.updatedAt,
-  }));
+export interface ListLeadsResult {
+  items: LeadListItem[];
+  total: number;
+}
+
+/**
+ * Lista leads para o dashboard de forma PAGINADA e FILTRÁVEL no servidor, já com
+ * a última mensagem e nome da campanha. Ordena por atividade recente (updatedAt
+ * desc). Escopo: conta do usuário. Devolve a página (`items`) + total filtrado
+ * (`total`) p/ a UI montar a paginação sem carregar tudo.
+ */
+export async function listLeads(
+  userId: string,
+  params: ListLeadsParams = {},
+): Promise<ListLeadsResult> {
+  const take = Math.min(params.take ?? 50, 100);
+  const skip = params.skip ?? 0;
+  const where: Prisma.LeadWhereInput = {
+    userId,
+    ...(params.assignedToId ? { assignedToId: params.assignedToId } : {}),
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.campaignId === null
+      ? { campaignId: null }
+      : params.campaignId
+        ? { campaignId: params.campaignId }
+        : {}),
+    ...(params.optOut !== undefined ? { optOut: params.optOut } : {}),
+    ...(params.tagId ? { tags: { some: { id: params.tagId } } } : {}),
+    ...(params.query
+      ? {
+          OR: [
+            { name: { contains: params.query, mode: "insensitive" as const } },
+            { phone: { contains: params.query } },
+          ],
+        }
+      : {}),
+  };
+  const [rows, total] = await Promise.all([
+    prisma.lead.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take,
+      include: {
+        campaign: { select: { name: true } },
+        tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { content: true, createdAt: true },
+        },
+      },
+    }),
+    prisma.lead.count({ where }),
+  ]);
+
+  return {
+    items: rows.map((l) => ({
+      id: l.id,
+      name: l.name,
+      phone: l.phone,
+      email: l.email,
+      status: l.status,
+      score: l.score,
+      optOut: l.optOut,
+      campaignName: l.campaign?.name ?? null,
+      lastMessage: l.messages[0]?.content ?? null,
+      lastMessageAt: l.messages[0]?.createdAt ?? null,
+      tags: l.tags,
+      updatedAt: l.updatedAt,
+    })),
+    total,
+  };
 }
 
 /** Detalhe completo de um lead: mensagens (cronológicas), qualificação e reunião. */
-export async function getLeadDetail(id: string, userId: string) {
+export async function getLeadDetail(
+  id: string,
+  userId: string,
+  opts: { assignedToId?: string } = {},
+) {
   return prisma.lead.findFirst({
-    where: { id, userId },
+    where: { id, userId, ...(opts.assignedToId ? { assignedToId: opts.assignedToId } : {}) },
     include: {
       campaign: { select: { id: true, name: true } },
       tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
@@ -94,16 +150,20 @@ export async function createLead(
   // contato passou a ser (whatsAppNumberId, phone), então não há mais composite
   // userId_phone em Lead.
   const existing = await prisma.lead.findFirst({ where: { userId, phone }, select: { id: true } });
+  let lead: Lead;
   if (existing) {
-    return prisma.lead.update({
+    lead = await prisma.lead.update({
       where: { id: existing.id },
       data: { name, ...(email ? { email } : {}) },
     });
+  } else {
+    // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
+    lead = await prisma.lead.create({
+      data: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
+    });
   }
-  // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
-  return prisma.lead.create({
-    data: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
-  });
+  await invalidateLeadCaches(userId); // contadores/facetas mudaram
+  return lead;
 }
 
 /**
@@ -161,7 +221,9 @@ export async function updateLead(
     patch.phone = phone;
   }
 
-  return prisma.lead.update({ where: { id }, data: patch });
+  const updated = await prisma.lead.update({ where: { id }, data: patch });
+  await invalidateLeadCaches(userId); // status/opt-out podem ter mudado
+  return updated;
 }
 
 /** Apaga um lead e tudo associado (mensagens, qualificação, reunião, jobs — cascade). */
@@ -169,6 +231,7 @@ export async function deleteLead(id: string, userId: string): Promise<void> {
   const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
   if (!exists) throw new Error("Lead não encontrado");
   await prisma.lead.delete({ where: { id } });
+  await invalidateLeadCaches(userId);
 }
 
 export interface ImportResult {
@@ -210,6 +273,7 @@ export async function importLeadsFromCsv(
 
   if (toCreate.length > 0) {
     await prisma.lead.createMany({ data: toCreate });
+    await invalidateLeadCaches(userId);
   }
 
   return {

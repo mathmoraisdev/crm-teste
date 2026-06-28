@@ -1,5 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { AttendanceStatus } from "@prisma/client";
+import { cached } from "@/server/cache/cache";
+import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
 
 export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
@@ -131,7 +133,7 @@ export async function assignConversation(
   if (!operators.has(operatorId)) {
     throw new Error("Operador não pertence a esta conta.");
   }
-  return prisma.lead.update({
+  const updated = await prisma.lead.update({
     where: { id: lead.id },
     data: {
       assignedToId: operatorId,
@@ -141,12 +143,14 @@ export async function assignConversation(
       ...(lead.queuedAt ? {} : { queuedAt: new Date() }),
     },
   });
+  await invalidateLeadCaches(tenantUserId); // contadores de inbox mudaram
+  return updated;
 }
 
 /** Coloca a conversa na FILA (handoff sem atribuição). Pausa a IA. */
 export async function enqueueConversation(tenantUserId: string, leadId: string) {
   const lead = await assertLead(tenantUserId, leadId);
-  return prisma.lead.update({
+  const updated = await prisma.lead.update({
     where: { id: lead.id },
     data: {
       attendanceStatus: "FILA",
@@ -155,6 +159,8 @@ export async function enqueueConversation(tenantUserId: string, leadId: string) 
       ...(lead.queuedAt ? {} : { queuedAt: new Date() }),
     },
   });
+  await invalidateLeadCaches(tenantUserId);
+  return updated;
 }
 
 /** Encerra a conversa. Por padrão devolve o controle à IA. */
@@ -165,26 +171,42 @@ export async function resolveConversation(
 ) {
   const lead = await assertLead(tenantUserId, leadId);
   const returnToAi = opts.returnToAi ?? true;
-  return prisma.lead.update({
+  const updated = await prisma.lead.update({
     where: { id: lead.id },
     data: {
       attendanceStatus: "RESOLVIDA",
       ...(returnToAi ? { aiPaused: false, aiPausedAt: null } : {}),
     },
   });
+  await invalidateLeadCaches(tenantUserId);
+  return updated;
 }
 
 /** Marca a conversa como lida (inbox compartilhado). */
 export async function markRead(tenantUserId: string, leadId: string) {
   const lead = await assertLead(tenantUserId, leadId);
-  return prisma.lead.update({
+  const updated = await prisma.lead.update({
     where: { id: lead.id },
     data: { lastReadAt: new Date() },
   });
+  await invalidateLeadCaches(tenantUserId); // não-lidas mudou
+  return updated;
 }
 
 /** Contadores p/ badges: fila, minhas (do operador) e não-lidas (ativas). */
 export async function inboxCounts(
+  tenantUserId: string,
+  sessionUserId: string,
+): Promise<InboxCounts> {
+  // Cache curto (30s): badges toleram alguns segundos de atraso e a contagem é
+  // cara (vários count + groupBy de não-lidas). Chave por (conta, operador)
+  // porque "minhas" é por operador. Invalida nas escritas (invalidateLeadCaches).
+  return cached(cacheKeys.inboxCounts(tenantUserId, sessionUserId), 30, () =>
+    computeInboxCounts(tenantUserId, sessionUserId),
+  );
+}
+
+async function computeInboxCounts(
   tenantUserId: string,
   sessionUserId: string,
 ): Promise<InboxCounts> {

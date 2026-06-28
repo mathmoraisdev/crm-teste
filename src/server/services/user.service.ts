@@ -241,11 +241,16 @@ export async function verifyEmailToken(token: string): Promise<boolean> {
 
 // ───────────────────── LGPD: exportar / apagar ─────────────────────
 
+/** Tamanho do lote ao exportar leads — não carrega a base inteira em memória. */
+export const EXPORT_LEADS_PAGE = 1000;
+
 /**
- * Exporta TODOS os dados do usuário (conta, leads, campanhas, mensagens,
- * números) como objeto serializável — para download em JSON (portabilidade LGPD).
+ * Cabeçalho da exportação LGPD: conta + campanhas + números (dados PEQUENOS e
+ * limitados). Os leads (potencialmente dezenas de milhares, cada um com todas as
+ * mensagens) NÃO entram aqui — vêm em lotes por `iterateUserLeads`, para a rota
+ * montar o JSON em stream sem segurar tudo na memória.
  */
-export async function exportUserData(userId: string) {
+export async function exportAccountHeader(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -256,14 +261,6 @@ export async function exportUserData(userId: string) {
       emailVerified: true,
       createdAt: true,
       updatedAt: true,
-      leads: {
-        include: {
-          messages: true,
-          qualification: true,
-          meeting: true,
-          campaign: { select: { id: true, name: true } },
-        },
-      },
       campaigns: true,
       whatsAppNumbers: {
         // Não exporta credenciais/sessão do Baileys — só metadados do chip.
@@ -283,7 +280,6 @@ export async function exportUserData(userId: string) {
   if (!user) throw new Error("Conta não encontrada.");
 
   return {
-    exportedAt: new Date().toISOString(),
     account: {
       id: user.id,
       name: user.name,
@@ -293,10 +289,33 @@ export async function exportUserData(userId: string) {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     },
-    leads: user.leads,
     campaigns: user.campaigns,
     whatsAppNumbers: user.whatsAppNumbers,
   };
+}
+
+/**
+ * Itera os leads do usuário em páginas de `EXPORT_LEADS_PAGE`, cada um com
+ * mensagens/qualificação/reunião. Async generator: a rota consome lote a lote e
+ * vai escrevendo no stream — o pico de memória é uma página, não a base toda.
+ */
+export async function* iterateUserLeads(userId: string) {
+  for (let skip = 0; ; skip += EXPORT_LEADS_PAGE) {
+    const batch = await prisma.lead.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: EXPORT_LEADS_PAGE,
+      include: {
+        messages: true,
+        qualification: true,
+        meeting: true,
+        campaign: { select: { id: true, name: true } },
+      },
+    });
+    if (batch.length === 0) break;
+    yield batch;
+  }
 }
 
 /**

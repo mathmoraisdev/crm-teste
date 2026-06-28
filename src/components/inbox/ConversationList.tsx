@@ -1,5 +1,7 @@
 "use client";
 
+import { memo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { ConversationListItem } from "@/components/inbox/ConversationListItem";
 import type { InboxFilter, InboxConversation, InboxCounts } from "@/server/services/inbox.service";
@@ -12,7 +14,7 @@ const TABS: { key: InboxFilter; label: string }[] = [
   { key: "resolvidas", label: "Resolvidas" },
 ];
 
-export function ConversationList({
+export const ConversationList = memo(function ConversationList({
   conversations,
   counts,
   filter,
@@ -36,6 +38,18 @@ export function ConversationList({
     if (key === "ia") return counts.ia;
     return null;
   }
+
+  // Virtualização: renderiza só as conversas visíveis (+ overscan). Mantém o
+  // scroll fluido mesmo com milhares de itens no inbox. Altura é medida por item
+  // (cards têm altura variável — última mensagem, badges).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: conversations.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 96,
+    overscan: 8,
+  });
+  const showList = !(loading && conversations.length === 0) && conversations.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -69,22 +83,40 @@ export function ConversationList({
         })}
       </div>
 
-      <div className="scroll-thin flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="scroll-thin flex-1 overflow-y-auto">
         {loading && conversations.length === 0 ? (
           <p className="py-10 text-center text-sm text-slate-400">Carregando…</p>
         ) : conversations.length === 0 ? (
           <p className="py-10 text-center text-sm text-slate-400">Nenhuma conversa aqui.</p>
-        ) : (
-          conversations.map((c) => (
-            <ConversationListItem
-              key={c.id}
-              conversation={c}
-              active={c.id === selectedId}
-              onSelect={() => onSelect(c.id)}
-            />
-          ))
+        ) : null}
+        {showList && (
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
+            {virtualizer.getVirtualItems().map((vi) => {
+              const c = conversations[vi.index];
+              return (
+                <div
+                  key={c.id}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${vi.start}px)`,
+                  }}
+                >
+                  <ConversationListItem
+                    conversation={c}
+                    active={c.id === selectedId}
+                    onSelect={onSelect}
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
   );
-}
+});

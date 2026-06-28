@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * startCampaign agora ENFILEIRA (não dispara). Este teste garante que:
- *  - cria 1 OutboundJob por lead (renderizado, freeform no modo mock),
- *  - marca a campanha como RUNNING,
+ * startCampaign ENFILEIRA (não dispara) em LOTES, sem carregar todos os leads em
+ * memória, e é IDEMPOTENTE (campanha em RUNNING não reenfileira). Este teste
+ * garante que:
+ *  - cria 1 OutboundJob por lead disparável (renderizado, freeform no mock),
+ *  - marca a campanha como RUNNING antes de enfileirar,
+ *  - pagina os leads via lead.findMany (lotes), não via include,
  *  - NÃO chama o WhatsApp (não há import de messaging aqui).
  * Prisma e env são mockados — sem banco, sem credenciais.
  */
@@ -17,21 +20,23 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 
-const findFirst = vi.fn();
-const update = vi.fn();
+const campaignFindFirst = vi.fn();
+const campaignUpdate = vi.fn();
+const leadFindMany = vi.fn();
 const createMany = vi.fn();
-const $transaction = vi.fn((ops: Promise<unknown>[]) => Promise.all(ops));
 
 vi.mock("@/server/db/client", () => ({
   prisma: {
     campaign: {
-      findFirst: (...a: unknown[]) => findFirst(...a),
-      update: (...a: unknown[]) => update(...a),
+      findFirst: (...a: unknown[]) => campaignFindFirst(...a),
+      update: (...a: unknown[]) => campaignUpdate(...a),
+    },
+    lead: {
+      findMany: (...a: unknown[]) => leadFindMany(...a),
     },
     outboundJob: {
       createMany: (...a: unknown[]) => createMany(...a),
     },
-    $transaction: (...a: unknown[]) => $transaction(...(a as [Promise<unknown>[]])),
   },
 }));
 
@@ -40,36 +45,44 @@ vi.mock("@/server/services/entitlements", () => ({ assertFeature: vi.fn() }));
 
 import { startCampaign } from "./campaign.service";
 
-describe("startCampaign (enfileiramento)", () => {
+/** Faz o lead.findMany devolver `leads` na 1ª página e [] depois (encerra o loop). */
+function paginate(leads: { id: string; name: string }[]) {
+  let served = false;
+  leadFindMany.mockImplementation(() => {
+    if (served) return Promise.resolve([]);
+    served = true;
+    return Promise.resolve(leads);
+  });
+}
+
+describe("startCampaign (enfileiramento em lotes + idempotência)", () => {
   beforeEach(() => {
-    findFirst.mockReset();
-    update.mockReset().mockResolvedValue({});
-    createMany.mockReset().mockResolvedValue({ count: 0 });
-    $transaction.mockClear();
+    campaignFindFirst.mockReset();
+    campaignUpdate.mockReset().mockResolvedValue({});
+    leadFindMany.mockReset();
+    createMany.mockReset().mockImplementation((arg: { data: unknown[] }) =>
+      Promise.resolve({ count: arg.data.length }),
+    );
   });
 
   it("cria N OutboundJobs PENDING e marca a campanha como RUNNING (sem enviar)", async () => {
-    findFirst.mockResolvedValue({
+    campaignFindFirst.mockResolvedValue({
       id: "camp-1",
+      status: "DRAFT",
       messageTemplate: "Olá {{nome}}!",
-      leads: [
-        { id: "l1", name: "Ana" },
-        { id: "l2", name: "Bruno" },
-      ],
     });
+    paginate([
+      { id: "l1", name: "Ana" },
+      { id: "l2", name: "Bruno" },
+    ]);
 
     const result = await startCampaign("camp-1", "user-1");
 
     expect(result).toEqual({ enqueued: 2 });
-
-    // marca a campanha como RUNNING
-    expect(update).toHaveBeenCalledWith({
+    expect(campaignUpdate).toHaveBeenCalledWith({
       where: { id: "camp-1" },
       data: { status: "RUNNING" },
     });
-
-    // cria os jobs renderizados (freeform no mock, templateName null)
-    expect(createMany).toHaveBeenCalledTimes(1);
     const arg = createMany.mock.calls[0][0] as { data: unknown[] };
     expect(arg.data).toEqual([
       { leadId: "l1", campaignId: "camp-1", kind: "freeform", content: "Olá Ana!", templateName: null },
@@ -77,39 +90,33 @@ describe("startCampaign (enfileiramento)", () => {
     ]);
   });
 
-  it("enfileira zero jobs quando não há leads NOVO elegíveis", async () => {
-    findFirst.mockResolvedValue({
-      id: "camp-2",
-      messageTemplate: "Oi {{nome}}",
-      leads: [],
-    });
-
-    const result = await startCampaign("camp-2", "user-1");
-
-    expect(result).toEqual({ enqueued: 0 });
-    expect(createMany).toHaveBeenCalledTimes(1);
-    expect((createMany.mock.calls[0][0] as { data: unknown[] }).data).toEqual([]);
-  });
-
-  it("permite redisparo: enfileira leads NOVO e CONTATADO (protege conversas ativas)", async () => {
-    findFirst.mockResolvedValue({
-      id: "camp-3",
-      messageTemplate: "Oi {{nome}}",
-      leads: [{ id: "l1", name: "Ana" }],
-    });
+  it("filtra leads disparáveis (NOVO e CONTATADO, não opt-out)", async () => {
+    campaignFindFirst.mockResolvedValue({ id: "camp-3", status: "DRAFT", messageTemplate: "Oi {{nome}}" });
+    paginate([{ id: "l1", name: "Ana" }]);
 
     await startCampaign("camp-3", "user-1");
 
-    // o filtro de leads elegíveis deve incluir CONTATADO (além de NOVO)
-    const arg = findFirst.mock.calls[0][0] as {
-      include: { leads: { where: { status: { in: string[] }; optOut: boolean } } };
+    const arg = leadFindMany.mock.calls[0][0] as {
+      where: { campaignId: string; status: { in: string[] }; optOut: boolean };
     };
-    expect(arg.include.leads.where.status.in).toEqual(["NOVO", "CONTATADO"]);
-    expect(arg.include.leads.where.optOut).toBe(false);
+    expect(arg.where.campaignId).toBe("camp-3");
+    expect(arg.where.status.in).toEqual(["NOVO", "CONTATADO"]);
+    expect(arg.where.optOut).toBe(false);
+  });
+
+  it("idempotência: campanha já RUNNING não reenfileira (enqueued 0, sem createMany)", async () => {
+    campaignFindFirst.mockResolvedValue({ id: "camp-r", status: "RUNNING", messageTemplate: "Oi {{nome}}" });
+
+    const result = await startCampaign("camp-r", "user-1");
+
+    expect(result).toEqual({ enqueued: 0 });
+    expect(campaignUpdate).not.toHaveBeenCalled();
+    expect(createMany).not.toHaveBeenCalled();
+    expect(leadFindMany).not.toHaveBeenCalled();
   });
 
   it("lança quando a campanha não existe", async () => {
-    findFirst.mockResolvedValue(null);
+    campaignFindFirst.mockResolvedValue(null);
     await expect(startCampaign("nope", "user-1")).rejects.toThrow("Campanha não encontrada");
     expect(createMany).not.toHaveBeenCalled();
   });

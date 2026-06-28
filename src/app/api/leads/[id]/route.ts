@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { LeadStatus } from "@prisma/client";
 import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +10,13 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
-  const lead = await getLeadDetail(id, userId);
+  // Mesmo escopo da listagem: ASSIGNED só abre o lead atribuído a ele (404 senão).
+  const assignedToId =
+    ctx.perms.leadsScope === "ASSIGNED" ? ctx.sessionUserId : undefined;
+  const lead = await getLeadDetail(id, ctx.tenantUserId, { assignedToId });
   if (!lead) {
     return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
   }

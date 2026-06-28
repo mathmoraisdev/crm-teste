@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { formatPhone } from "@/lib/phone";
 import { timeAgo, cn } from "@/lib/utils";
@@ -14,19 +15,22 @@ export const ATTENDANCE_META: Record<AttendanceStatus, { label: string; tone: To
   RESOLVIDA: { label: "Resolvida", tone: "green" },
 };
 
-export function ConversationListItem({
+// memo: numa lista de conversas, só re-renderiza o item cujo `conversation`,
+// `active` ou `onSelect` mudou (não a lista inteira a cada poll). `onSelect`
+// recebe o id e é estável no pai (não mais um arrow inline por item).
+export const ConversationListItem = memo(function ConversationListItem({
   conversation,
   active,
   onSelect,
 }: {
   conversation: InboxConversation;
   active: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
 }) {
   const meta = ATTENDANCE_META[conversation.attendanceStatus];
   return (
     <button
-      onClick={onSelect}
+      onClick={() => onSelect(conversation.id)}
       className={cn(
         "w-full border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
         active && "bg-brand-50/60",
@@ -67,4 +71,4 @@ export function ConversationListItem({
       </div>
     </button>
   );
-}
+});

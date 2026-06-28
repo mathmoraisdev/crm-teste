@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid, List, RefreshCw, Plus, Search, X, Tag as TagIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,18 +13,30 @@ import { PipelineBoard } from "@/components/PipelineBoard";
 import { TagManagerModal } from "@/components/TagManagerModal";
 import { StatCard } from "@/components/app/StatCard";
 import { cn } from "@/lib/utils";
+import { useDebounced } from "@/lib/use-debounced";
+import { useTenantStream } from "@/lib/use-tenant-stream";
 import { PIPELINE_ORDER, resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { LeadStatus } from "@prisma/client";
 import type { LeadListItem } from "@/server/services/lead.service";
+import type { LeadFacets } from "@/server/services/lead-facets.service";
 
 type View = "table" | "board";
 const NO_CAMPAIGN = "__none__";
+const TAKE = 50;
 
 const selectClass =
   "min-w-[140px] flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 sm:flex-none";
 
 export function LeadsDashboard() {
-  const [leads, setLeads] = useState<LeadListItem[] | null>(null);
+  // Lista PAGINADA (server-side): página atual em `items`, total filtrado em `total`.
+  const [items, setItems] = useState<LeadListItem[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const skipRef = useRef(0);
+  const itemsRef = useRef<LeadListItem[] | null>(null);
+  // Facetas (status/campanhas/tags) — fonte própria, não derivadas da lista.
+  const [facets, setFacets] = useState<LeadFacets | null>(null);
+
   const [view, setView] = useState<View>("table");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<LeadListItem | null>(null);
@@ -34,29 +46,87 @@ export function LeadsDashboard() {
   const [moveError, setMoveError] = useState<string | null>(null);
   const [pipelineLabels, setPipelineLabels] = useState<PipelineLabels>({});
 
-  // filtros
+  // filtros (aplicados NO SERVIDOR via query params)
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [campaignFilter, setCampaignFilter] = useState<string>("ALL");
   const [optOutFilter, setOptOutFilter] = useState<string>("ALL");
   const [tagFilter, setTagFilter] = useState<string>("ALL");
+  // Debounce na busca textual: não dispara fetch a cada tecla.
+  const debouncedQuery = useDebounced(query, 350);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    skipRef.current = skip;
+  }, [skip]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const buildParams = useCallback(
+    (skipArg: number) => {
+      const p = new URLSearchParams();
+      p.set("skip", String(skipArg));
+      p.set("take", String(TAKE));
+      if (debouncedQuery.trim()) p.set("q", debouncedQuery.trim());
+      if (statusFilter !== "ALL") p.set("status", statusFilter);
+      if (campaignFilter === NO_CAMPAIGN) p.set("campaignId", "none");
+      else if (campaignFilter !== "ALL") p.set("campaignId", campaignFilter);
+      if (optOutFilter !== "ALL") p.set("optOut", String(optOutFilter === "optout"));
+      if (tagFilter !== "ALL") p.set("tagId", tagFilter);
+      return p.toString();
+    },
+    [debouncedQuery, statusFilter, campaignFilter, optOutFilter, tagFilter],
+  );
+
+  const loadPage = useCallback(
+    async (skipArg: number, append: boolean) => {
+      try {
+        const res = await fetch(`/api/leads?${buildParams(skipArg)}`, { cache: "no-store" });
+        const data = await res.json();
+        setItems((prev) => (append && prev ? [...prev, ...data.items] : data.items));
+        setTotal(data.total);
+      } catch {
+        // mantém o estado anterior em caso de falha de rede transiente
+      }
+    },
+    [buildParams],
+  );
+
+  const loadFacets = useCallback(async () => {
     try {
-      const res = await fetch("/api/leads", { cache: "no-store" });
-      const data = await res.json();
-      setLeads(data.leads as LeadListItem[]);
+      const res = await fetch("/api/leads/facets", { cache: "no-store" });
+      setFacets(await res.json());
     } catch {
-      // mantém o estado anterior em caso de falha de rede transiente
+      // facetas são best-effort; mantém as anteriores
     }
   }, []);
 
-  // Carga inicial + polling leve a cada 4s para refletir mudanças do pipeline.
+  // Qualquer mudança de filtro reseta a paginação e recarrega a 1ª página.
   useEffect(() => {
-    load();
-    const t = setInterval(load, 4000);
+    setSkip(0);
+    loadPage(0, false);
+  }, [loadPage]);
+
+  // Facetas: carga inicial (recarregadas após mutações via refresh()).
+  useEffect(() => {
+    loadFacets();
+  }, [loadFacets]);
+
+  // Polling de FALLBACK (30s) — só revalida a 1ª página e não atropela quem
+  // paginou. Em produção com Redis o SSE (abaixo) cobre o tempo real; este
+  // intervalo só protege contra SSE indisponível (sem Redis / conexão caída).
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (skipRef.current === 0) loadPage(0, false);
+    }, 30000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [loadPage]);
+
+  // Tempo real: ao receber evento da conta, revalida 1ª página + facetas na hora.
+  useTenantStream(() => {
+    if (skipRef.current === 0) loadPage(0, false);
+    loadFacets();
+  });
 
   // Rótulos renomeados do funil (uma vez).
   useEffect(() => {
@@ -68,54 +138,37 @@ export function LeadsDashboard() {
 
   const statusMeta = useMemo(() => resolveStatusMeta(pipelineLabels), [pipelineLabels]);
 
+  // Recarrega 1ª página + facetas após uma mutação (criar/editar/excluir/mover/tags).
+  const refresh = useCallback(() => {
+    setSkip(0);
+    loadPage(0, false);
+    loadFacets();
+  }, [loadPage, loadFacets]);
+
   async function manualRefresh() {
     setRefreshing(true);
-    await load();
+    await Promise.all([loadPage(0, false), loadFacets()]);
+    setSkip(0);
     setRefreshing(false);
   }
 
-  // Campanhas presentes nos leads, para o filtro (sem fetch extra).
-  const campaignNames = useMemo(() => {
-    if (!leads) return [];
-    return [...new Set(leads.map((l) => l.campaignName).filter((n): n is string => !!n))].sort();
-  }, [leads]);
+  function loadMore() {
+    const next = skip + TAKE;
+    setSkip(next);
+    loadPage(next, true);
+  }
 
-  // Tags presentes nos leads, para o filtro (sem fetch extra).
-  const tagOptions = useMemo(() => {
-    if (!leads) return [];
-    const map = new Map<string, string>();
-    for (const l of leads) for (const t of l.tags) map.set(t.id, t.name);
-    return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [leads]);
-
-  // Métricas reais do funil (derivadas dos leads carregados).
+  // Stats do funil vêm das facetas (contagem real no banco, não da página atual).
   const stats = useMemo(() => {
-    if (!leads) return null;
-    const by = (s: string) => leads.filter((l) => l.status === s).length;
+    if (!facets) return null;
+    const by = (s: string) => facets.byStatus[s] ?? 0;
     return {
-      total: leads.length,
-      contatados: leads.filter((l) => l.status !== "NOVO").length,
+      total: facets.total,
+      contatados: facets.total - by("NOVO"),
       qualificados: by("QUALIFICADO") + by("REUNIAO_AGENDADA"),
       reunioes: by("REUNIAO_AGENDADA"),
     };
-  }, [leads]);
-
-  const filtered = useMemo(() => {
-    if (!leads) return null;
-    const q = query.trim().toLowerCase();
-    return leads.filter((l) => {
-      if (statusFilter !== "ALL" && l.status !== statusFilter) return false;
-      if (campaignFilter === NO_CAMPAIGN && l.campaignName) return false;
-      if (campaignFilter !== "ALL" && campaignFilter !== NO_CAMPAIGN && l.campaignName !== campaignFilter)
-        return false;
-      if (optOutFilter === "active" && l.optOut) return false;
-      if (optOutFilter === "optout" && !l.optOut) return false;
-      if (tagFilter !== "ALL" && !l.tags.some((t) => t.id === tagFilter)) return false;
-      if (q && !l.name.toLowerCase().includes(q) && !l.phone.toLowerCase().includes(q))
-        return false;
-      return true;
-    });
-  }, [leads, query, statusFilter, campaignFilter, optOutFilter, tagFilter]);
+  }, [facets]);
 
   const hasFilters =
     query.trim() !== "" ||
@@ -138,32 +191,38 @@ export function LeadsDashboard() {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error ?? "Falha ao apagar lead");
     }
-    await load();
+    refresh();
   }
 
   // Drag-and-drop do kanban: atualização otimista → PATCH → reverte em erro.
-  async function moveLead(leadId: string, status: LeadStatus) {
-    const prev = leads;
-    setLeads((cur) =>
-      cur ? cur.map((l) => (l.id === leadId ? { ...l, status } : l)) : cur,
-    );
-    setMoveError(null);
-    try {
-      const res = await fetch(`/api/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Falha ao mover o lead");
+  // useCallback p/ identidade estável (não quebra o memo do PipelineBoard ao
+  // digitar na busca). O revert lê a lista anterior via ref (sem depender de
+  // `items` nas deps, que mudaria a identidade a cada fetch).
+  const moveLead = useCallback(
+    async (leadId: string, status: LeadStatus) => {
+      const prev = itemsRef.current;
+      setItems((cur) => (cur ? cur.map((l) => (l.id === leadId ? { ...l, status } : l)) : cur));
+      setMoveError(null);
+      try {
+        const res = await fetch(`/api/leads/${leadId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Falha ao mover o lead");
+        }
+        loadFacets(); // o status mudou → atualiza os contadores do funil
+      } catch (e) {
+        setItems(prev); // reverte
+        setMoveError(e instanceof Error ? e.message : "Falha ao mover o lead");
       }
-      load();
-    } catch (e) {
-      setLeads(prev); // reverte
-      setMoveError(e instanceof Error ? e.message : "Falha ao mover o lead");
-    }
-  }
+    },
+    [loadFacets],
+  );
+
+  const hasMore = items !== null && items.length < total;
 
   return (
     <div className="space-y-5">
@@ -174,11 +233,11 @@ export function LeadsDashboard() {
             Leads
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            {filtered === null
+            {items === null
               ? "—"
               : hasFilters
-                ? `${filtered.length} de ${leads?.length ?? 0} leads`
-                : `${leads?.length ?? 0} contatos no funil`}{" "}
+                ? `${items.length} de ${total} leads`
+                : `${total} contatos no funil`}{" "}
             · atualização automática
           </p>
         </div>
@@ -221,11 +280,7 @@ export function LeadsDashboard() {
         <StatCard label="Leads no funil" value={stats?.total ?? "—"} />
         <StatCard label="Contatados" value={stats?.contatados ?? "—"} />
         <StatCard label="Qualificados" value={stats?.qualificados ?? "—"} accent />
-        <StatCard
-          label="Reuniões agendadas"
-          value={stats?.reunioes ?? "—"}
-          dark
-        />
+        <StatCard label="Reuniões agendadas" value={stats?.reunioes ?? "—"} dark />
       </div>
 
       {/* filtros */}
@@ -253,9 +308,9 @@ export function LeadsDashboard() {
         <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} className={selectClass}>
           <option value="ALL">Todas as campanhas</option>
           <option value={NO_CAMPAIGN}>Sem campanha</option>
-          {campaignNames.map((n) => (
-            <option key={n} value={n}>
-              {n}
+          {(facets?.campaigns ?? []).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>
@@ -266,7 +321,7 @@ export function LeadsDashboard() {
         </select>
         <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className={selectClass}>
           <option value="ALL">Todas as tags</option>
-          {tagOptions.map((t) => (
+          {(facets?.tags ?? []).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
             </option>
@@ -286,27 +341,36 @@ export function LeadsDashboard() {
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{moveError}</p>
       )}
 
-      {filtered === null ? (
+      {items === null ? (
         <Card>
           <LoadingBlock label="Carregando leads…" />
         </Card>
       ) : view === "table" ? (
         <Card className="overflow-hidden">
           <LeadsTable
-            leads={filtered}
+            leads={items}
             onEdit={setEditing}
             onDelete={setDeleting}
             labels={pipelineLabels}
           />
         </Card>
       ) : (
-        <PipelineBoard leads={filtered} onMove={moveLead} labels={pipelineLabels} />
+        <PipelineBoard leads={items} onMove={moveLead} labels={pipelineLabels} />
+      )}
+
+      {/* paginação: carrega mais sob demanda */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button variant="secondary" size="sm" onClick={loadMore} disabled={!hasMore}>
+            Carregar mais ({items?.length ?? 0} de {total})
+          </Button>
+        </div>
       )}
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Novo lead">
         <LeadForm
           onSaved={() => {
-            load();
+            refresh();
             setCreateOpen(false);
           }}
         />
@@ -329,7 +393,7 @@ export function LeadsDashboard() {
             }}
             labels={pipelineLabels}
             onSaved={() => {
-              load();
+              refresh();
               setEditing(null);
             }}
           />
@@ -339,7 +403,7 @@ export function LeadsDashboard() {
       <TagManagerModal
         open={tagManagerOpen}
         onClose={() => setTagManagerOpen(false)}
-        onChanged={load}
+        onChanged={refresh}
       />
 
       <ConfirmDialog

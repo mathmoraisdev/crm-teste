@@ -6,6 +6,7 @@ import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
 import { sleep } from "@/lib/humanize";
+import { logger } from "@/lib/logger";
 
 type Pool = typeof import("@/server/whatsapp/baileys/pool");
 let pool: Pool | null = null;
@@ -34,9 +35,9 @@ async function bootBaileys(): Promise<Pool> {
         .catch((err) => {
           // Nunca deixar a falha virar unhandled rejection: o lead fica sem
           // resposta, mas pelo menos fica rastreável (chip + telefone + erro).
-          console.error(
-            `[worker] ingestInbound falhou (chip=${e.whatsAppNumberId} de=${e.fromPhone}):`,
-            err,
+          logger.error(
+            { whatsAppNumberId: e.whatsAppNumberId, fromPhone: e.fromPhone, err },
+            "[worker] ingestInbound falhou",
           );
         }),
     // Operador respondeu manual pelo zap (fromMe não-bot): registra, pausa a IA
@@ -52,9 +53,9 @@ async function bootBaileys(): Promise<Pool> {
           if (r.leadId) cancelResponse(r.leadId);
         })
         .catch((err) => {
-          console.error(
-            `[worker] handleOperatorMessage falhou (chip=${e.whatsAppNumberId} p/=${e.toPhone}):`,
-            err,
+          logger.error(
+            { whatsAppNumberId: e.whatsAppNumberId, toPhone: e.toPhone, err },
+            "[worker] handleOperatorMessage falhou",
           );
         }),
     onAck: (id, status) => applyAck(id, status),
@@ -64,20 +65,26 @@ async function bootBaileys(): Promise<Pool> {
 }
 
 async function main() {
-  console.log("[worker] iniciado. modo=%s cap/dia=%d", env.WHATSAPP_MODE, env.WHATSAPP_DAILY_CAP);
+  logger.info(
+    { mode: env.WHATSAPP_MODE, dailyCap: env.WHATSAPP_DAILY_CAP },
+    "[worker] iniciado",
+  );
   // Diagnóstico: o agendamento roda AQUI (worker). Se calendar=google-calendar
   // mas as credenciais estão AUSENTES, proposeSlots quebra e o lead fica sem
   // resposta. Imprime no boot p/ flagrar variável faltando no serviço do worker.
-  console.log(
-    "[worker] calendar=%s googleCreds=%s",
-    env.CALENDAR_MODE,
-    env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY ? "presentes" : "AUSENTES",
+  logger.info(
+    {
+      calendar: env.CALENDAR_MODE,
+      googleCreds: env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY ? "presentes" : "AUSENTES",
+    },
+    "[worker] calendar",
   );
   if (env.WHATSAPP_MODE === "baileys") pool = await bootBaileys();
 
   // Recupera jobs órfãos de execuções anteriores (deploy/crash deixou SENDING preso).
   const reclaimedOnBoot = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
-  if (reclaimedOnBoot > 0) console.log("[worker] reaper boot: %d jobs recuperados", reclaimedOnBoot);
+  if (reclaimedOnBoot > 0)
+    logger.info({ reclaimed: reclaimedOnBoot }, "[worker] reaper boot: jobs recuperados");
 
   // Baileys: 1 runner (laço de envio) por chip enviável, supervisionado abaixo.
   const runners = new Map<string, { stopped: boolean }>();
@@ -100,7 +107,7 @@ async function main() {
 
     if (Date.now() - lastReap >= env.WORKER_REAP_EVERY_MS) {
       const n = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);
-      if (n > 0) console.log("[worker] reaper: %d jobs recuperados", n);
+      if (n > 0) logger.info({ reclaimed: n }, "[worker] reaper: jobs recuperados");
       lastReap = Date.now();
     }
 
@@ -109,9 +116,9 @@ async function main() {
     if (Date.now() - lastReminder >= 60_000) {
       try {
         const r = await dispatchDueReminders(new Date());
-        if (r > 0) console.log("[worker] lembretes de reunião enviados: %d", r);
+        if (r > 0) logger.info({ sent: r }, "[worker] lembretes de reunião enviados");
       } catch (err) {
-        console.error("[worker] dispatchDueReminders falhou:", err);
+        logger.error({ err }, "[worker] dispatchDueReminders falhou");
       }
       lastReminder = Date.now();
     }
@@ -138,9 +145,9 @@ async function main() {
       if (chips.length === 0 && Date.now() - lastChipAlert >= 60_000) {
         const pendingJobs = await prisma.outboundJob.count({ where: { status: "PENDING" } });
         if (pendingJobs > 0) {
-          console.error(
-            "[worker] ALERTA: 0 chips vivos com %d jobs PENDING — repor números p/ retomar o disparo.",
-            pendingJobs,
+          logger.error(
+            { pendingJobs },
+            "[worker] ALERTA: 0 chips vivos com jobs PENDING — repor números p/ retomar o disparo",
           );
           lastChipAlert = Date.now();
         }
@@ -170,6 +177,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("[worker] erro fatal:", e);
+  logger.error({ err: e }, "[worker] erro fatal");
   process.exit(1);
 });

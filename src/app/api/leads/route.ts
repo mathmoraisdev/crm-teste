@@ -1,15 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import type { LeadStatus } from "@prisma/client";
 import { createLead, listLeads } from "@/server/services/lead.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const leads = await listLeads(userId);
-  return NextResponse.json({ leads });
+export async function GET(req: NextRequest) {
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  // Operador com escopo ASSIGNED só enxerga os leads atribuídos a ele.
+  const assignedToId =
+    ctx.perms.leadsScope === "ASSIGNED" ? ctx.sessionUserId : undefined;
+  const sp = req.nextUrl.searchParams;
+  const result = await listLeads(ctx.tenantUserId, {
+    assignedToId,
+    skip: Number(sp.get("skip") ?? 0) || 0,
+    take: Number(sp.get("take") ?? 50) || 50,
+    query: sp.get("q") ?? undefined,
+    status: (sp.get("status") as LeadStatus | null) ?? undefined,
+    campaignId: sp.get("campaignId") === "none" ? null : sp.get("campaignId") || undefined,
+    optOut: sp.get("optOut") === null ? undefined : sp.get("optOut") === "true",
+    tagId: sp.get("tagId") ?? undefined,
+  });
+  return NextResponse.json(result); // { items, total }
 }
 
 const createSchema = z.object({

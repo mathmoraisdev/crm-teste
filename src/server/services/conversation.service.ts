@@ -13,6 +13,8 @@ import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
 import { shouldCreateContact } from "./inbound-resolve";
 import { isAccountActiveByLead } from "@/server/services/account.service";
+import { cached } from "@/server/cache/cache";
+import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -83,6 +85,19 @@ const DEFAULT_CONTEXT_RESET_MINUTES = 180;
 async function loadConversation(
   leadId: string,
   resetMinutes: number = DEFAULT_CONTEXT_RESET_MINUTES,
+): Promise<ConversationTurn[]> {
+  // Cache 300s por lead: o worker pode recarregar o mesmo contexto várias vezes
+  // (debounce/agrupamento) sem nova ida ao banco. Invalida a cada Message nova
+  // (invalidateConversation no inbound/outbound), então nunca serve histórico
+  // defasado dentro da conversa.
+  return cached(cacheKeys.conversation(leadId), 300, () =>
+    computeConversation(leadId, resetMinutes),
+  );
+}
+
+async function computeConversation(
+  leadId: string,
+  resetMinutes: number,
 ): Promise<ConversationTurn[]> {
   // Pega as últimas N (createdAt desc + take) e reverte p/ ordem cronológica.
   const messages = await prisma.message.findMany({
@@ -169,6 +184,9 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
       providerMessageId: input.providerMessageId ?? undefined,
     },
   });
+  // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
+  await invalidateConversation(lead.id);
+  await invalidateLeadCaches(lead.userId);
 
   // Opt-out (LGPD): tem precedência sobre tudo — inclusive sobre o handoff humano.
   // Mesmo com a IA pausada (operador no controle), um "PARAR/SAIR" precisa encerrar
@@ -395,7 +413,7 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
   if (!exists) throw new Error("Lead não encontrado");
   // Handoff também movimenta a camada de atendimento (inbox): pausar = entra na
   // FILA (marcando o início do SLA); retomar = volta à IA e libera a atribuição.
-  return prisma.lead.update({
+  const updated = await prisma.lead.update({
     where: { id: leadId },
     data: paused
       ? {
@@ -411,6 +429,8 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
           assignedToId: null,
         },
   });
+  await invalidateLeadCaches(userId); // FILA/IA mudou os contadores de inbox
+  return updated;
 }
 
 /**
@@ -437,6 +457,7 @@ export async function sendManualReply(leadId: string, userId: string, content: s
   if (Object.keys(data).length > 0) {
     await prisma.lead.update({ where: { id: lead.id }, data });
   }
+  await invalidateLeadCaches(userId); // ATENDENDO→AGUARDANDO / SLA → contadores
 }
 
 /**
@@ -506,6 +527,8 @@ export async function handleOperatorMessage(input: {
     }
     throw e;
   }
+  // OUTBOUND novo (resposta humana pelo zap) → invalida contexto da IA.
+  await invalidateConversation(lead.id);
   // Duas responsabilidades distintas:
   //  - pausar a IA (handoff automático) só se o número tiver autoPauseOnHumanReply;
   //  - renovar o relógio de inatividade SEMPRE que o humano falar com um lead já

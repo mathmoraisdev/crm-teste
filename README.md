@@ -130,8 +130,24 @@ código de negócio**.
 `Lead` 1‑N `Message` · `Lead` 1‑1 `Qualification` · `Lead` 1‑1 `Meeting` ·
 `Campaign` 1‑N `Lead`. Status do lead:
 `NOVO → CONTATADO → EM_CONVERSA → QUALIFICADO → REUNIAO_AGENDADA` (ou
-`DESCARTADO`). Para o MVP usa `prisma db push`; migrations versionadas ficam como
-nota de produção (abaixo).
+`DESCARTADO`).
+
+#### Migrations versionadas
+
+O deploy do worker (`railway.json`) agora roda **`prisma migrate deploy`** (não mais
+`db push --accept-data-loss`). Fluxo de trabalho:
+
+1. Editar `prisma/schema.prisma`.
+2. `npx prisma migrate dev --name <descricao>` (gera a migration + aplica no dev).
+3. Commitar `prisma/migrations/**` junto com o schema.
+4. No deploy, o Railway roda `prisma migrate deploy` automaticamente.
+
+> **CUTOVER (rodar UMA vez):** o banco de produção foi criado por `db push`, então as
+> tabelas do baseline já existem. ANTES do primeiro deploy com `migrate deploy`, marque
+> o baseline como aplicado para o Prisma não tentar recriá-lo:
+> `npx prisma migrate resolve --applied 00000000000000_baseline` (apontando para o banco
+> de produção). Sem isso, o `migrate deploy` falha ("type/table already exists") e o
+> worker não sobe. O mesmo vale para o banco local se ele foi gerido por `db push`.
 
 ---
 

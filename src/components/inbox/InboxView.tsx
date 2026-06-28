@@ -11,6 +11,7 @@ import { QualificationPanel } from "@/components/QualificationPanel";
 import { TagPicker } from "@/components/TagPicker";
 import { ConversationList } from "@/components/inbox/ConversationList";
 import { ATTENDANCE_META } from "@/components/inbox/ConversationListItem";
+import { useTenantStream } from "@/lib/use-tenant-stream";
 import { formatPhone } from "@/lib/phone";
 import type {
   InboxFilter,
@@ -48,10 +49,12 @@ export function InboxView() {
     }
   }, []);
 
+  // Polling de FALLBACK (30s): com Redis o SSE abaixo cobre o tempo real; este
+  // intervalo protege contra SSE indisponível.
   useEffect(() => {
     setLoadingList(true);
     loadList(filter);
-    const t = setInterval(() => loadList(filter), 4000);
+    const t = setInterval(() => loadList(filter), 30000);
     return () => clearInterval(t);
   }, [filter, loadList]);
 
@@ -66,29 +69,40 @@ export function InboxView() {
     }
   }, []);
 
-  // Polling do detalhe selecionado (ver novas mensagens / mudança de estado).
+  // Polling de FALLBACK do detalhe selecionado (30s) — o SSE revalida na hora.
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
     loadDetail(selectedId);
-    const t = setInterval(() => loadDetail(selectedId), 3000);
+    const t = setInterval(() => loadDetail(selectedId), 30000);
     return () => clearInterval(t);
   }, [selectedId, loadDetail]);
 
-  async function select(id: string) {
-    setSelectedId(id);
-    setDetail(null);
-    setActionError(null);
-    // Marca como lida e atualiza a lista (apaga a bolinha).
-    try {
-      await fetch(`/api/inbox/${id}/read`, { method: "POST" });
-    } catch {
-      // não bloqueia a abertura
-    }
+  // Tempo real: evento da conta → revalida a lista e o detalhe aberto na hora.
+  useTenantStream(() => {
     loadList(filter);
-  }
+    if (selectedRef.current) loadDetail(selectedRef.current);
+  });
+
+  // useCallback: identidade estável p/ a ConversationList memoizada não
+  // re-renderizar a cada poll (4s) por causa de um novo onSelect.
+  const select = useCallback(
+    async (id: string) => {
+      setSelectedId(id);
+      setDetail(null);
+      setActionError(null);
+      // Marca como lida e atualiza a lista (apaga a bolinha).
+      try {
+        await fetch(`/api/inbox/${id}/read`, { method: "POST" });
+      } catch {
+        // não bloqueia a abertura
+      }
+      loadList(filter);
+    },
+    [filter, loadList],
+  );
 
   async function act(
     path: string,

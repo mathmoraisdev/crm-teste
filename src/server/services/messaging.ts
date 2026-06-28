@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import { getWhatsApp } from "@/server/whatsapp";
 import { env } from "@/lib/env";
 import { typingDelayMs, sleep } from "@/lib/humanize";
+import { invalidateConversation } from "@/server/cache/keys";
 
 /**
  * O pool Baileys é importado de forma PREGUIÇOSA (só quando WHATSAPP_MODE=baileys).
@@ -60,6 +61,7 @@ export async function sendWhatsAppMessage(
       },
     });
     await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
+    await invalidateConversation(lead.id); // OUTBOUND novo → contexto da IA mudou
     return;
   }
 
@@ -80,6 +82,7 @@ export async function sendWhatsAppMessage(
     where: { id: lead.id },
     data: { updatedAt: new Date() },
   });
+  await invalidateConversation(lead.id); // OUTBOUND novo → contexto da IA mudou
 }
 
 /**

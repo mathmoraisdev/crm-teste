@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { startCampaign } from "@/server/services/campaign.service";
 import { isAccountActive } from "@/server/services/account.service";
 import { getTenantContext } from "@/lib/tenant";
+import { rateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,16 @@ export async function POST(
     );
   }
   const userId = ctx.tenantUserId;
+  // Rate limit por conta: protege o disparo em massa de clique-frenético/abuso
+  // (10/min). Sem Redis é no-op (dev/local). Idempotência da campanha cobre o
+  // resto; aqui é a 1ª barreira barata, antes de tocar o banco.
+  const rl = await rateLimit(`campaign-start:${userId}`, 10, 60);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Muitas tentativas de disparo. Aguarde um minuto e tente de novo." },
+      { status: 429 },
+    );
+  }
   if (!(await isAccountActive(userId))) {
     return NextResponse.json(
       {

@@ -132,6 +132,9 @@ export async function createCampaign(
  * si é feito pelo worker, respeitando rate limit, janela comercial e cap diário
  * — não há mais loop síncrono aqui.
  */
+/** Tamanho do lote ao enfileirar — não carrega todos os leads em memória. */
+const ENQUEUE_BATCH = 500;
+
 export async function startCampaign(
   campaignId: string,
   userId: string,
@@ -139,21 +142,35 @@ export async function startCampaign(
   await assertFeature(userId, "campaigns"); // entitlements: plano permite campanha?
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, userId },
-    include: {
-      leads: {
-        where: { status: { in: DISPATCHABLE_LEAD_STATUSES }, optOut: false },
-        select: { id: true, name: true },
-      },
-    },
+    select: { id: true, status: true, messageTemplate: true },
   });
   if (!campaign) throw new Error("Campanha não encontrada");
 
+  // Idempotência: campanha já em disparo NÃO reenfileira. Protege o clique-duplo
+  // do operador (e retries) de criar OutboundJobs duplicados para os mesmos leads.
+  if (campaign.status === "RUNNING") return { enqueued: 0 };
+
   const useTemplate = !!env.WHATSAPP_TEMPLATE_NAME && env.WHATSAPP_MODE === "cloud-api";
 
-  await prisma.$transaction([
-    prisma.campaign.update({ where: { id: campaignId }, data: { status: "RUNNING" } }),
-    prisma.outboundJob.createMany({
-      data: campaign.leads.map((lead) => ({
+  // Marca RUNNING ANTES de enfileirar: fecha a janela do clique-duplo (a 2ª
+  // chamada já vê RUNNING e sai pelo guard acima) e habilita o worker a consumir
+  // os jobs à medida que são criados.
+  await prisma.campaign.update({ where: { id: campaignId }, data: { status: "RUNNING" } });
+
+  // Enfileira em páginas de 500: o enqueue NÃO muda o status do lead (isso é o
+  // worker no disparo), então o conjunto filtrado é estável e `skip` é seguro.
+  let enqueued = 0;
+  for (let skip = 0; ; skip += ENQUEUE_BATCH) {
+    const leads = await prisma.lead.findMany({
+      where: { campaignId, status: { in: DISPATCHABLE_LEAD_STATUSES }, optOut: false },
+      orderBy: { id: "asc" },
+      skip,
+      take: ENQUEUE_BATCH,
+      select: { id: true, name: true },
+    });
+    if (leads.length === 0) break;
+    const { count } = await prisma.outboundJob.createMany({
+      data: leads.map((lead) => ({
         leadId: lead.id,
         campaignId,
         kind: useTemplate ? "template" : "freeform",
@@ -161,10 +178,11 @@ export async function startCampaign(
         content: renderTemplate(renderSpintax(campaign.messageTemplate), lead.name),
         templateName: useTemplate ? env.WHATSAPP_TEMPLATE_NAME : null,
       })),
-    }),
-  ]);
+    });
+    enqueued += count;
+  }
 
-  return { enqueued: campaign.leads.length };
+  return { enqueued };
 }
 
 /**
