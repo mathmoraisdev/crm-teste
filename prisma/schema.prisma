@@ -93,6 +93,11 @@ model User {
   aiKeyLast4      String? // 4 últimos dígitos p/ exibir na UI sem revelar
   aiKeyVerifiedAt DateTime? // última validação bem-sucedida contra a API
 
+  // Cota de IA na chave da PLATAFORMA (BYOK ignora). Reset por virada de mês,
+  // em tempo real (sem cron): se aiCreditMonth != mês atual, o contador zera.
+  aiCreditMonth String? // "YYYY-MM" — mês de referência do contador
+  aiCreditUsed  Int     @default(0) // atendimentos de IA consumidos no mês corrente
+
   leads                     Lead[]
   assignedLeads             Lead[]   @relation("AssignedLeads")
   tags                      Tag[]
