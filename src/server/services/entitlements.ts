@@ -78,3 +78,25 @@ export async function consumeAiCredit(userId: string, now: Date = new Date()): P
   });
   return { allowed: true, source: "platform", used: next, quota };
 }
+
+export type AiUsageStatus =
+  | { unlimited: true; reason: "byok" | "grandfather" | "admin" }
+  | { unlimited: false; used: number; quota: number; month: string };
+
+/** Leitura (sem mutação) do consumo de IA do tenant — pra exibir na UI. */
+export async function getAiUsageStatus(userId: string, now: Date = new Date()): Promise<AiUsageStatus> {
+  const { source } = await resolveProviderForUser(userId);
+  if (source === "user") return { unlimited: true, reason: "byok" };
+
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true, aiCreditMonth: true, aiCreditUsed: true },
+  });
+  if (!owner) throw new Error("Conta não encontrada");
+  if (isAdminEmail(owner.email)) return { unlimited: true, reason: "admin" };
+  if (!owner.plan) return { unlimited: true, reason: "grandfather" };
+
+  const month = monthKey(now);
+  const used = owner.aiCreditMonth === month ? owner.aiCreditUsed : 0;
+  return { unlimited: false, used, quota: PLAN_LIMITS[owner.plan].aiMonthlyQuota, month };
+}

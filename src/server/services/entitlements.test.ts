@@ -149,3 +149,39 @@ describe("consumeAiCredit", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
+
+describe("getAiUsageStatus", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const NOW = new Date("2026-06-15T12:00:00Z");
+
+  it("BYOK → ilimitado", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "user" });
+    const { getAiUsageStatus } = await import("./entitlements");
+    expect(await getAiUsageStatus("dono-1", NOW)).toEqual({ unlimited: true, reason: "byok" });
+  });
+
+  it("plataforma com plano → used/quota do mês corrente", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-06", aiCreditUsed: 420,
+    });
+    const { getAiUsageStatus } = await import("./entitlements");
+    expect(await getAiUsageStatus("dono-1", NOW)).toEqual({
+      unlimited: false, used: 420, quota: 1500, month: "2026-06",
+    });
+  });
+
+  it("plataforma, mês virou → used=0 (não vaza o mês anterior)", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-05", aiCreditUsed: 1500,
+    });
+    const { getAiUsageStatus } = await import("./entitlements");
+    expect(await getAiUsageStatus("dono-1", NOW)).toMatchObject({ used: 0, quota: 1500 });
+  });
+});
