@@ -32,9 +32,9 @@ export interface InboundInput {
  *  - leadId (+userId)         → dono direto (simulate-reply)
  *  - whatsAppNumberId + phone → conta dona do chip que recebeu
  *  - userId + phone           → conta explícita
- *  - phone (fallback)         → global (cloud-api sem mapa de número→conta)
+ *  - phone só (sem escopo)    → NÃO resolve (evita vazamento entre contas)
  */
-async function resolveLead(input: InboundInput) {
+export async function resolveLead(input: InboundInput) {
   if (input.leadId) {
     return prisma.lead.findFirst({
       where: { id: input.leadId, ...(input.userId ? { userId: input.userId } : {}) },
@@ -57,7 +57,9 @@ async function resolveLead(input: InboundInput) {
     });
   }
   if (input.phone) {
-    return prisma.lead.findFirst({ where: { phone: { in: brPhoneVariants(input.phone) } } });
+    // Sem whatsAppNumberId nem userId não há como escopar a conta: buscar global
+    // casaria o lead de QUALQUER tenant (vazamento). Melhor não resolver.
+    return null;
   }
   return null;
 }
