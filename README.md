@@ -142,12 +142,14 @@ O deploy do worker (`railway.json`) agora roda **`prisma migrate deploy`** (não
 3. Commitar `prisma/migrations/**` junto com o schema.
 4. No deploy, o Railway roda `prisma migrate deploy` automaticamente.
 
-> **CUTOVER (rodar UMA vez):** o banco de produção foi criado por `db push`, então as
-> tabelas do baseline já existem. ANTES do primeiro deploy com `migrate deploy`, marque
-> o baseline como aplicado para o Prisma não tentar recriá-lo:
-> `npx prisma migrate resolve --applied 00000000000000_baseline` (apontando para o banco
-> de produção). Sem isso, o `migrate deploy` falha ("type/table already exists") e o
-> worker não sobe. O mesmo vale para o banco local se ele foi gerido por `db push`.
+> **CUTOVER (automático):** o banco de produção foi criado por `db push`, então as
+> tabelas do baseline já existem e o `migrate deploy` puro falharia com **P3005**
+> ("schema not empty"). Por isso o `startCommand` do worker (`railway.json`) roda antes
+> um `prisma migrate resolve --applied 00000000000000_baseline` (que MARCA o baseline
+> como aplicado sem rodar o SQL), tolerando erro nos deploys seguintes (`|| true`, quando
+> já está aplicado). Assim o 1º deploy se auto-baseliza e os próximos só aplicam
+> migrations novas. Para baselizar um banco local gerido por `db push`, rode o mesmo
+> `migrate resolve` uma vez.
 
 ---
 
