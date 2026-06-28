@@ -10,6 +10,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+// Pool: configurado via `?connection_limit=N&pool_timeout=N` na DATABASE_URL
+// (NÃO existe opção de pool no construtor do Prisma). Ver .env.example.
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
