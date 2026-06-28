@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createCampaign, listCampaigns } from "@/server/services/campaign.service";
 import { isAccountActive } from "@/server/services/account.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 const SUSPENDED_MSG =
   "Conta aguardando liberação no painel financeiro. Fale com o suporte para ativar as campanhas.";
+
+const NO_CAMPAIGN_PERM =
+  "Seu usuário não tem permissão para disparar campanhas. Fale com o administrador da conta.";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +31,12 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canCampaigns) {
+    return NextResponse.json({ error: NO_CAMPAIGN_PERM }, { status: 403 });
+  }
+  const userId = ctx.tenantUserId;
   if (!(await isAccountActive(userId))) {
     return NextResponse.json({ error: SUSPENDED_MSG }, { status: 403 });
   }

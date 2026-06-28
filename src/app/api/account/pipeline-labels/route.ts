@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getPipelineLabels, setPipelineLabels } from "@/server/services/account.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +17,15 @@ const putSchema = z.object({
 });
 
 export async function PUT(req: NextRequest) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json(
+      { error: "Seu usuário não tem permissão para alterar as configurações da conta." },
+      { status: 403 },
+    );
+  }
+  const userId = ctx.tenantUserId;
   const body = await req.json().catch(() => null);
   const parsed = putSchema.safeParse(body);
   if (!parsed.success) {

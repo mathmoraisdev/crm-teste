@@ -10,6 +10,9 @@ const createSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome."),
   email: z.string().email("E-mail inválido."),
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres."),
+  canCampaigns: z.boolean().optional(),
+  canSettings: z.boolean().optional(),
+  leadsScope: z.enum(["ALL", "ASSIGNED"]).optional(),
 });
 
 /** Lista os operadores da conta (só o ADMIN da conta). */

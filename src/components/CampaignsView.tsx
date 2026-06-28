@@ -28,7 +28,7 @@ const STATUS_LABEL = {
 
 const STATUS_OPTIONS = Object.keys(STATUS_LABEL) as (keyof typeof STATUS_LABEL)[];
 
-export function CampaignsView() {
+export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean }) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[] | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CampaignListItem | null>(null);
@@ -110,11 +110,20 @@ export function CampaignsView() {
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Atualizar
           </Button>
-          <Button size="sm" onClick={() => setFormOpen(true)}>
-            <Plus size={14} /> Nova campanha
-          </Button>
+          {canCampaigns && (
+            <Button size="sm" onClick={() => setFormOpen(true)}>
+              <Plus size={14} /> Nova campanha
+            </Button>
+          )}
         </div>
       </div>
+
+      {!canCampaigns && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
+          Seu usuário pode acompanhar as campanhas, mas não tem permissão para criá-las ou
+          dispará-las. Fale com o administrador da conta.
+        </div>
+      )}
 
       {flash && (
         <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-700">
@@ -321,7 +330,7 @@ export function CampaignsView() {
                           size="sm"
                           onClick={() => start(c.id)}
                           loading={startingId === c.id}
-                          disabled={!canStart}
+                          disabled={!canStart || !canCampaigns}
                         >
                           <Play size={13} />
                           {canStart ? "Iniciar" : "Disparada"}

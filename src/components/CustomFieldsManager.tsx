@@ -22,7 +22,7 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
 
 /** CRUD dos campos customizados da conta (usado em /configuracoes). */
-export function CustomFieldsManager() {
+export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
   const [defs, setDefs] = useState<CustomFieldDefItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +111,7 @@ export function CustomFieldsManager() {
         title="Campos customizados"
         subtitle="Campos extras exibidos no cadastro e no detalhe de cada lead."
         action={
+          canEdit &&
           editId === null && (
             <Button size="sm" onClick={startNew}>
               <Plus size={14} /> Novo campo
@@ -194,20 +195,22 @@ export function CustomFieldsManager() {
                 <span className="text-xs text-slate-400">{d.options.join(" · ")}</span>
               )}
             </div>
-            <div className="flex items-center gap-0.5">
-              <Button size="sm" variant="ghost" onClick={() => startEdit(d)} aria-label="Editar campo">
-                <Pencil size={14} />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => remove(d.id)}
-                aria-label="Apagar campo"
-                className="text-red-600 hover:bg-red-50"
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
+            {canEdit && (
+              <div className="flex items-center gap-0.5">
+                <Button size="sm" variant="ghost" onClick={() => startEdit(d)} aria-label="Editar campo">
+                  <Pencil size={14} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => remove(d.id)}
+                  aria-label="Apagar campo"
+                  className="text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            )}
           </div>
         ))}
       </div>

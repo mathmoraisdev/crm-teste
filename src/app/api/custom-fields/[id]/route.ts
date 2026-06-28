@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { CustomFieldType } from "@prisma/client";
 import { deleteDef, updateDef } from "@/server/services/custom-field.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
+
+const NO_SETTINGS_PERM =
+  "Seu usuário não tem permissão para alterar as configurações da conta.";
 
 const updateSchema = z
   .object({
@@ -19,8 +22,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
+  }
+  const userId = ctx.tenantUserId;
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -45,8 +52,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
+  }
+  const userId = ctx.tenantUserId;
   const { id } = await params;
   try {
     await deleteDef(userId, id);

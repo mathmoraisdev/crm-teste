@@ -43,6 +43,12 @@ enum AccountRole {
   OPERADOR  // atende/CRM; sem billing nem gestão de equipe
 }
 
+// Escopo de leads visível a um operador (ignorado no dono/ADMIN).
+enum LeadsScope {
+  ALL       // vê todos os leads da conta
+  ASSIGNED  // vê só os leads atribuídos a ele
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -65,6 +71,11 @@ model User {
   plan            Plan?
   // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
   role            AccountRole @default(ADMIN)
+  // Limitações configuráveis do OPERADOR (o admin define no /equipe). No dono/ADMIN
+  // são ignoradas — ele sempre tem acesso total. Enforced no servidor (rotas de API).
+  canCampaigns    Boolean     @default(true)  // pode criar/disparar campanhas
+  canSettings     Boolean     @default(true)  // pode editar Configurações/IA da conta
+  leadsScope      LeadsScope  @default(ALL)   // ALL = todos os leads; ASSIGNED = só os atribuídos
   // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
   // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
   pipelineLabels  Json?
@@ -216,6 +227,7 @@ model Lead {
   // a mesma pessoa pode falar com 2 empresas suas = 2 conversas distintas.
   @@unique([whatsAppNumberId, phone])
   @@index([userId])
+  @@index([userId, updatedAt]) // ordenamento paginado por conta (listLeads)
   @@index([userId, status])
   @@index([status])
   @@index([userId, attendanceStatus])

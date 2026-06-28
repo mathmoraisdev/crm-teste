@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
+import { getTenantContext } from "@/lib/tenant";
 import { getUserById } from "@/server/services/user.service";
 import { getAiCredentialStatus } from "@/server/services/ai-credential.service";
 import { AccountSettings } from "@/components/app/AccountSettings";
@@ -12,10 +13,17 @@ export default async function ConfiguracoesPage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login");
 
-  const user = await getUserById(userId);
+  const [user, ctx, aiKey] = await Promise.all([
+    getUserById(userId),
+    getTenantContext(),
+    getAiCredentialStatus(userId),
+  ]);
   if (!user) redirect("/login");
 
-  const aiKey = await getAiCredentialStatus(userId);
+  // Operador sem canSettings: vê as configs da conta, mas não edita IA/funil/campos.
+  const canSettings = ctx?.perms.canSettings ?? true;
+  // Só o dono/ADMIN exporta ou exclui a conta inteira.
+  const isOwner = ctx?.role === "ADMIN";
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -33,14 +41,16 @@ export default async function ConfiguracoesPage() {
           createdAt: user.createdAt.toISOString(),
         }}
         aiKey={aiKey}
+        canSettings={canSettings}
+        isOwner={isOwner}
       />
 
       <div className="mt-6">
-        <CustomFieldsManager />
+        <CustomFieldsManager canEdit={canSettings} />
       </div>
 
       <div className="mt-6">
-        <PipelineLabelsManager />
+        <PipelineLabelsManager canEdit={canSettings} />
       </div>
     </div>
   );

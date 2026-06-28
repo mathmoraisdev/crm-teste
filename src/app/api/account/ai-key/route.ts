@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/session";
+import { getTenantContext } from "@/lib/tenant";
 import {
   getAiCredentialStatus,
   saveAiCredential,
@@ -8,6 +9,9 @@ import {
 } from "@/server/services/ai-credential.service";
 
 export const dynamic = "force-dynamic";
+
+const NO_SETTINGS_PERM =
+  "Seu usuário não tem permissão para alterar as configurações da conta.";
 
 const bodySchema = z.object({
   provider: z.enum(["OPENAI", "ANTHROPIC"]),
@@ -21,8 +25,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const userId = await getCurrentUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
+  }
+  const userId = ctx.sessionUserId;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -40,8 +48,11 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE() {
-  const userId = await getCurrentUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  await removeAiCredential(userId);
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
+  }
+  await removeAiCredential(ctx.sessionUserId);
   return NextResponse.json({ ok: true });
 }

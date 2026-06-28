@@ -2,9 +2,16 @@ import { prisma } from "@/server/db/client";
 import { hashPassword } from "@/lib/password";
 import { normalizeEmail } from "@/lib/email";
 import { PLAN_LIMITS } from "@/lib/plans";
-import type { AccountRole } from "@prisma/client";
+import type { AccountRole, LeadsScope } from "@prisma/client";
 
-export interface CreateOperatorInput {
+/** Limitações configuráveis de um operador. Default = acesso total (igual hoje). */
+export interface OperatorPermsInput {
+  canCampaigns?: boolean;
+  canSettings?: boolean;
+  leadsScope?: LeadsScope;
+}
+
+export interface CreateOperatorInput extends OperatorPermsInput {
   name: string;
   email: string;
   password: string;
@@ -15,6 +22,9 @@ export interface MemberRow {
   name: string;
   email: string;
   role: AccountRole;
+  canCampaigns: boolean;
+  canSettings: boolean;
+  leadsScope: LeadsScope;
   createdAt: Date;
 }
 
@@ -66,6 +76,9 @@ export async function createOperator(
       passwordHash: hashPassword(input.password),
       role: "OPERADOR",
       ownerId: adminUserId,
+      canCampaigns: input.canCampaigns ?? true,
+      canSettings: input.canSettings ?? true,
+      leadsScope: input.leadsScope ?? "ALL",
     },
     select: { id: true },
   });
@@ -77,9 +90,42 @@ export async function listMembers(adminUserId: string): Promise<MemberRow[]> {
   const members = await prisma.user.findMany({
     where: { ownerId: adminUserId },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      canCampaigns: true,
+      canSettings: true,
+      leadsScope: true,
+      createdAt: true,
+    },
   });
   return members;
+}
+
+/**
+ * Atualiza as limitações de um operador. Valida que ele pertence a este dono.
+ * Só altera os campos informados (merge) — não mexe em nome/e-mail/senha.
+ */
+export async function updateOperatorPerms(
+  adminUserId: string,
+  operatorId: string,
+  perms: OperatorPermsInput,
+): Promise<void> {
+  const op = await prisma.user.findFirst({
+    where: { id: operatorId, ownerId: adminUserId },
+    select: { id: true },
+  });
+  if (!op) throw new Error("Operador não encontrado nesta conta.");
+  await prisma.user.update({
+    where: { id: op.id },
+    data: {
+      ...(perms.canCampaigns !== undefined ? { canCampaigns: perms.canCampaigns } : {}),
+      ...(perms.canSettings !== undefined ? { canSettings: perms.canSettings } : {}),
+      ...(perms.leadsScope !== undefined ? { leadsScope: perms.leadsScope } : {}),
+    },
+  });
 }
 
 /** Remove um operador — valida que ele pertence a este dono antes de apagar. */

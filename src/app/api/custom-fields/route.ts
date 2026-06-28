@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { CustomFieldType } from "@prisma/client";
 import { createDef, listDefs } from "@/server/services/custom-field.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
+
+const NO_SETTINGS_PERM =
+  "Seu usuário não tem permissão para alterar as configurações da conta.";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +24,12 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
+  }
+  const userId = ctx.tenantUserId;
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/session";
+import { getTenantContext } from "@/lib/tenant";
 import { deleteAccount } from "@/server/services/user.service";
 import { SESSION_COOKIE } from "@/lib/auth";
 
@@ -9,13 +9,22 @@ export const runtime = "nodejs";
  * Exclui a conta do usuário logado (direito de eliminação — LGPD).
  * O cascade do schema remove leads/campanhas/mensagens/números/tokens.
  * Limpa o cookie de sessão ao final.
+ *
+ * Só o DONO (ADMIN) exclui a conta — é uma operação de ciclo de vida da conta
+ * inteira. Operadores são removidos pelo admin em /equipe.
  */
 export async function POST() {
-  const userId = await getCurrentUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (ctx.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Apenas o administrador da conta pode excluí-la." },
+      { status: 403 },
+    );
+  }
 
   try {
-    await deleteAccount(userId);
+    await deleteAccount(ctx.tenantUserId);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao excluir a conta." },

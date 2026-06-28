@@ -12,7 +12,7 @@ const inputClass =
  * Renomeia os rótulos das etapas do funil (sem mexer no enum, que sustenta a IA).
  * Deixar em branco usa o rótulo padrão.
  */
-export function PipelineLabelsManager() {
+export function PipelineLabelsManager({ canEdit = true }: { canEdit?: boolean }) {
   const [values, setValues] = useState<PipelineLabels>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -63,18 +63,25 @@ export function PipelineLabelsManager() {
               onChange={(e) => setValues((v) => ({ ...v, [status]: e.target.value }))}
               placeholder={LEAD_STATUS_META[status].label}
               className={inputClass}
+              disabled={!canEdit}
             />
           </div>
         ))}
         {error && (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         )}
-        <div className="flex items-center justify-end gap-3">
-          {saved && <span className="text-sm text-brand-600">Salvo ✓</span>}
-          <Button size="sm" onClick={save} loading={saving}>
-            Salvar rótulos
-          </Button>
-        </div>
+        {!canEdit ? (
+          <p className="text-sm text-slate-500">
+            Apenas o administrador da conta pode renomear as etapas do funil.
+          </p>
+        ) : (
+          <div className="flex items-center justify-end gap-3">
+            {saved && <span className="text-sm text-brand-600">Salvo ✓</span>}
+            <Button size="sm" onClick={save} loading={saving}>
+              Salvar rótulos
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

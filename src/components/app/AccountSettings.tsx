@@ -26,9 +26,13 @@ type AiKeyStatus = {
 export function AccountSettings({
   account,
   aiKey,
+  canSettings = true,
+  isOwner = true,
 }: {
   account: Account;
   aiKey: AiKeyStatus;
+  canSettings?: boolean;
+  isOwner?: boolean; // dono/ADMIN — só ele exporta/exclui a conta
 }) {
   const router = useRouter();
   const verified = !!account.emailVerified;
@@ -249,26 +253,28 @@ export function AccountSettings({
         </div>
       </Card>
 
-      {/* Privacidade / LGPD */}
-      <Card>
-        <CardHeader
-          title="Privacidade e seus dados"
-          subtitle="Baixe uma cópia de tudo o que guardamos sobre você (LGPD)."
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <p className="text-sm text-slate-600">
-            Exporta conta, leads, campanhas, mensagens e números em um arquivo JSON.
-          </p>
-          <Button variant="secondary" onClick={exportData} disabled={exporting}>
-            {exporting ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Download size={16} />
-            )}
-            Exportar meus dados
-          </Button>
-        </div>
-      </Card>
+      {/* Privacidade / LGPD — operações da conta inteira: só o dono. */}
+      {isOwner && (
+        <Card>
+          <CardHeader
+            title="Privacidade e seus dados"
+            subtitle="Baixe uma cópia de tudo o que guardamos sobre você (LGPD)."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <p className="text-sm text-slate-600">
+              Exporta conta, leads, campanhas, mensagens e números em um arquivo JSON.
+            </p>
+            <Button variant="secondary" onClick={exportData} disabled={exporting}>
+              {exporting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Download size={16} />
+              )}
+              Exportar meus dados
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* BYOK — Chave de API de IA */}
       <Card>
@@ -277,7 +283,14 @@ export function AccountSettings({
           subtitle="Use sua própria chave (OpenAI ou Anthropic). Se não configurar, usamos a chave da plataforma."
         />
         <div className="space-y-3 px-5 py-4">
-          {status.configured ? (
+          {!canSettings ? (
+            <p className="text-sm text-slate-600">
+              {status.configured
+                ? `${status.provider} • chave terminando em ••••${status.last4}${status.verifiedAt ? " • validada" : ""}.`
+                : "Usando a chave da plataforma."}{" "}
+              Apenas o administrador da conta pode alterar a chave de IA.
+            </p>
+          ) : status.configured ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600">
                 {status.provider} • chave terminando em{" "}
@@ -324,21 +337,23 @@ export function AccountSettings({
         </div>
       </Card>
 
-      {/* Zona de perigo */}
-      <Card className="border-red-200">
-        <CardHeader
-          title={<span className="text-[#C0392B]">Zona de perigo</span>}
-          subtitle="Esta ação é permanente e não pode ser desfeita."
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <p className="text-sm text-slate-600">
-            Excluir a conta remove todos os seus leads, campanhas, mensagens e números conectados.
-          </p>
-          <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-            Excluir minha conta
-          </Button>
-        </div>
-      </Card>
+      {/* Zona de perigo — excluir a conta inteira: só o dono. */}
+      {isOwner && (
+        <Card className="border-red-200">
+          <CardHeader
+            title={<span className="text-[#C0392B]">Zona de perigo</span>}
+            subtitle="Esta ação é permanente e não pode ser desfeita."
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <p className="text-sm text-slate-600">
+              Excluir a conta remove todos os seus leads, campanhas, mensagens e números conectados.
+            </p>
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              Excluir minha conta
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
