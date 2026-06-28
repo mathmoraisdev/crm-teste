@@ -4,7 +4,7 @@ import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-const FILTERS: InboxFilter[] = ["fila", "minhas", "todas", "resolvidas"];
+const FILTERS: InboxFilter[] = ["fila", "minhas", "ia", "todas", "resolvidas"];
 
 export async function GET(req: NextRequest) {
   const ctx = await getTenantContext();

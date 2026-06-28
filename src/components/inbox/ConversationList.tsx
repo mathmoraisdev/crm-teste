@@ -7,6 +7,7 @@ import type { InboxFilter, InboxConversation, InboxCounts } from "@/server/servi
 const TABS: { key: InboxFilter; label: string }[] = [
   { key: "fila", label: "Fila" },
   { key: "minhas", label: "Minhas" },
+  { key: "ia", label: "IA" },
   { key: "todas", label: "Todas" },
   { key: "resolvidas", label: "Resolvidas" },
 ];
@@ -32,6 +33,7 @@ export function ConversationList({
     if (!counts) return null;
     if (key === "fila") return counts.fila;
     if (key === "minhas") return counts.minhas;
+    if (key === "ia") return counts.ia;
     return null;
   }
 

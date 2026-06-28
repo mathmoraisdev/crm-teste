@@ -120,4 +120,27 @@ describe("listConversations + unread", () => {
     expect(rows[0].unread).toBe(true);
     expect(rows[0].whatsAppNumber).toBe("Empresa");
   });
+
+  it("'todas' inclui as conversas em IA (monitorar/assumir)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.lead.findMany as any).mockResolvedValue([]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    const { listConversations } = await import("./inbox.service");
+    await listConversations("dono-1", { filter: "todas", sessionUserId: "dono-1" });
+    const where = (prisma.lead.findMany as any).mock.calls[0][0].where;
+    expect(where.attendanceStatus.in).toEqual(
+      expect.arrayContaining(["IA", "FILA", "ATENDENDO", "AGUARDANDO"]),
+    );
+    expect(where.attendanceStatus.in).not.toContain("RESOLVIDA");
+  });
+
+  it("'ia' filtra só conversas atendidas pela IA", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.lead.findMany as any).mockResolvedValue([]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    const { listConversations } = await import("./inbox.service");
+    await listConversations("dono-1", { filter: "ia", sessionUserId: "dono-1" });
+    const where = (prisma.lead.findMany as any).mock.calls[0][0].where;
+    expect(where.attendanceStatus).toBe("IA");
+  });
 });

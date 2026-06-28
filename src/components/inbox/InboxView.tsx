@@ -20,7 +20,7 @@ import type {
 import type { LeadDetail } from "@/server/services/lead.service";
 
 export function InboxView() {
-  const [filter, setFilter] = useState<InboxFilter>("fila");
+  const [filter, setFilter] = useState<InboxFilter>("todas");
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [counts, setCounts] = useState<InboxCounts | null>(null);
   const [me, setMe] = useState<string | null>(null);

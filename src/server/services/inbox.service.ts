@@ -1,10 +1,12 @@
 import { prisma } from "@/server/db/client";
 import type { AttendanceStatus } from "@prisma/client";
 
-export type InboxFilter = "fila" | "minhas" | "todas" | "resolvidas";
+export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
-/** Estados "ativos" do inbox (fora IA e RESOLVIDA). */
+/** Estados "ativos" do inbox humano (fora IA e RESOLVIDA) — base de não-lidas/SLA. */
 const ACTIVE: AttendanceStatus[] = ["FILA", "ATENDENDO", "AGUARDANDO"];
+/** Tudo que não está encerrado — inclui IA, p/ a aba "Todas" monitorar e assumir. */
+const NON_RESOLVED: AttendanceStatus[] = ["IA", "FILA", "ATENDENDO", "AGUARDANDO"];
 
 export interface InboxConversation {
   id: string;
@@ -22,6 +24,7 @@ export interface InboxConversation {
 export interface InboxCounts {
   fila: number;
   minhas: number;
+  ia: number;
   naoLidas: number;
 }
 
@@ -63,9 +66,11 @@ export async function listConversations(
             assignedToId: opts.sessionUserId,
             attendanceStatus: { in: ["ATENDENDO", "AGUARDANDO"] as AttendanceStatus[] },
           }
-        : filter === "resolvidas"
-          ? { userId: tenantUserId, attendanceStatus: "RESOLVIDA" as AttendanceStatus }
-          : { userId: tenantUserId, attendanceStatus: { in: ACTIVE } };
+        : filter === "ia"
+          ? { userId: tenantUserId, attendanceStatus: "IA" as AttendanceStatus }
+          : filter === "resolvidas"
+            ? { userId: tenantUserId, attendanceStatus: "RESOLVIDA" as AttendanceStatus }
+            : { userId: tenantUserId, attendanceStatus: { in: NON_RESOLVED } };
 
   const leads = await prisma.lead.findMany({
     where,
@@ -183,7 +188,7 @@ export async function inboxCounts(
   tenantUserId: string,
   sessionUserId: string,
 ): Promise<InboxCounts> {
-  const [fila, minhas, active] = await Promise.all([
+  const [fila, minhas, ia, active] = await Promise.all([
     prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "FILA" } }),
     prisma.lead.count({
       where: {
@@ -192,6 +197,7 @@ export async function inboxCounts(
         attendanceStatus: { in: ["ATENDENDO", "AGUARDANDO"] },
       },
     }),
+    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "IA" } }),
     prisma.lead.findMany({
       where: { userId: tenantUserId, attendanceStatus: { in: ACTIVE } },
       select: { id: true, lastReadAt: true },
@@ -213,5 +219,5 @@ export async function inboxCounts(
     }
   }
 
-  return { fila, minhas, naoLidas };
+  return { fila, minhas, ia, naoLidas };
 }
