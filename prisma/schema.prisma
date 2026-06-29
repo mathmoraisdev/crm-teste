@@ -292,6 +292,12 @@ model Message {
   // qual chip enviou/recebeu — auditoria (Baileys multi-número)
   whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])
   whatsAppNumberId  String?
+  // Citação (reply): mensagem desta thread que esta responde. OUTBOUND = operador
+  // citou pelo CRM; INBOUND = lead citou uma msg nossa (resolvida pelo stanzaId do
+  // Baileys → providerMessageId). SetNull: se a citada some, a resposta permanece.
+  replyTo           Message?         @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId         String?
+  replies           Message[]        @relation("MessageReply")
   createdAt         DateTime         @default(now())
 
   @@index([leadId, createdAt])
@@ -366,6 +372,9 @@ model OutboundJob {
   // qual chip enviou (auditoria + cap por número + roteamento de resposta)
   whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
   whatsAppNumberId String?
+  // resposta manual citando uma Message (id interno). O worker resolve o
+  // providerMessageId/conteúdo p/ montar o `quoted` do Baileys ao enviar.
+  replyToMessageId String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 

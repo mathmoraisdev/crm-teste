@@ -124,7 +124,11 @@ export async function getLeadDetail(
     include: {
       campaign: { select: { id: true, name: true } },
       tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        // Citação (reply): inclui um resumo da msg citada p/ a bolha renderizar.
+        include: { replyTo: { select: { id: true, content: true, direction: true } } },
+      },
       qualification: true,
       meeting: true,
     },

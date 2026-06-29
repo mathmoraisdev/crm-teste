@@ -23,6 +23,8 @@ export interface InboundEvent {
   text: string;
   providerMessageId: string | null;
   whatsAppNumberId: string;
+  /** Se o lead citou uma mensagem (reply), o id WA da citada (contextInfo.stanzaId). */
+  quotedProviderMessageId?: string | null;
 }
 /** Mensagem `fromMe` digitada por humano (não pelo bot) — handoff manual pelo zap. */
 export interface OperatorEvent {
@@ -229,6 +231,11 @@ export async function connectNumber(numberId: string): Promise<void> {
         null;
       const text =
         inner?.conversation ?? inner?.extendedTextMessage?.text ?? "";
+      // Reply/citação: o id WA da mensagem citada vem no contextInfo (só presente
+      // em extendedTextMessage — texto puro não cita). Usado p/ ligar a resposta
+      // à msg original no inbox (resolvido por providerMessageId no ingest).
+      const quotedProviderMessageId =
+        inner?.extendedTextMessage?.contextInfo?.stanzaId ?? null;
 
       // TRACE: mostra type, JID cru + alt + PN resolvido, campos e texto — pra
       // flagrar mensagem descartada antes da IA (LID sem PN, type != notify, etc).
@@ -291,6 +298,7 @@ export async function connectNumber(numberId: string): Promise<void> {
         text,
         providerMessageId: m.key.id ?? null,
         whatsAppNumberId: numberId,
+        quotedProviderMessageId,
       });
     }
   });
@@ -332,10 +340,21 @@ async function resolveJid(
 /** Envia com simulação humana (presence/typing). NÃO faz o delay de digitação
  *  aqui — quem chama (messaging) controla o sleep p/ manter a lógica testável.
  *  O JID de destino é o CANÔNICO do WhatsApp (corrige o 9º dígito BR). */
+/** Citação (reply): reconstruída a partir do que persistimos da msg original.
+ *  `id` = providerMessageId (= key.id do WA), `fromMe` = se foi nossa (OUTBOUND),
+ *  `text` = conteúdo p/ o preview da citação. Suficiente p/ o Baileys montar o
+ *  contextInfo — não precisa da WAMessage "viva". */
+export interface QuotedRef {
+  id: string;
+  text: string;
+  fromMe: boolean;
+}
+
 export async function send(
   numberId: string,
   phone: string,
   text: string,
+  quoted?: QuotedRef | null,
 ): Promise<SendOutcome> {
   const sock = sockets.get(numberId);
   if (!sock) return { ok: false, reason: "no_socket" };
@@ -354,7 +373,19 @@ export async function send(
       setTimeout(async () => {
         try {
           await sock.sendPresenceUpdate("paused", jid).catch(() => {});
-          const r = await sock.sendMessage(jid, { text });
+          // WAMessage mínima p/ citar: o Baileys só lê key (stanzaId/fromMe) e
+          // message (preview). Reconstruída do que guardamos — sem buscar a viva.
+          const quotedMsg = quoted
+            ? {
+                key: { remoteJid: jid, fromMe: quoted.fromMe, id: quoted.id },
+                message: { conversation: quoted.text },
+              }
+            : undefined;
+          const r = await sock.sendMessage(
+            jid,
+            { text },
+            quotedMsg ? { quoted: quotedMsg } : undefined,
+          );
           // marca SÍNCRONO o id do nosso envio antes do eco fromMe chegar, p/ não
           // confundir com resposta manual do operador (auto-pause indevido).
           if (r?.key?.id) rememberBotSent(r.key.id);

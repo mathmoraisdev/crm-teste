@@ -30,6 +30,9 @@ export interface InboundInput {
   text: string;
   /** Id do provedor para dedupe. Pode ser nulo no mock. */
   providerMessageId?: string | null;
+  /** Reply: id WA (stanzaId) da mensagem nossa que o lead citou. Resolvido p/
+   *  Message.replyToId via providerMessageId. Nulo quando não é uma citação. */
+  quotedProviderMessageId?: string | null;
 }
 
 /**
@@ -233,13 +236,24 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     return { leadId: null, respond: false, delayMs: 0 };
   }
 
-  // 1b. Salva inbound
+  // 1b. Salva inbound. Se o lead citou (reply) uma msg nossa, resolve o stanzaId
+  // → providerMessageId → Message.replyToId (mesmo lead). Citada ausente/de outro
+  // lead → ignora silenciosamente (a mensagem chega, só sem o vínculo).
+  let replyToId: string | undefined;
+  if (input.quotedProviderMessageId) {
+    const quoted = await prisma.message.findFirst({
+      where: { providerMessageId: input.quotedProviderMessageId, leadId: lead.id },
+      select: { id: true },
+    });
+    replyToId = quoted?.id;
+  }
   await prisma.message.create({
     data: {
       leadId: lead.id,
       direction: "INBOUND",
       content: input.text,
       providerMessageId: input.providerMessageId ?? undefined,
+      replyToId,
     },
   });
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
@@ -618,7 +632,12 @@ export async function reconcileAiResume(now: Date): Promise<string[]> {
  * chip e persiste como Message(OUTBOUND) — reaproveita sendWhatsAppMessage, a
  * fonte única de verdade de envio. Escopado por conta (userId).
  */
-export async function sendManualReply(leadId: string, userId: string, content: string) {
+export async function sendManualReply(
+  leadId: string,
+  userId: string,
+  content: string,
+  replyToMessageId?: string | null,
+) {
   const lead = await prisma.lead.findFirst({
     where: { id: leadId, userId },
     select: {
@@ -629,11 +648,11 @@ export async function sendManualReply(leadId: string, userId: string, content: s
   if (!lead) throw new Error("Lead não encontrado");
   // No Baileys o socket vive só no worker; o web não envia direto (no_socket).
   // Enfileira a intenção e o worker drena/envia. Mock/cloud-api enviam por HTTP,
-  // então rodam direto no web.
+  // então rodam direto no web. A citação (reply) viaja em ambos os caminhos.
   if (env.WHATSAPP_MODE === "baileys") {
-    await enqueueManualReply(lead, content);
+    await enqueueManualReply(lead, content, { replyToMessageId });
   } else {
-    await sendWhatsAppMessage(lead, content);
+    await sendWhatsAppMessage(lead, content, { replyToMessageId });
   }
   // Operador respondeu pela tela do CRM: renova o relógio de inatividade p/ o
   // resume automático medir o silêncio a partir de agora (não desde a pausa) e

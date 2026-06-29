@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot } from "lucide-react";
+import { Send, Hand, Bot, Reply, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { LeadDetail } from "@/server/services/lead.service";
@@ -42,6 +42,9 @@ export function ConversationView({
   const [reply, setReply] = useState("");
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  // Mensagem citada (reply): o operador clicou "responder" numa bolha.
+  const [quoting, setQuoting] = useState<Message | null>(null);
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
   // Toggle "assumir conversa" — pausa/retoma a IA.
   const [togglingHandoff, setTogglingHandoff] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -93,6 +96,12 @@ export function ConversationView({
     }
   }
 
+  // Operador clicou "responder" numa bolha: marca a citação e foca o input.
+  function startQuote(m: Message) {
+    setQuoting(m);
+    replyInputRef.current?.focus();
+  }
+
   // Resposta manual do operador, enviada ao lead pelo mesmo chip.
   async function sendReply() {
     const content = reply.trim();
@@ -103,11 +112,12 @@ export function ConversationView({
       const res = await fetch(`/api/leads/${leadId}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, replyToMessageId: quoting?.id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Falha ao enviar resposta");
       setReply("");
+      setQuoting(null);
       onReplied();
     } catch (e) {
       setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
@@ -126,7 +136,7 @@ export function ConversationView({
           </p>
         )}
         {messages.map((m) => (
-          <Bubble key={m.id} message={m} />
+          <Bubble key={m.id} message={m} onReply={aiPaused ? startQuote : undefined} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -176,8 +186,27 @@ export function ConversationView({
             {aiPaused ? (
               /* Caixa de resposta manual do operador (envia ao lead pelo chip). */
               <>
+                {quoting && (
+                  <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-brand-400 bg-slate-50 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium text-brand-600">
+                        Respondendo {quoting.direction === "INBOUND" ? "ao lead" : "a você"}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">{quoting.content}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setQuoting(null)}
+                      className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                      aria-label="Cancelar citação"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   <textarea
+                    ref={replyInputRef}
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     onKeyDown={(e) => {
@@ -244,10 +273,29 @@ export function ConversationView({
   );
 }
 
-function Bubble({ message }: { message: Message }) {
+function Bubble({
+  message,
+  onReply,
+}: {
+  message: Message;
+  /** Presente quando o operador pode citar esta mensagem (handoff ativo). */
+  onReply?: (m: Message) => void;
+}) {
   const inbound = message.direction === "INBOUND";
+  const quoted = message.replyTo;
   return (
-    <div className={cn("flex", inbound ? "justify-start" : "justify-end")}>
+    <div className={cn("group flex items-center gap-1.5", inbound ? "justify-start" : "justify-end")}>
+      {/* Botão "responder/citar" — aparece no hover, à esquerda das bolhas de saída. */}
+      {onReply && !inbound && (
+        <button
+          type="button"
+          onClick={() => onReply(message)}
+          className="opacity-0 transition group-hover:opacity-100 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Responder a esta mensagem"
+        >
+          <Reply size={14} />
+        </button>
+      )}
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm",
@@ -256,6 +304,22 @@ function Bubble({ message }: { message: Message }) {
             : "rounded-br-sm bg-brand-500 text-white",
         )}
       >
+        {/* Citação (reply): resumo da mensagem original acima do conteúdo. */}
+        {quoted && (
+          <div
+            className={cn(
+              "mb-1 rounded border-l-2 px-2 py-1 text-xs",
+              inbound
+                ? "border-brand-400 bg-slate-50 text-slate-500"
+                : "border-white/60 bg-white/15 text-brand-50",
+            )}
+          >
+            <span className="font-medium">
+              {quoted.direction === "INBOUND" ? "Lead" : "Você"}
+            </span>
+            <span className="ml-1 line-clamp-2 align-middle">{quoted.content}</span>
+          </div>
+        )}
         <p className="whitespace-pre-wrap">{message.content}</p>
         <p
           className={cn(
@@ -266,6 +330,17 @@ function Bubble({ message }: { message: Message }) {
           {inbound ? "Lead" : "Você"} · {formatDateTime(message.createdAt)}
         </p>
       </div>
+      {/* Para bolhas de entrada (lead), o botão fica à direita. */}
+      {onReply && inbound && (
+        <button
+          type="button"
+          onClick={() => onReply(message)}
+          className="opacity-0 transition group-hover:opacity-100 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Responder a esta mensagem"
+        >
+          <Reply size={14} />
+        </button>
+      )}
     </div>
   );
 }

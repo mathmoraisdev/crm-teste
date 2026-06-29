@@ -38,6 +38,33 @@ function withOptOutFooter(content: string): string {
 }
 
 /**
+ * Resolve a mensagem citada (reply) p/ um envio do operador. Valida que ela
+ * pertence ao MESMO lead (anti-cross-thread) e devolve:
+ *  - `messageId`: id interno p/ gravar Message.replyToId (vínculo na UI);
+ *  - `quote`: ref WA (providerMessageId/fromMe/texto) p/ o `quoted` do Baileys,
+ *    ou null se a citada não tem providerMessageId (não dá p/ citar no WhatsApp,
+ *    mas o vínculo na UI permanece).
+ * Retorna null quando não há citação ou a msg não é deste lead.
+ */
+async function resolveQuotedRef(
+  leadId: string,
+  replyToMessageId: string | null,
+): Promise<{ messageId: string; quote: { id: string; text: string; fromMe: boolean } | null } | null> {
+  if (!replyToMessageId) return null;
+  const m = await prisma.message.findFirst({
+    where: { id: replyToMessageId, leadId },
+    select: { id: true, content: true, direction: true, providerMessageId: true },
+  });
+  if (!m) return null;
+  return {
+    messageId: m.id,
+    quote: m.providerMessageId
+      ? { id: m.providerMessageId, text: m.content, fromMe: m.direction === "OUTBOUND" }
+      : null,
+  };
+}
+
+/**
  * Envia uma mensagem via WhatsApp (mock, cloud-api ou baileys) e persiste como
  * OUTBOUND. Fonte única de verdade para envio reativo — usada pela conversa e
  * pelo agendamento, evitando duplicar a lógica de persistência em cada lugar.
@@ -45,6 +72,7 @@ function withOptOutFooter(content: string): string {
 export async function sendWhatsAppMessage(
   lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
   text: string,
+  opts: { replyToMessageId?: string | null } = {},
 ): Promise<void> {
   if (env.WHATSAPP_MODE === "baileys") {
     // responde pelo chip que iniciou a conversa; senão, qualquer um conectado DA CONTA
@@ -57,8 +85,9 @@ export async function sendWhatsAppMessage(
       numberId = healthy?.id ?? null;
     }
     if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
+    const quoted = await resolveQuotedRef(lead.id, opts.replyToMessageId ?? null);
     const { send: poolSend } = await loadPool();
-    const out = await poolSend(numberId, lead.phone, text);
+    const out = await poolSend(numberId, lead.phone, text, quoted?.quote);
     if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
     await prisma.message.create({
       data: {
@@ -68,6 +97,7 @@ export async function sendWhatsAppMessage(
         providerMessageId: out.providerMessageId,
         status: "SENT",
         whatsAppNumberId: numberId,
+        replyToId: quoted?.messageId ?? null,
       },
     });
     await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
@@ -75,7 +105,9 @@ export async function sendWhatsAppMessage(
     return;
   }
 
-  // caminho original (mock/cloud-api):
+  // caminho original (mock/cloud-api): não há quote nativo, mas guardamos o
+  // vínculo (replyToId) p/ a UI renderizar a citação de forma consistente.
+  const quoted = await resolveQuotedRef(lead.id, opts.replyToMessageId ?? null);
   const wa = getWhatsApp();
   const { providerMessageId } = await wa.sendMessage(lead.phone, text);
   await prisma.message.create({
@@ -85,6 +117,7 @@ export async function sendWhatsAppMessage(
       content: text,
       providerMessageId,
       status: "SENT",
+      replyToId: quoted?.messageId ?? null,
     },
   });
   // Toca updatedAt do lead para o dashboard refletir atividade recente.
@@ -119,6 +152,7 @@ async function resolveReplyChip(
 export async function enqueueManualReply(
   lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
   text: string,
+  opts: { replyToMessageId?: string | null } = {},
 ): Promise<void> {
   const numberId = await resolveReplyChip(lead.userId, lead.whatsAppNumberId ?? null);
   if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
@@ -130,6 +164,7 @@ export async function enqueueManualReply(
       status: "PENDING",
       whatsAppNumberId: numberId,
       scheduledFor: new Date(),
+      replyToMessageId: opts.replyToMessageId ?? null, // citação (reply) opcional
     },
   });
 }
@@ -161,7 +196,11 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
   }
   if (!numberId) throw new Error("sem número Baileys vivo p/ a resposta manual");
 
-  const out = await pool.send(numberId, job.lead.phone, job.content);
+  // Citação (reply): resolve a msg original p/ montar o `quoted` do Baileys e
+  // gravar o vínculo (replyToId) na resposta. null se o job não cita nada.
+  const quoted = await resolveQuotedRef(job.lead.id, job.replyToMessageId ?? null);
+
+  const out = await pool.send(numberId, job.lead.phone, job.content, quoted?.quote);
   if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
 
   await prisma.$transaction([
@@ -173,6 +212,7 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
         providerMessageId: out.providerMessageId,
         status: "SENT",
         whatsAppNumberId: numberId,
+        replyToId: quoted?.messageId ?? null,
       },
     }),
     prisma.outboundJob.update({

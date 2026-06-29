@@ -30,6 +30,7 @@ async function bootBaileys(): Promise<Pool> {
         whatsAppNumberId: e.whatsAppNumberId,
         text: e.text,
         providerMessageId: e.providerMessageId,
+        quotedProviderMessageId: e.quotedProviderMessageId,
       })
         .then((r) => {
           if (r.respond && r.leadId) scheduleResponse(r.leadId, r.delayMs);

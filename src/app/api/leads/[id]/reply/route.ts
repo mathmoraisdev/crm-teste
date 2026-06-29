@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 const replySchema = z.object({
   content: z.string().trim().min(1, "Mensagem obrigatória"),
+  // Citação (reply): id interno da Message desta conversa que está sendo citada.
+  replyToMessageId: z.string().cuid().optional(),
 });
 
 /**
@@ -29,7 +31,7 @@ export async function POST(
     );
   }
   try {
-    await sendManualReply(id, userId, parsed.data.content);
+    await sendManualReply(id, userId, parsed.data.content, parsed.data.replyToMessageId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
