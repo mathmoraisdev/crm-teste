@@ -68,11 +68,11 @@ export const ConversationList = memo(function ConversationList({
       {/* Seletor de número: divide as conversas por chip (ex.: cada cartório).
           Só aparece com mais de um número — com um só não há o que dividir. */}
       {numbers.length > 1 && (
-        <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-100 p-2">
+        <div className="scroll-tabs flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 p-2">
           <button
             onClick={() => onSelectNumber(null)}
             className={cn(
-              "rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+              "shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
               selectedNumber === null
                 ? "bg-ink text-white"
                 : "text-slate-500 hover:bg-slate-100 hover:text-ink",
@@ -86,7 +86,7 @@ export const ConversationList = memo(function ConversationList({
               onClick={() => onSelectNumber(n.id)}
               title={numberLabel(n)}
               className={cn(
-                "max-w-[140px] truncate rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+                "max-w-[140px] shrink-0 truncate rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
                 selectedNumber === n.id
                   ? "bg-ink text-white"
                   : "text-slate-500 hover:bg-slate-100 hover:text-ink",
@@ -98,7 +98,7 @@ export const ConversationList = memo(function ConversationList({
         </div>
       )}
 
-      <div className="flex shrink-0 gap-1 border-b border-slate-100 p-2">
+      <div className="scroll-tabs flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 p-2">
         {TABS.map((t) => {
           const n = badgeFor(t.key);
           return (
@@ -106,7 +106,7 @@ export const ConversationList = memo(function ConversationList({
               key={t.key}
               onClick={() => onFilter(t.key)}
               className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+                "flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
                 filter === t.key
                   ? "bg-brand-500 text-white"
                   : "text-slate-500 hover:bg-slate-100 hover:text-ink",
