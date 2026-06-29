@@ -3,6 +3,7 @@ import type { WhatsAppNumberStatus, Prisma } from "@prisma/client";
 import { sentTodayByNumber } from "@/server/worker/dispatcher";
 import { isAdminEmail } from "@/lib/admin";
 import { PLAN_LIMITS } from "@/lib/plans";
+import { modelTier } from "@/lib/ai-models";
 import { assertFeature } from "@/server/services/entitlements";
 
 /**
@@ -33,6 +34,32 @@ export async function assertNumberQuota(userId: string, phone: string): Promise<
   if (count >= max) {
     throw new Error(
       `Seu plano permite ${max} ${max === 1 ? "número" : "números"} de WhatsApp.`,
+    );
+  }
+}
+
+/**
+ * Entitlements: garante que o tenant pode GRAVAR este modelo no número.
+ *
+ * - modelo null/cheap → sempre ok (sem consulta).
+ * - `plan == null` (grandfather) ou admin da plataforma → sem clamp.
+ * - modelo strong em plano sem `allowStrongModel` → rejeita (faça upgrade ou BYOK).
+ *   O clamp de runtime no `respondToLead` ainda é a rede de segurança em downgrades.
+ */
+export async function assertModelAllowedForPlan(
+  userId: string,
+  aiModel: string | null | undefined,
+): Promise<void> {
+  if (!aiModel || modelTier(aiModel) !== "strong") return; // cheap/null: livre
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true },
+  });
+  if (!owner) throw new Error("Conta não encontrada");
+  if (!owner.plan || isAdminEmail(owner.email)) return; // grandfather / admin
+  if (!PLAN_LIMITS[owner.plan].allowStrongModel) {
+    throw new Error(
+      "O modelo avançado não está disponível no seu plano. Faça upgrade ou use sua própria chave (BYOK).",
     );
   }
 }
@@ -150,6 +177,8 @@ export async function updateWhatsAppNumber(
   // (desligar é sempre livre). Grandfather/admin passam direto no assertFeature.
   if (data.qualifyEnabled === true) await assertFeature(userId, "qualify");
   if (data.scheduleEnabled === true) await assertFeature(userId, "schedule");
+  // Modelo avançado só grava em plano que permite (grandfather/admin passam).
+  if (data.aiModel !== undefined) await assertModelAllowedForPlan(userId, data.aiModel);
   // Monta o patch só com o que veio (undefined = não mexe; null limpa o campo).
   // Build explícito p/ satisfazer Prisma.WhatsAppNumberUpdateInput (Object.fromEntries
   // perde a tipagem e quebra o tsc).

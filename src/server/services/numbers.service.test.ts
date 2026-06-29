@@ -62,3 +62,49 @@ describe("assertNumberQuota", () => {
     expect(prisma.whatsAppNumber.count).not.toHaveBeenCalled();
   });
 });
+
+describe("assertModelAllowedForPlan", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("INICIAL não pode gravar modelo strong → rejeita", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).rejects.toThrow(/não está disponível/i);
+  });
+
+  it("INICIAL pode gravar modelo cheap → permite", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o-mini")).resolves.toBeUndefined();
+  });
+
+  it("PROFISSIONAL pode gravar modelo strong → permite", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "PROFISSIONAL" });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).resolves.toBeUndefined();
+  });
+
+  it("null/limpar campo sempre permite", async () => {
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", null)).resolves.toBeUndefined();
+    const { prisma } = await import("@/server/db/client");
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("plano null (grandfather) → sem clamp", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: null });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).resolves.toBeUndefined();
+  });
+
+  it("admin da plataforma → sem clamp", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "admin@exemplo.com", plan: "INICIAL" });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("admin-1", "gpt-4o")).resolves.toBeUndefined();
+  });
+});
