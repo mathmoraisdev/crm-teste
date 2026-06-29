@@ -345,7 +345,12 @@ export async function respondToLead(leadId: string): Promise<void> {
   //    (toggles da empresa) e apenas pontuam/desviam o fluxo. O modelo configurado
   //    no número (aiModel) vale p/ TODAS as chamadas deste client (qualificação,
   //    próxima pergunta, atendimento).
-  if (!(await ensureAiCredit(lead))) return; // cota de IA estourada → fila humana
+  // Só cobra crédito quando a IA realmente vai rodar (qualificação ou resposta).
+  // Número em handoff total (autoReply + qualify desligados) não aciona a IA → não
+  // cobra nem dispara a mensagem de cota; o inbound só fica persistido p/ o humano.
+  if (mode.qualify || mode.reply) {
+    if (!(await ensureAiCredit(lead))) return; // cota de IA estourada → fila humana
+  }
   const ai = await getAiClient(lead.userId, company?.aiModel ?? undefined);
   const conversation = await loadConversation(
     lead.id,
