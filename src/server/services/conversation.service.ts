@@ -4,7 +4,7 @@ import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
 import { generateAttendanceReply } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
-import { consumeAiCredit } from "@/server/services/entitlements";
+import { consumeAiCredit, resolveAiModelForUser } from "@/server/services/entitlements";
 import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
@@ -358,7 +358,9 @@ export async function respondToLead(leadId: string): Promise<void> {
   });
   if (meeting?.status === "PROPOSED") {
     if (!(await aiStillActive(lead.id))) return; // operador assumiu durante o debounce
-    if (!(await ensureAiCredit(lead))) return;   // cota de IA estourada → fila humana
+    // PROPOSED não carrega company aqui; passa null = padrão econômico (peso 1).
+    const effectiveModel = await resolveAiModelForUser(lead.userId, null);
+    if (!(await ensureAiCredit(lead, effectiveModel))) return; // cota estourada → fila humana
     const lastInbound = await prisma.message.findFirst({
       where: { leadId: lead.id, direction: "INBOUND" },
       orderBy: { createdAt: "desc" },
@@ -399,10 +401,12 @@ export async function respondToLead(leadId: string): Promise<void> {
   // Só cobra crédito quando a IA realmente vai rodar (qualificação ou resposta).
   // Número em handoff total (autoReply + qualify desligados) não aciona a IA → não
   // cobra nem dispara a mensagem de cota; o inbound só fica persistido p/ o humano.
+  // Modelo efetivo = override do número, clampado pelo plano (strong só em plano que permite).
+  const effectiveModel = await resolveAiModelForUser(lead.userId, company?.aiModel ?? null);
   if (mode.qualify || mode.reply) {
-    if (!(await ensureAiCredit(lead))) return; // cota de IA estourada → fila humana
+    if (!(await ensureAiCredit(lead, effectiveModel))) return; // cota estourada → fila humana
   }
-  const ai = await getAiClient(lead.userId, company?.aiModel ?? undefined);
+  const ai = await getAiClient(lead.userId, effectiveModel ?? undefined);
   const conversation = await loadConversation(
     lead.id,
     company?.contextResetMinutes ?? DEFAULT_CONTEXT_RESET_MINUTES,
@@ -461,14 +465,17 @@ export async function respondToLead(leadId: string): Promise<void> {
  * fixa, joga o lead pra fila humana (aiPaused) e devolve false — o chamador
  * deve abortar a geração. `lead` precisa dos campos de envio + SLA do inbox.
  */
-async function ensureAiCredit(lead: {
-  id: string;
-  userId: string;
-  phone: string;
-  whatsAppNumberId: string | null;
-  queuedAt: Date | null;
-}): Promise<boolean> {
-  const credit = await consumeAiCredit(lead.userId);
+async function ensureAiCredit(
+  lead: {
+    id: string;
+    userId: string;
+    phone: string;
+    whatsAppNumberId: string | null;
+    queuedAt: Date | null;
+  },
+  model: string | null,
+): Promise<boolean> {
+  const credit = await consumeAiCredit(lead.userId, model);
   if (credit.allowed) return true;
   // Teto atingido → handoff suave: humano assume, sem deixar o lead no vácuo.
   await sendWhatsAppMessage(lead, AI_QUOTA_EXCEEDED_MESSAGE);
