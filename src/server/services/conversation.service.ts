@@ -4,6 +4,7 @@ import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
 import { generateAttendanceReply } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
+import { consumeAiCredit } from "@/server/services/entitlements";
 import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
@@ -74,6 +75,11 @@ const CONVERSATION_CONTEXT_LIMIT = 25;
 
 /** Reset de contexto por silêncio (min) quando o número não define o seu. */
 const DEFAULT_CONTEXT_RESET_MINUTES = 180;
+
+// Mensagem enviada ao lead quando a cota de IA do mês (chave da plataforma) acaba.
+// MVP: fixa. Follow-up: tornar configurável por número/conta.
+const AI_QUOTA_EXCEEDED_MESSAGE =
+  "Recebi sua mensagem! 🙌 Em instantes um de nossos atendentes vai continuar por aqui.";
 
 /**
  * Monta o contexto enviado à IA. Duas camadas:
@@ -301,6 +307,7 @@ export async function respondToLead(leadId: string): Promise<void> {
   });
   if (meeting?.status === "PROPOSED") {
     if (!(await aiStillActive(lead.id))) return; // operador assumiu durante o debounce
+    if (!(await ensureAiCredit(lead))) return;   // cota de IA estourada → fila humana
     const lastInbound = await prisma.message.findFirst({
       where: { leadId: lead.id, direction: "INBOUND" },
       orderBy: { createdAt: "desc" },
@@ -338,6 +345,7 @@ export async function respondToLead(leadId: string): Promise<void> {
   //    (toggles da empresa) e apenas pontuam/desviam o fluxo. O modelo configurado
   //    no número (aiModel) vale p/ TODAS as chamadas deste client (qualificação,
   //    próxima pergunta, atendimento).
+  if (!(await ensureAiCredit(lead))) return; // cota de IA estourada → fila humana
   const ai = await getAiClient(lead.userId, company?.aiModel ?? undefined);
   const conversation = await loadConversation(
     lead.id,
@@ -389,6 +397,36 @@ export async function respondToLead(leadId: string): Promise<void> {
     await sendWhatsAppMessage(lead, reply);
   }
   // !mode.reply → handoff total: só persiste o inbound (humano responde via /reply).
+}
+
+/**
+ * Garante 1 crédito de IA antes de gerar resposta na chave da plataforma.
+ * BYOK/grandfather/admin sempre passam. Se a cota estourou: manda a mensagem
+ * fixa, joga o lead pra fila humana (aiPaused) e devolve false — o chamador
+ * deve abortar a geração. `lead` precisa dos campos de envio + SLA do inbox.
+ */
+async function ensureAiCredit(lead: {
+  id: string;
+  userId: string;
+  phone: string;
+  whatsAppNumberId: string | null;
+  queuedAt: Date | null;
+}): Promise<boolean> {
+  const credit = await consumeAiCredit(lead.userId);
+  if (credit.allowed) return true;
+  // Teto atingido → handoff suave: humano assume, sem deixar o lead no vácuo.
+  await sendWhatsAppMessage(lead, AI_QUOTA_EXCEEDED_MESSAGE);
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: {
+      aiPaused: true,
+      aiPausedAt: new Date(),
+      attendanceStatus: "FILA",
+      // Só inicia o SLA do inbox se o lead ainda não estava na fila (igual setHandoff).
+      ...(lead.queuedAt ? {} : { queuedAt: new Date() }),
+    },
+  });
+  return false;
 }
 
 /** True se a IA ainda pode responder (não foi pausada). Recheck fresco anti-corrida. */
