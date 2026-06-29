@@ -23,11 +23,14 @@ export const dynamic = "force-dynamic";
 const METHOD_LABELS = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" } as const;
 const PLAN_LABELS = { INICIAL: "Inicial", PROFISSIONAL: "Profissional", ESCALA: "Escala" } as const;
 
-/** Rótulo do consumo de IA do mês p/ uma conta: BYOK / ilimitado / "usado / cota". */
+/** Rótulo do consumo de IA do mês p/ uma conta: admin / BYOK / ilimitado / "usado / cota". */
 function aiUsageLabel(
-  a: { plan: keyof typeof PLAN_LIMITS | null; byok: boolean; aiCreditMonth: string | null; aiCreditUsed: number },
+  a: { isAdmin: boolean; plan: keyof typeof PLAN_LIMITS | null; byok: boolean; aiCreditMonth: string | null; aiCreditUsed: number },
   month: string,
 ): string {
+  // Admin master da plataforma e grandfather (sem plano) nunca são cobrados — o
+  // gate (consumeAiCredit) os trata como ilimitados, então o painel reflete isso.
+  if (a.isAdmin) return "ilimitado (admin)";
   if (a.byok) return "BYOK";
   if (!a.plan) return "ilimitado";
   const used = a.aiCreditMonth === month ? a.aiCreditUsed : 0;
