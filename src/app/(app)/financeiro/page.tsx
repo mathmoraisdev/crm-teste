@@ -4,6 +4,8 @@ import { getUserById } from "@/server/services/user.service";
 import { isAdminEmail } from "@/lib/admin";
 import { listAccountsForAdmin } from "@/server/services/account.service";
 import { revenueCents, revenueTotalCents, listPayments } from "@/server/services/payment.service";
+import { monthKey } from "@/server/services/entitlements";
+import { PLAN_LIMITS } from "@/lib/plans";
 import { monthRange, currentMonth } from "@/lib/period";
 import { formatCentsBRL } from "@/lib/money";
 import { Card } from "@/components/ui/Card";
@@ -20,6 +22,17 @@ export const dynamic = "force-dynamic";
 
 const METHOD_LABELS = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" } as const;
 const PLAN_LABELS = { INICIAL: "Inicial", PROFISSIONAL: "Profissional", ESCALA: "Escala" } as const;
+
+/** Rótulo do consumo de IA do mês p/ uma conta: BYOK / ilimitado / "usado / cota". */
+function aiUsageLabel(
+  a: { plan: keyof typeof PLAN_LIMITS | null; byok: boolean; aiCreditMonth: string | null; aiCreditUsed: number },
+  month: string,
+): string {
+  if (a.byok) return "BYOK";
+  if (!a.plan) return "ilimitado";
+  const used = a.aiCreditMonth === month ? a.aiCreditUsed : 0;
+  return `${used} / ${PLAN_LIMITS[a.plan].aiMonthlyQuota}`;
+}
 
 export default async function FinanceiroPage({
   searchParams,
@@ -63,6 +76,7 @@ export default async function FinanceiroPage({
     status === "ativo" ? a.active : status === "suspenso" ? !a.active : true,
   );
   const activeCount = accounts.filter((a) => a.active).length;
+  const aiMonth = monthKey(); // mês corrente p/ exibir o consumo de IA por conta
 
   return (
     <div className="space-y-5">
@@ -145,6 +159,10 @@ export default async function FinanceiroPage({
                 <p className="text-slate-600">{a.leads}</p>
               </div>
               <div>
+                <p className="text-xs text-slate-400">IA (mês)</p>
+                <p className="text-slate-600">{aiUsageLabel(a, aiMonth)}</p>
+              </div>
+              <div>
                 <p className="text-xs text-slate-400">Criada</p>
                 <p className="text-slate-500">{formatDateTime(a.createdAt)}</p>
               </div>
@@ -195,6 +213,7 @@ export default async function FinanceiroPage({
               <Th>Usuários</Th>
               <Th>Chips</Th>
               <Th>Leads</Th>
+              <Th>IA (mês)</Th>
               <Th>Criada</Th>
               <Th>Validade</Th>
               <Th>Pagamento</Th>
@@ -232,6 +251,7 @@ export default async function FinanceiroPage({
                 </Td>
                 <Td className="text-slate-600">{a.numbers}</Td>
                 <Td className="text-slate-600">{a.leads}</Td>
+                <Td className="whitespace-nowrap text-slate-600">{aiUsageLabel(a, aiMonth)}</Td>
                 <Td className="whitespace-nowrap text-slate-500">
                   {formatDateTime(a.createdAt)}
                 </Td>

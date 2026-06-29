@@ -93,6 +93,10 @@ export interface AdminAccountRow {
   maxSeats: number | null;   // teto do plano (null = sem plano definido)
   seats: AccountSeat[];      // dono (primeiro) + operadores, p/ o dropdown de usuários
   createdAt: Date;
+  // Cota de IA na chave da plataforma (BYOK = ilimitado).
+  byok: boolean;             // true = conta usa chave própria → consumo ilimitado
+  aiCreditMonth: string | null;
+  aiCreditUsed: number;
 }
 
 /**
@@ -114,6 +118,10 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       paymentDueDate: true,
       plan: true,
       createdAt: true,
+      aiProvider: true,
+      aiKeyEnc: true,
+      aiCreditMonth: true,
+      aiCreditUsed: true,
       members: {
         orderBy: { createdAt: "asc" },
         select: { id: true, name: true, email: true, role: true },
@@ -149,6 +157,10 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       })),
     ],
     createdAt: u.createdAt,
+    // BYOK exige provider + chave cifrada (igual resolveProviderForUser).
+    byok: !!(u.aiProvider && u.aiKeyEnc),
+    aiCreditMonth: u.aiCreditMonth,
+    aiCreditUsed: u.aiCreditUsed,
   }));
 }
 
