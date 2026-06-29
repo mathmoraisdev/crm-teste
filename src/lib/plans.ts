@@ -7,13 +7,14 @@ export interface PlanLimits {
   qualify: boolean;   // pode ligar qualifyEnabled por número
   schedule: boolean;  // pode ligar scheduleEnabled por número
   campaigns: boolean; // pode criar/rodar campanha
-  aiMonthlyQuota: number; // teto de atendimentos de IA/mês na chave da PLATAFORMA (BYOK ignora)
+  aiMonthlyQuota: number;     // pool de créditos de IA/mês na chave da PLATAFORMA (BYOK ignora)
+  allowStrongModel: boolean;  // pode usar modelo avançado (strong) na chave da plataforma
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
-  INICIAL:      { priceCents: 12700, maxNumbers: 1, maxSeats: 2,  qualify: false, schedule: false, campaigns: false, aiMonthlyQuota: 300  },
-  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  qualify: true,  schedule: true,  campaigns: true,  aiMonthlyQuota: 1500 },
-  ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, qualify: true,  schedule: true,  campaigns: true,  aiMonthlyQuota: 5000 },
+  INICIAL:      { priceCents: 12700, maxNumbers: 1, maxSeats: 2,  qualify: false, schedule: false, campaigns: false, aiMonthlyQuota: 300,  allowStrongModel: false },
+  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  qualify: true,  schedule: true,  campaigns: true,  aiMonthlyQuota: 1500, allowStrongModel: true  },
+  ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, qualify: true,  schedule: true,  campaigns: true,  aiMonthlyQuota: 5000, allowStrongModel: true  },
 };
 
 const LABELS: Record<Plan, string> = {
