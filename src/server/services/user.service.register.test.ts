@@ -33,4 +33,14 @@ describe("registerUser", () => {
     expect(arg.data.billingOverride).toBe("AUTO");
     expect(arg.data.accessUntil).toEqual(new Date("2026-07-04T12:00:00Z"));
   });
+
+  it("conta nova nasce com plano INICIAL (trial capado, cheap-only)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue(null);
+    (prisma.user.create as any).mockResolvedValue({ id: "u-1", sessionEpoch: 0 });
+    const { registerUser } = await import("./user.service");
+    await registerUser({ name: "X", email: "novo@x.com", password: "12345678" });
+    const arg = (prisma.user.create as any).mock.calls[0][0];
+    expect(arg.data.plan).toBe("INICIAL");
+  });
 });

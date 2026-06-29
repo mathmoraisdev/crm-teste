@@ -51,6 +51,9 @@ export async function registerUser(
       // Com TRIAL_DAYS>0 ganha trial automático de N dias.
       billingOverride: "AUTO",
       accessUntil,
+      // Nasce no plano de entrada: trial/INICIAL roda só o modelo econômico e tem
+      // pool de créditos. plan=null fica reservado a grandfather que o admin marca.
+      plan: "INICIAL",
     },
     select: { id: true, sessionEpoch: true },
   });
