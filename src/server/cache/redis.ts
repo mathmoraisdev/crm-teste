@@ -20,4 +20,11 @@ export const redis: Redis | null =
       })
     : null);
 
+// CRÍTICO: sem um listener de 'error', uma queda de conexão do ioredis vira
+// "Unhandled error event" e DERRUBA o processo (web/worker). Aqui só logamos e
+// deixamos o ioredis reconectar sozinho — o cache/SSE degradam até voltar.
+redis?.on("error", (err) => {
+  console.error("[redis] erro de conexão:", err?.message ?? err);
+});
+
 if (process.env.NODE_ENV !== "production") g.redis = redis;
