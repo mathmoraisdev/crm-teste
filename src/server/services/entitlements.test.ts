@@ -72,7 +72,7 @@ describe("consumeAiCredit", () => {
     const { prisma } = await import("@/server/db/client");
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", NOW);
+    const r = await consumeAiCredit("dono-1", null, NOW);
     expect(r).toEqual({ allowed: true, source: "user" });
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe("consumeAiCredit", () => {
     });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", NOW);
+    const r = await consumeAiCredit("dono-1", null, NOW);
     expect(r).toEqual({ allowed: true, source: "platform", used: 11, quota: 300 });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "dono-1" },
@@ -103,7 +103,7 @@ describe("consumeAiCredit", () => {
     });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", NOW);
+    const r = await consumeAiCredit("dono-1", null, NOW);
     expect(r).toEqual({ allowed: false, used: 300, quota: 300 });
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -117,7 +117,7 @@ describe("consumeAiCredit", () => {
     });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", NOW);
+    const r = await consumeAiCredit("dono-1", null, NOW);
     expect(r).toEqual({ allowed: true, source: "platform", used: 1, quota: 300 });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "dono-1" },
@@ -132,7 +132,7 @@ describe("consumeAiCredit", () => {
     (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: null });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", NOW);
+    const r = await consumeAiCredit("dono-1", null, NOW);
     expect(r).toEqual({ allowed: true, source: "platform", used: 0, quota: Infinity });
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -144,9 +144,95 @@ describe("consumeAiCredit", () => {
     (prisma.user.findUnique as any).mockResolvedValue({ email: "admin@exemplo.com", plan: "INICIAL" });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("admin-1", NOW);
+    const r = await consumeAiCredit("admin-1", null, NOW);
     expect(r.allowed).toBe(true);
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("consumeAiCredit (peso por modelo)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const NOW = new Date("2026-06-15T12:00:00Z");
+
+  it("modelo strong cobra STRONG_CREDIT_WEIGHT créditos", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-06", aiCreditUsed: 100,
+    });
+    const { consumeAiCredit } = await import("./entitlements");
+
+    const r = await consumeAiCredit("dono-1", "gpt-4o", NOW);
+    expect(r).toEqual({ allowed: true, source: "platform", used: 110, quota: 1500 });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "dono-1" },
+      data: { aiCreditMonth: "2026-06", aiCreditUsed: 110 },
+    });
+  });
+
+  it("cheap (ou sem modelo) cobra 1", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "INICIAL", aiCreditMonth: "2026-06", aiCreditUsed: 0,
+    });
+    const { consumeAiCredit } = await import("./entitlements");
+    expect(await consumeAiCredit("dono-1", "gpt-4o-mini", NOW)).toMatchObject({ used: 1 });
+    expect(await consumeAiCredit("dono-1", null, NOW)).toMatchObject({ used: 1 });
+  });
+
+  it("bloqueia se o peso não cabe no que resta (não cobra parcial)", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-06", aiCreditUsed: 1495,
+    });
+    const { consumeAiCredit } = await import("./entitlements");
+
+    const r = await consumeAiCredit("dono-1", "gpt-4o", NOW); // 1495 + 10 > 1500
+    expect(r).toEqual({ allowed: false, used: 1495, quota: 1500 });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveAiModelForUser (clamp por plano)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("plano sem strong → modelo strong vira null (cai no padrão econômico)", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
+    const { resolveAiModelForUser } = await import("./entitlements");
+    expect(await resolveAiModelForUser("dono-1", "gpt-4o")).toBeNull();
+  });
+
+  it("plano com strong → mantém o modelo escolhido", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "ESCALA" });
+    const { resolveAiModelForUser } = await import("./entitlements");
+    expect(await resolveAiModelForUser("dono-1", "gpt-4o")).toBe("gpt-4o");
+  });
+
+  it("BYOK → mantém qualquer modelo (sem clamp)", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "user" });
+    const { resolveAiModelForUser } = await import("./entitlements");
+    expect(await resolveAiModelForUser("dono-1", "claude-opus-4-8")).toBe("claude-opus-4-8");
+  });
+
+  it("modelo cheap passa em qualquer plano", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
+    const { resolveAiModelForUser } = await import("./entitlements");
+    expect(await resolveAiModelForUser("dono-1", "gpt-4o-mini")).toBe("gpt-4o-mini");
   });
 });
 
