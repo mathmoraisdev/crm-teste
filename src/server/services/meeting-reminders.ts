@@ -149,6 +149,7 @@ export async function dispatchDueReminders(now: Date): Promise<number> {
           dayBefore: m.lead.whatsAppNumber?.reminderDayBeforeTemplate,
           hourBefore: m.lead.whatsAppNumber?.reminderHourBeforeTemplate,
         }),
+        { source: "SYSTEM" }, // lembrete automático, não é resposta da IA
       );
       await prisma.meeting.update({
         where: { id: m.id },

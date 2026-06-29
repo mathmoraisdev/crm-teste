@@ -44,8 +44,12 @@ export interface DashboardData {
   byCompany: CompanyRow[];
   byCampaign: CampaignRow[];
   sla: {
-    avgFirstResponseSeconds: number | null; // tempo médio até a 1ª resposta humana
+    avgFirstResponseSeconds: number | null; // tempo médio até a 1ª resposta humana (handoff → operador)
     sampleSize: number;
+  };
+  aiSla: {
+    avgResponseSeconds: number | null; // tempo médio de resposta da IA (msg do lead → resposta da IA)
+    sampleSize: number; // nº de respostas da IA pareadas no período
   };
   resolvedByAgent: AgentRow[];
 }
@@ -112,8 +116,8 @@ export async function getDashboard(
     }),
   ]);
 
-  // SLA de 1ª resposta + resolvidas por atendente (no período, ancorado na resposta).
-  const [slaLeads, resolvedGroups, members] = await Promise.all([
+  // SLA de 1ª resposta humana + resolvidas por atendente + mensagens p/ o SLA da IA.
+  const [slaLeads, resolvedGroups, members, aiSlaMessages] = await Promise.all([
     prisma.lead.findMany({
       where: { userId, queuedAt: { not: null }, firstResponseAt: { not: null, gte: since } },
       select: { queuedAt: true, firstResponseAt: true },
@@ -127,6 +131,17 @@ export async function getDashboard(
       where: { OR: [{ id: userId }, { ownerId: userId }] },
       select: { id: true, name: true },
     }),
+    // Para o SLA da IA: todo INBOUND do lead + toda resposta OUTBOUND da IA no
+    // período, em ordem cronológica por conversa (pareamento em JS abaixo).
+    prisma.message.findMany({
+      where: {
+        lead: { userId },
+        createdAt: { gte: since },
+        OR: [{ direction: "INBOUND" }, { direction: "OUTBOUND", source: "AI" }],
+      },
+      select: { leadId: true, direction: true, createdAt: true },
+      orderBy: [{ leadId: "asc" }, { createdAt: "asc" }],
+    }),
   ]);
 
   let slaSum = 0;
@@ -138,6 +153,32 @@ export async function getDashboard(
   const sla = {
     avgFirstResponseSeconds: slaLeads.length > 0 ? Math.round(slaSum / slaLeads.length) : null,
     sampleSize: slaLeads.length,
+  };
+
+  // SLA da IA: pareia cada resposta da IA ao 1º INBOUND ainda não respondido da
+  // mesma conversa (o "abre" da rajada — espelha o debounce: a IA junta mensagens
+  // picadas e mede do início da rajada). Latência = resposta − abertura.
+  let aiSum = 0;
+  let aiCount = 0;
+  let aiLead: string | null = null;
+  let openInboundAt: Date | null = null;
+  for (const m of aiSlaMessages) {
+    if (m.leadId !== aiLead) {
+      aiLead = m.leadId;
+      openInboundAt = null;
+    }
+    if (m.direction === "INBOUND") {
+      if (!openInboundAt) openInboundAt = m.createdAt; // 1º inbound da rajada
+    } else if (openInboundAt) {
+      // resposta da IA fechando uma rajada aberta
+      aiSum += (m.createdAt.getTime() - openInboundAt.getTime()) / 1000;
+      aiCount += 1;
+      openInboundAt = null;
+    }
+  }
+  const aiSla = {
+    avgResponseSeconds: aiCount > 0 ? Math.round(aiSum / aiCount) : null,
+    sampleSize: aiCount,
   };
 
   const memberName = new Map(members.map((m) => [m.id, m.name]));
@@ -231,6 +272,7 @@ export async function getDashboard(
     byCompany,
     byCampaign,
     sla,
+    aiSla,
     resolvedByAgent,
   };
 }

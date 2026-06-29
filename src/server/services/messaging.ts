@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import type { MessageSource } from "@prisma/client";
 import { getWhatsApp } from "@/server/whatsapp";
 import { env } from "@/lib/env";
 import { typingDelayMs, sleep } from "@/lib/humanize";
@@ -72,8 +73,11 @@ async function resolveQuotedRef(
 export async function sendWhatsAppMessage(
   lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
   text: string,
-  opts: { replyToMessageId?: string | null } = {},
+  opts: { replyToMessageId?: string | null; source?: MessageSource } = {},
 ): Promise<void> {
+  // Envio reativo é, por padrão, da IA (resposta conversacional). Lembretes e
+  // outros automatismos passam source explícito (SYSTEM) p/ não inflar a métrica.
+  const source: MessageSource = opts.source ?? "AI";
   if (env.WHATSAPP_MODE === "baileys") {
     // responde pelo chip que iniciou a conversa; senão, qualquer um conectado DA CONTA
     let numberId = lead.whatsAppNumberId ?? null;
@@ -98,6 +102,7 @@ export async function sendWhatsAppMessage(
         status: "SENT",
         whatsAppNumberId: numberId,
         replyToId: quoted?.messageId ?? null,
+        source,
       },
     });
     await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
@@ -118,6 +123,7 @@ export async function sendWhatsAppMessage(
       providerMessageId,
       status: "SENT",
       replyToId: quoted?.messageId ?? null,
+      source,
     },
   });
   // Toca updatedAt do lead para o dashboard refletir atividade recente.
@@ -213,6 +219,7 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
         status: "SENT",
         whatsAppNumberId: numberId,
         replyToId: quoted?.messageId ?? null,
+        source: "OPERATOR", // resposta manual do operador (inbox CRM)
       },
     }),
     prisma.outboundJob.update({
@@ -295,6 +302,7 @@ export async function dispatchOutboundJob(
           providerMessageId: out.providerMessageId,
           status: "SENT",
           whatsAppNumberId: numberId,
+          source: "CAMPAIGN", // disparo de campanha (template/freeform)
         },
       }),
       prisma.outboundJob.update({
@@ -336,6 +344,7 @@ export async function dispatchOutboundJob(
         content: sentContent,
         providerMessageId,
         status: "SENT",
+        source: "CAMPAIGN", // disparo de campanha (template/freeform)
       },
     }),
     prisma.outboundJob.update({

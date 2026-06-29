@@ -493,7 +493,8 @@ async function ensureAiCredit(
   const credit = await consumeAiCredit(lead.userId, model);
   if (credit.allowed) return true;
   // Teto atingido → handoff suave: humano assume, sem deixar o lead no vácuo.
-  await sendWhatsAppMessage(lead, AI_QUOTA_EXCEEDED_MESSAGE);
+  // SYSTEM: mensagem canned de cota estourada, não conta como resposta da IA.
+  await sendWhatsAppMessage(lead, AI_QUOTA_EXCEEDED_MESSAGE, { source: "SYSTEM" });
   await prisma.lead.update({
     where: { id: lead.id },
     data: {
@@ -652,7 +653,7 @@ export async function sendManualReply(
   if (env.WHATSAPP_MODE === "baileys") {
     await enqueueManualReply(lead, content, { replyToMessageId });
   } else {
-    await sendWhatsAppMessage(lead, content, { replyToMessageId });
+    await sendWhatsAppMessage(lead, content, { replyToMessageId, source: "OPERATOR" });
   }
   // Operador respondeu pela tela do CRM: renova o relógio de inatividade p/ o
   // resume automático medir o silêncio a partir de agora (não desde a pausa) e
@@ -722,6 +723,7 @@ export async function handleOperatorMessage(input: {
         providerMessageId: input.providerMessageId ?? undefined,
         status: "SENT",
         whatsAppNumberId: input.whatsAppNumberId,
+        source: "OPERATOR", // operador respondeu digitando no próprio WhatsApp
       },
     });
   } catch (e) {

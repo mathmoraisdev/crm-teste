@@ -133,7 +133,7 @@ export function DashboardView() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             <StatCard label="Mensagens recebidas" value={data.totals.inbound} hint={`últimos ${data.days} dias`} />
             <StatCard label="Mensagens enviadas" value={data.totals.outbound} hint={`últimos ${data.days} dias`} />
             <StatCard
@@ -141,11 +141,28 @@ export function DashboardView() {
               value={data.newLeadsPerDay.reduce((s, p) => s + p.count, 0)}
               hint={`últimos ${data.days} dias`}
             />
+          </div>
+
+          {/* Tempo de resposta: IA (automática) x atendente humano (handoff). */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StatCard
-              label="Tempo até 1ª resposta"
-              value={formatDuration(data.sla.avgFirstResponseSeconds)}
-              hint={data.sla.sampleSize > 0 ? `média de ${data.sla.sampleSize} atendimento(s)` : "sem dados no período"}
+              label="Resposta da IA"
+              value={formatDuration(data.aiSla.avgResponseSeconds)}
+              hint={
+                data.aiSla.sampleSize > 0
+                  ? `média de ${data.aiSla.sampleSize} resposta(s) automática(s)`
+                  : "sem respostas da IA no período"
+              }
               accent
+            />
+            <StatCard
+              label="Resposta do atendente"
+              value={formatDuration(data.sla.avgFirstResponseSeconds)}
+              hint={
+                data.sla.sampleSize > 0
+                  ? `1ª resposta · média de ${data.sla.sampleSize} atendimento(s)`
+                  : "sem atendimentos humanos no período"
+              }
             />
           </div>
 

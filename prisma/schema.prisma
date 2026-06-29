@@ -152,6 +152,15 @@ enum MessageStatus {
   FAILED
 }
 
+// Origem de uma mensagem OUTBOUND (null = INBOUND do lead ou linha legada).
+// Usado p/ separar métrica de tempo de resposta da IA vs. do atendente humano.
+enum MessageSource {
+  AI        // resposta conversacional gerada pela IA
+  OPERATOR  // resposta humana (inbox CRM ou digitada no próprio WhatsApp)
+  CAMPAIGN  // disparo de campanha (template/freeform)
+  SYSTEM    // automatismo sem ser resposta (lembrete de reunião, etc.)
+}
+
 enum CampaignStatus {
   DRAFT
   RUNNING
@@ -289,6 +298,8 @@ model Message {
   content           String
   providerMessageId String?          @unique // dedupe de webhook
   status            MessageStatus?
+  // origem do OUTBOUND (null em INBOUND e em linhas anteriores a este campo)
+  source            MessageSource?
   // qual chip enviou/recebeu — auditoria (Baileys multi-número)
   whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])
   whatsAppNumberId  String?
