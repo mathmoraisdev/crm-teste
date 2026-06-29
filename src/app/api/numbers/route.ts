@@ -6,6 +6,8 @@ import { prisma } from "@/server/db/client";
 import { normalizePhone } from "@/lib/phone";
 import { listWhatsAppNumbers, assertNumberQuota } from "@/server/services/numbers.service";
 import { getTenantUserId, getTenantContext } from "@/lib/tenant";
+import { isAdminEmail } from "@/lib/admin";
+import { PLAN_LIMITS } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +17,7 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const [numbers, user] = await Promise.all([
     listWhatsAppNumbers(userId),
-    prisma.user.findUnique({ where: { id: userId }, select: { aiProvider: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { aiProvider: true, email: true, plan: true } }),
   ]);
   // converte o QR cru em data URL p/ a UI renderizar como <img>
   const withQr = await Promise.all(
@@ -26,7 +28,13 @@ export async function GET() {
   );
   // provider efetivo p/ a UI adaptar o catálogo de modelos (BYOK ou plataforma=OPENAI)
   const provider = user?.aiProvider ?? "OPENAI";
-  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE, provider });
+  // Pode usar modelo avançado? grandfather/admin → sim; senão, conforme o plano.
+  // (Espelha assertModelAllowedForPlan no PATCH — o runtime é a rede de segurança.)
+  const allowStrongModel =
+    !user?.plan || (user.email && isAdminEmail(user.email))
+      ? true
+      : PLAN_LIMITS[user.plan].allowStrongModel;
+  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE, provider, allowStrongModel });
 }
 
 const createSchema = z.object({

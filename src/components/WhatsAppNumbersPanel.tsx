@@ -92,6 +92,8 @@ export function WhatsAppNumbersPanel() {
   const [numbers, setNumbers] = useState<NumberItem[] | null>(null);
   const [mode, setMode] = useState<string | null>(null);
   const [provider, setProvider] = useState<AiProviderName>("OPENAI");
+  // Conta libera o modelo avançado (strong)? Vem do plano (grandfather/admin = true).
+  const [allowStrongModel, setAllowStrongModel] = useState(false);
 
   // estado do modal de pareamento
   const [open, setOpen] = useState(false);
@@ -128,6 +130,7 @@ export function WhatsAppNumbersPanel() {
       if (data.provider === "OPENAI" || data.provider === "ANTHROPIC") {
         setProvider(data.provider);
       }
+      setAllowStrongModel(Boolean(data.allowStrongModel));
     } catch {
       /* mantém estado anterior */
     }
@@ -683,17 +686,25 @@ export function WhatsAppNumbersPanel() {
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="">Padrão da conta</option>
-                {AI_MODELS_BY_PROVIDER[provider].map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
+                {AI_MODELS_BY_PROVIDER[provider]
+                  .filter((m) => allowStrongModel || m.tier === "cheap")
+                  .map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                      {m.tier === "strong" ? " (avançado · 10 créditos)" : ""}
+                    </option>
+                  ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
                 Modelo que gera as respostas deste número.{" "}
                 {provider === "ANTHROPIC" ? "Provider: Anthropic." : "Provider: OpenAI."}{" "}
                 &quot;Padrão da conta&quot; usa o modelo configurado globalmente.
               </p>
+              {!allowStrongModel && (
+                <p className="mt-1 text-xs text-amber-600">
+                  Modelos avançados disponíveis no Profissional/Escala ou com sua própria chave (BYOK).
+                </p>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">

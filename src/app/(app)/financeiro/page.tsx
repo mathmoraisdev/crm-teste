@@ -162,7 +162,7 @@ export default async function FinanceiroPage({
                 <p className="text-slate-600">{a.leads}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">IA (mês)</p>
+                <p className="text-xs text-slate-400">IA (créditos/mês)</p>
                 <p className="text-slate-600">{aiUsageLabel(a, aiMonth)}</p>
               </div>
               <div>
@@ -216,7 +216,7 @@ export default async function FinanceiroPage({
               <Th>Usuários</Th>
               <Th>Chips</Th>
               <Th>Leads</Th>
-              <Th>IA (mês)</Th>
+              <Th>IA (créditos/mês)</Th>
               <Th>Criada</Th>
               <Th>Validade</Th>
               <Th>Pagamento</Th>

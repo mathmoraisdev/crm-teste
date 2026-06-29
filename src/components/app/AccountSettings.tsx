@@ -352,8 +352,11 @@ export function AccountSettings({
           ) : (
             <>
               <span>
-                Atendimentos de IA: <strong>{aiUsage.used} / {aiUsage.quota}</strong> este mês
+                Atendimentos de IA: <strong>{aiUsage.used} / {aiUsage.quota}</strong> créditos este mês
               </span>
+              <p className="mt-1 text-xs text-slate-400">
+                Modelo econômico = 1 crédito por atendimento; modelo avançado = 10.
+              </p>
               {aiUsage.used >= aiUsage.quota && (
                 <p className="mt-1 text-[#C0392B]">
                   Cota esgotada. Faça upgrade de plano ou cadastre sua própria chave de IA acima para
