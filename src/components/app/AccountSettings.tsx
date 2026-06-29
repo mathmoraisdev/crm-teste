@@ -23,14 +23,20 @@ type AiKeyStatus = {
   verifiedAt: string | null;
 };
 
+type AiUsage =
+  | { unlimited: true; reason: "byok" | "grandfather" | "admin" }
+  | { unlimited: false; used: number; quota: number; month: string };
+
 export function AccountSettings({
   account,
   aiKey,
+  aiUsage,
   canSettings = true,
   isOwner = true,
 }: {
   account: Account;
   aiKey: AiKeyStatus;
+  aiUsage: AiUsage;
   canSettings?: boolean;
   isOwner?: boolean; // dono/ADMIN — só ele exporta/exclui a conta
 }) {
@@ -332,6 +338,28 @@ export function AccountSettings({
                   Testar e salvar
                 </Button>
               </div>
+            </>
+          )}
+        </div>
+
+        {/* Medidor de consumo na chave da plataforma (BYOK = ilimitado). */}
+        <div className="border-t border-slate-100 px-5 py-3 text-sm text-slate-600">
+          {aiUsage.unlimited ? (
+            <span>
+              Atendimentos de IA: <strong>Ilimitado</strong>
+              {aiUsage.reason === "byok" ? " (sua chave)" : ""}
+            </span>
+          ) : (
+            <>
+              <span>
+                Atendimentos de IA: <strong>{aiUsage.used} / {aiUsage.quota}</strong> este mês
+              </span>
+              {aiUsage.used >= aiUsage.quota && (
+                <p className="mt-1 text-[#C0392B]">
+                  Cota esgotada. Faça upgrade de plano ou cadastre sua própria chave de IA acima para
+                  liberar atendimentos ilimitados.
+                </p>
+              )}
             </>
           )}
         </div>
