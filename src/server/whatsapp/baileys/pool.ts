@@ -14,7 +14,7 @@ import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
 import { jidOf, pickSendJid } from "./jid";
-import { isMediaMessage } from "./media";
+import { isMediaMessage, mediaPlaceholder } from "./media";
 
 const logger = pino({ level: "warn" });
 
@@ -31,6 +31,13 @@ export interface OperatorEvent {
   providerMessageId: string | null;
   whatsAppNumberId: string;
 }
+/** Mídia recebida do lead (sem legenda) — vira placeholder no inbox, sem IA. */
+export interface InboundMediaEvent {
+  fromPhone: string; // E.164 com "+"
+  placeholder: string; // rótulo legível ("📷 Imagem")
+  providerMessageId: string | null;
+  whatsAppNumberId: string;
+}
 export type SendOutcome =
   | { ok: true; providerMessageId: string }
   | { ok: false; reason: "no_socket" | "not_on_whatsapp" | "send_failed" };
@@ -40,6 +47,8 @@ type Handlers = {
   onAck: (providerMessageId: string, status: "DELIVERED" | "READ") => Promise<void>;
   /** opcional: mensagem manual do operador (fromMe não-bot) → handoff automático. */
   onOperatorMessage?: (e: OperatorEvent) => Promise<void>;
+  /** opcional: mídia do lead sem legenda → persiste placeholder no inbox (sem IA). */
+  onInboundMedia?: (e: InboundMediaEvent) => Promise<void>;
 };
 
 const sockets = new Map<string, WASocket>();
@@ -236,8 +245,20 @@ export async function connectNumber(numberId: string): Promise<void> {
             `[baileys] "${rec.label}" inbound NÃO descriptografado de ${remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );
         } else if (!fromMe && pnJid && isMediaMessage(inner)) {
-          // Mídia de um lead: ainda não lemos arquivos → avisa que só lê texto.
-          await replyUnsupportedMedia(numberId, `+${pnJid.split("@")[0]}`, rec.label);
+          // Mídia de um lead (sem legenda): não lemos o arquivo. Registra um
+          // placeholder no inbox (operador vê que chegou algo) e avisa o lead que
+          // só lemos texto (anti-spam: 1x a cada 5 min).
+          const phone = `+${pnJid.split("@")[0]}`;
+          const placeholder = mediaPlaceholder(inner);
+          if (placeholder) {
+            await handlers.onInboundMedia?.({
+              fromPhone: phone,
+              placeholder,
+              providerMessageId: m.key.id ?? null,
+              whatsAppNumberId: numberId,
+            });
+          }
+          await replyUnsupportedMedia(numberId, phone, rec.label);
         }
         continue;
       }

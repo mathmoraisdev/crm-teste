@@ -16,6 +16,7 @@ import { shouldCreateContact } from "./inbound-resolve";
 import { isAccountActiveByLead } from "@/server/services/account.service";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
+import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -112,7 +113,12 @@ async function computeConversation(
     take: CONVERSATION_CONTEXT_LIMIT,
     select: { direction: true, content: true, createdAt: true },
   });
-  const chronological = messages.reverse();
+  // Exclui os placeholders de mídia ("📷 Imagem" etc.): a IA não lê o arquivo, e
+  // mandar o rótulo no transcript só confunde/gasta token. O operador continua
+  // vendo no inbox (que lê as Messages cruas, não passa por aqui).
+  const chronological = messages
+    .reverse()
+    .filter((m) => !(m.direction === "INBOUND" && MEDIA_PLACEHOLDERS.has(m.content)));
   return sessionWindow(chronological, resetMinutes).map((m) => ({
     direction: m.direction,
     content: m.content,
@@ -126,6 +132,75 @@ export interface IngestResult {
   respond: boolean;
   /** atraso recomendado antes de responder (debounce), em ms. 0 = imediato. */
   delayMs: number;
+}
+
+/**
+ * Resolve o lead da conversa ou cria o contato: inbound de um telefone
+ * desconhecido CRIA o contato atrelado à empresa (número) que recebeu. Sem a
+ * empresa (ex.: cloud-api sem mapa) não cria → devolve null. Compartilhado por
+ * `ingestInbound` (texto) e `ingestInboundMedia` (placeholder).
+ */
+async function resolveOrCreateLead(input: InboundInput) {
+  const lead = await resolveLead(input);
+  if (lead) return lead;
+  if (!shouldCreateContact({ matched: false, whatsAppNumberId: input.whatsAppNumberId, phone: input.phone })) {
+    return null;
+  }
+  // Descobre o dono (operador) a partir da empresa (número) que recebeu.
+  const num = await prisma.whatsAppNumber.findUnique({
+    where: { id: input.whatsAppNumberId! },
+    select: { userId: true },
+  });
+  if (!num) return null;
+  return prisma.lead.create({
+    data: {
+      userId: num.userId,
+      whatsAppNumberId: input.whatsAppNumberId!,
+      phone: input.phone!,
+      name: input.phone!, // sem nome ainda; o telefone é o rótulo inicial
+      status: "EM_CONVERSA",
+      consentSource: "inbound", // o cliente iniciou o contato (base legal p/ responder)
+    },
+  });
+}
+
+/**
+ * Mídia recebida do lead (áudio/imagem/vídeo/doc...) SEM legenda. Não baixamos o
+ * arquivo nem acionamos a IA — só persistimos um PLACEHOLDER textual ("📷 Imagem")
+ * como Message(INBOUND) p/ o operador ver no inbox que algo chegou. O aviso "só
+ * leio texto" ao lead é enviado à parte (pool.replyUnsupportedMedia). Dedupe por
+ * providerMessageId p/ a reentrega do Baileys não duplicar o placeholder.
+ */
+export async function ingestInboundMedia(input: {
+  phone?: string;
+  whatsAppNumberId?: string;
+  placeholder: string;
+  providerMessageId: string | null;
+}): Promise<void> {
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findUnique({
+      where: { providerMessageId: input.providerMessageId },
+      select: { id: true },
+    });
+    if (existing) return;
+  }
+  const lead = await resolveOrCreateLead({
+    phone: input.phone,
+    whatsAppNumberId: input.whatsAppNumberId,
+    text: input.placeholder,
+  });
+  if (!lead) return;
+  await prisma.message.create({
+    data: {
+      leadId: lead.id,
+      direction: "INBOUND",
+      content: input.placeholder,
+      providerMessageId: input.providerMessageId ?? undefined,
+    },
+  });
+  // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
+  await invalidateConversation(lead.id);
+  await invalidateLeadCaches(lead.userId);
 }
 
 /**
@@ -144,41 +219,17 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     if (existing) return { leadId: existing.leadId, deduped: true, respond: false, delayMs: 0 };
   }
 
-  // Localiza o lead (respeitando o isolamento por conta)
-  let lead = await resolveLead(input);
-
+  // Localiza o lead (respeitando o isolamento por conta) ou cria o contato.
+  const lead = await resolveOrCreateLead(input);
   if (!lead) {
-    // Atendimento: inbound de um telefone desconhecido CRIA o contato atrelado à
-    // empresa (número) que recebeu. Sem a empresa (cloud-api sem mapa) não criamos.
-    if (shouldCreateContact({ matched: false, whatsAppNumberId: input.whatsAppNumberId, phone: input.phone })) {
-      // Descobre o dono (operador) a partir da empresa (número) que recebeu.
-      const num = await prisma.whatsAppNumber.findUnique({
-        where: { id: input.whatsAppNumberId! },
-        select: { userId: true },
-      });
-      if (num) {
-        lead = await prisma.lead.create({
-          data: {
-            userId: num.userId,
-            whatsAppNumberId: input.whatsAppNumberId!,
-            phone: input.phone!,
-            name: input.phone!, // sem nome ainda; o telefone é o rótulo inicial
-            status: "EM_CONVERSA",
-            consentSource: "inbound", // o cliente iniciou o contato (base legal p/ responder)
-          },
-        });
-      }
+    // NÃO fica mudo: um inbound sem empresa para criar contato (ex.: cloud-api
+    // sem mapa) é a causa clássica de "a IA parou de responder". Logar dá o rastro.
+    if (input.phone) {
+      console.warn(
+        `[inbound] descartado: sem empresa p/ criar contato telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"}`,
+      );
     }
-    if (!lead) {
-      // NÃO fica mudo: um inbound sem empresa para criar contato (ex.: cloud-api
-      // sem mapa) é a causa clássica de "a IA parou de responder". Logar dá o rastro.
-      if (input.phone) {
-        console.warn(
-          `[inbound] descartado: sem empresa p/ criar contato telefone=${input.phone} chip=${input.whatsAppNumberId ?? "—"}`,
-        );
-      }
-      return { leadId: null, respond: false, delayMs: 0 };
-    }
+    return { leadId: null, respond: false, delayMs: 0 };
   }
 
   // 1b. Salva inbound

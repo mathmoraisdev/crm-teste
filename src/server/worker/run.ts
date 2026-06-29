@@ -14,7 +14,7 @@ let pool: Pool | null = null;
 /** Boot do modo Baileys: importa o pool, liga inbound/ack ao domínio e conecta. */
 async function bootBaileys(): Promise<Pool> {
   const p = await import("@/server/whatsapp/baileys/pool");
-  const { ingestInbound, handleOperatorMessage } = await import(
+  const { ingestInbound, ingestInboundMedia, handleOperatorMessage } = await import(
     "@/server/services/conversation.service"
   );
   const { scheduleResponse, cancelResponse } = await import("./respond-queue");
@@ -58,6 +58,19 @@ async function bootBaileys(): Promise<Pool> {
             "[worker] handleOperatorMessage falhou",
           );
         }),
+    // Mídia do lead sem legenda: persiste só um placeholder no inbox (sem IA).
+    onInboundMedia: (e) =>
+      ingestInboundMedia({
+        phone: e.fromPhone,
+        whatsAppNumberId: e.whatsAppNumberId,
+        placeholder: e.placeholder,
+        providerMessageId: e.providerMessageId,
+      }).catch((err) => {
+        logger.error(
+          { whatsAppNumberId: e.whatsAppNumberId, fromPhone: e.fromPhone, err },
+          "[worker] ingestInboundMedia falhou",
+        );
+      }),
     onAck: (id, status) => applyAck(id, status),
   });
   await p.ensureConnections();

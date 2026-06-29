@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { env } from "@/lib/env";
-import { handleInbound } from "@/server/services/conversation.service";
+import { handleInbound, ingestInboundMedia } from "@/server/services/conversation.service";
+import { cloudApiMediaPlaceholder } from "@/server/whatsapp/baileys/media";
 import { applyStatuses, applyQualityUpdate } from "@/server/services/webhook.service";
 import { logger } from "@/lib/logger";
 
@@ -73,12 +74,26 @@ export async function POST(req: NextRequest) {
 
         const messages = change.value?.messages ?? [];
         for (const msg of messages) {
-          if (msg.type !== "text") continue;
-          await handleInbound({
-            phone: `+${msg.from}`,
-            text: msg.text?.body ?? "",
-            providerMessageId: msg.id,
-          });
+          if (msg.type === "text") {
+            await handleInbound({
+              phone: `+${msg.from}`,
+              text: msg.text?.body ?? "",
+              providerMessageId: msg.id,
+            });
+            continue;
+          }
+          // Mídia: imagem/vídeo/doc podem vir COM legenda (em msg[type].caption) →
+          // usa a legenda como texto e aciona a IA. Sem legenda, persiste só um
+          // placeholder no inbox (operador vê que chegou algo); a IA não lê mídia.
+          const caption: string = (msg?.[msg.type]?.caption ?? "").trim();
+          if (caption) {
+            await handleInbound({ phone: `+${msg.from}`, text: caption, providerMessageId: msg.id });
+            continue;
+          }
+          const placeholder = cloudApiMediaPlaceholder(msg.type);
+          if (placeholder) {
+            await ingestInboundMedia({ phone: `+${msg.from}`, placeholder, providerMessageId: msg.id });
+          }
         }
       }
     }
