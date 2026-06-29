@@ -30,6 +30,22 @@ export interface InboxCounts {
   naoLidas: number;
 }
 
+/** Número da conta para o seletor do inbox (divisão de conversas por chip). */
+export interface InboxNumber {
+  id: string;
+  label: string;
+  displayName: string | null;
+}
+
+/** Lista os números (chips/empresas) da conta para o seletor do inbox. */
+export async function listAccountNumbers(tenantUserId: string): Promise<InboxNumber[]> {
+  return prisma.whatsAppNumber.findMany({
+    where: { userId: tenantUserId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, label: true, displayName: true },
+  });
+}
+
 /** Ids válidos de operador da conta: o dono (tenant) + seus membros. */
 async function accountOperatorIds(tenantUserId: string): Promise<Set<string>> {
   const members = await prisma.user.findMany({
@@ -56,10 +72,10 @@ async function assertLead(tenantUserId: string, leadId: string) {
  */
 export async function listConversations(
   tenantUserId: string,
-  opts: { filter?: InboxFilter; sessionUserId: string },
+  opts: { filter?: InboxFilter; sessionUserId: string; whatsAppNumberId?: string },
 ): Promise<InboxConversation[]> {
   const filter = opts.filter ?? "todas";
-  const where =
+  const byStatus =
     filter === "fila"
       ? { userId: tenantUserId, attendanceStatus: "FILA" as AttendanceStatus }
       : filter === "minhas"
@@ -73,6 +89,11 @@ export async function listConversations(
           : filter === "resolvidas"
             ? { userId: tenantUserId, attendanceStatus: "RESOLVIDA" as AttendanceStatus }
             : { userId: tenantUserId, attendanceStatus: { in: NON_RESOLVED } };
+  // Seletor de número: divide as conversas por chip (ex.: cada cartório).
+  const where = {
+    ...byStatus,
+    ...(opts.whatsAppNumberId ? { whatsAppNumberId: opts.whatsAppNumberId } : {}),
+  };
 
   const leads = await prisma.lead.findMany({
     where,
@@ -175,7 +196,9 @@ export async function resolveConversation(
     where: { id: lead.id },
     data: {
       attendanceStatus: "RESOLVIDA",
-      ...(returnToAi ? { aiPaused: false, aiPausedAt: null } : {}),
+      // Devolver à IA também sinaliza o worker p/ responder a backlog pendente
+      // (mesma semântica do setHandoff), sem esperar novo inbound do lead.
+      ...(returnToAi ? { aiPaused: false, aiPausedAt: null, aiResumePendingAt: new Date() } : {}),
     },
   });
   await invalidateLeadCaches(tenantUserId);
@@ -197,31 +220,36 @@ export async function markRead(tenantUserId: string, leadId: string) {
 export async function inboxCounts(
   tenantUserId: string,
   sessionUserId: string,
+  whatsAppNumberId?: string,
 ): Promise<InboxCounts> {
   // Cache curto (30s): badges toleram alguns segundos de atraso e a contagem é
-  // cara (vários count + groupBy de não-lidas). Chave por (conta, operador)
-  // porque "minhas" é por operador. Invalida nas escritas (invalidateLeadCaches).
-  return cached(cacheKeys.inboxCounts(tenantUserId, sessionUserId), 30, () =>
-    computeInboxCounts(tenantUserId, sessionUserId),
+  // cara (vários count + groupBy de não-lidas). Chave por (conta, operador,
+  // número) porque "minhas" é por operador e o seletor filtra por chip. Invalida
+  // nas escritas (invalidateLeadCaches varre o prefixo da conta).
+  return cached(cacheKeys.inboxCounts(tenantUserId, sessionUserId, whatsAppNumberId), 30, () =>
+    computeInboxCounts(tenantUserId, sessionUserId, whatsAppNumberId),
   );
 }
 
 async function computeInboxCounts(
   tenantUserId: string,
   sessionUserId: string,
+  whatsAppNumberId?: string,
 ): Promise<InboxCounts> {
+  const num = whatsAppNumberId ? { whatsAppNumberId } : {};
   const [fila, minhas, ia, active] = await Promise.all([
-    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "FILA" } }),
+    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "FILA", ...num } }),
     prisma.lead.count({
       where: {
         userId: tenantUserId,
         assignedToId: sessionUserId,
         attendanceStatus: { in: ["ATENDENDO", "AGUARDANDO"] },
+        ...num,
       },
     }),
-    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "IA" } }),
+    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "IA", ...num } }),
     prisma.lead.findMany({
-      where: { userId: tenantUserId, attendanceStatus: { in: ACTIVE } },
+      where: { userId: tenantUserId, attendanceStatus: { in: ACTIVE }, ...num },
       select: { id: true, lastReadAt: true },
     }),
   ]);

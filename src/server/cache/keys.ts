@@ -9,8 +9,8 @@ import { publishTenantEvent } from "@/server/events/bus";
  * alguns contadores são por operador; a invalidação varre o prefixo da conta.
  */
 export const cacheKeys = {
-  inboxCounts: (tenantUserId: string, sessionUserId: string) =>
-    `inbox:counts:${tenantUserId}:${sessionUserId}`,
+  inboxCounts: (tenantUserId: string, sessionUserId: string, whatsAppNumberId?: string) =>
+    `inbox:counts:${tenantUserId}:${sessionUserId}:${whatsAppNumberId ?? "_"}`,
   leadFacets: (userId: string, assignedToId?: string) =>
     `leads:facets:${userId}:${assignedToId ?? "_"}`,
   // Contexto de conversa montado p/ a IA (por lead). resetMinutes é estável por

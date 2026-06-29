@@ -17,15 +17,23 @@ import type {
   InboxFilter,
   InboxConversation,
   InboxCounts,
+  InboxNumber,
 } from "@/server/services/inbox.service";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 export function InboxView() {
   const [filter, setFilter] = useState<InboxFilter>("todas");
+  // Seletor de número: null = todos os chips juntos; id = só aquele número.
+  const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+  const [numbers, setNumbers] = useState<InboxNumber[]>([]);
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [counts, setCounts] = useState<InboxCounts | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
+
+  // Ref p/ loadList ler o número atual sem precisar entrar na lista de deps.
+  const numberRef = useRef<string | null>(selectedNumber);
+  numberRef.current = selectedNumber;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<LeadDetail | null>(null);
@@ -37,10 +45,13 @@ export function InboxView() {
 
   const loadList = useCallback(async (f: InboxFilter) => {
     try {
-      const res = await fetch(`/api/inbox?filter=${f}`, { cache: "no-store" });
+      const n = numberRef.current;
+      const url = `/api/inbox?filter=${f}${n ? `&number=${encodeURIComponent(n)}` : ""}`;
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
       setConversations((data.conversations as InboxConversation[]) ?? []);
       setCounts((data.counts as InboxCounts) ?? null);
+      setNumbers((data.numbers as InboxNumber[]) ?? []);
       setMe((data.me as string) ?? null);
     } catch {
       // mantém estado
@@ -50,13 +61,13 @@ export function InboxView() {
   }, []);
 
   // Polling de FALLBACK (30s): com Redis o SSE abaixo cobre o tempo real; este
-  // intervalo protege contra SSE indisponível.
+  // intervalo protege contra SSE indisponível. Recarrega ao trocar de número.
   useEffect(() => {
     setLoadingList(true);
     loadList(filter);
     const t = setInterval(() => loadList(filter), 30000);
     return () => clearInterval(t);
-  }, [filter, loadList]);
+  }, [filter, selectedNumber, loadList]);
 
   const loadDetail = useCallback(async (id: string) => {
     try {
@@ -155,6 +166,9 @@ export function InboxView() {
             counts={counts}
             filter={filter}
             onFilter={setFilter}
+            numbers={numbers}
+            selectedNumber={selectedNumber}
+            onSelectNumber={setSelectedNumber}
             selectedId={selectedId}
             onSelect={select}
             loading={loadingList}

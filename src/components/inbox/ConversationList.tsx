@@ -4,7 +4,12 @@ import { memo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { ConversationListItem } from "@/components/inbox/ConversationListItem";
-import type { InboxFilter, InboxConversation, InboxCounts } from "@/server/services/inbox.service";
+import type {
+  InboxFilter,
+  InboxConversation,
+  InboxCounts,
+  InboxNumber,
+} from "@/server/services/inbox.service";
 
 const TABS: { key: InboxFilter; label: string }[] = [
   { key: "fila", label: "Fila" },
@@ -19,6 +24,9 @@ export const ConversationList = memo(function ConversationList({
   counts,
   filter,
   onFilter,
+  numbers,
+  selectedNumber,
+  onSelectNumber,
   selectedId,
   onSelect,
   loading,
@@ -27,10 +35,14 @@ export const ConversationList = memo(function ConversationList({
   counts: InboxCounts | null;
   filter: InboxFilter;
   onFilter: (f: InboxFilter) => void;
+  numbers: InboxNumber[];
+  selectedNumber: string | null;
+  onSelectNumber: (id: string | null) => void;
   selectedId: string | null;
   onSelect: (id: string) => void;
   loading: boolean;
 }) {
+  const numberLabel = (n: InboxNumber) => n.displayName?.trim() || n.label;
   function badgeFor(key: InboxFilter): number | null {
     if (!counts) return null;
     if (key === "fila") return counts.fila;
@@ -53,6 +65,39 @@ export const ConversationList = memo(function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
+      {/* Seletor de número: divide as conversas por chip (ex.: cada cartório).
+          Só aparece com mais de um número — com um só não há o que dividir. */}
+      {numbers.length > 1 && (
+        <div className="flex shrink-0 flex-wrap gap-1 border-b border-slate-100 p-2">
+          <button
+            onClick={() => onSelectNumber(null)}
+            className={cn(
+              "rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+              selectedNumber === null
+                ? "bg-ink text-white"
+                : "text-slate-500 hover:bg-slate-100 hover:text-ink",
+            )}
+          >
+            Todos
+          </button>
+          {numbers.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => onSelectNumber(n.id)}
+              title={numberLabel(n)}
+              className={cn(
+                "max-w-[140px] truncate rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+                selectedNumber === n.id
+                  ? "bg-ink text-white"
+                  : "text-slate-500 hover:bg-slate-100 hover:text-ink",
+              )}
+            >
+              {numberLabel(n)}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex shrink-0 gap-1 border-b border-slate-100 p-2">
         {TABS.map((t) => {
           const n = badgeFor(t.key);
