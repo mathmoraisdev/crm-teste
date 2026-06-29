@@ -5,6 +5,8 @@ import { processNextJob } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
+import { reconcileAiResume } from "@/server/services/conversation.service";
+import { scheduleResponse } from "./respond-queue";
 import { sleep } from "@/lib/humanize";
 import { logger } from "@/lib/logger";
 
@@ -105,6 +107,7 @@ async function main() {
   let lastReap = Date.now();
   let lastChipAlert = 0;
   let lastReminder = 0;
+  let lastAiResume = 0;
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
@@ -134,6 +137,19 @@ async function main() {
         logger.error({ err }, "[worker] dispatchDueReminders falhou");
       }
       lastReminder = Date.now();
+    }
+
+    // Devolve a IA à conversa quando o operador retoma (handback/resolve) ou o
+    // handoff esfria por inatividade — respondendo a backlog SEM esperar inbound
+    // novo. Roda nos dois modos (o envio é por chip no baileys, Graph no cloud).
+    // Throttle de 30s: a granularidade da inatividade é minuto.
+    if (Date.now() - lastAiResume >= 30_000) {
+      try {
+        for (const leadId of await reconcileAiResume(new Date())) scheduleResponse(leadId, 0);
+      } catch (err) {
+        logger.error({ err }, "[worker] reconcileAiResume falhou");
+      }
+      lastAiResume = Date.now();
     }
 
     if (env.WHATSAPP_MODE === "baileys") {

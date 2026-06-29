@@ -70,9 +70,9 @@ export async function resolveLead(input: InboundInput) {
 
 /** Teto de mensagens enviadas à IA por resposta — controla custo de token em
  *  conversas longas. Reenviar o histórico inteiro a cada réplica cresce de forma
- *  quadrática ao longo da vida do lead; 25 turnos cobrem o contexto recente. É um
+ *  quadrática ao longo da vida do lead; 12 turnos cobrem o contexto recente. É um
  *  limite de SEGURANÇA: a janela de sessão (silêncio) costuma cortar bem antes. */
-const CONVERSATION_CONTEXT_LIMIT = 25;
+const CONVERSATION_CONTEXT_LIMIT = 12;
 
 /** Reset de contexto por silêncio (min) quando o número não define o seu. */
 const DEFAULT_CONTEXT_RESET_MINUTES = 180;
@@ -521,6 +521,7 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
           aiPaused: true,
           aiPausedAt: new Date(),
           attendanceStatus: "FILA",
+          aiResumePendingAt: null, // operador reassumiu → descarta sinal pendente
           ...(exists.queuedAt ? {} : { queuedAt: new Date() }),
         }
       : {
@@ -528,10 +529,87 @@ export async function setHandoff(leadId: string, userId: string, paused: boolean
           aiPausedAt: null,
           attendanceStatus: "IA",
           assignedToId: null,
+          // Sinaliza o worker p/ responder a backlog (se houver) sem esperar novo
+          // inbound. O worker consome, revalida e só responde se o lead aguarda.
+          aiResumePendingAt: new Date(),
         },
   });
   await invalidateLeadCaches(userId); // FILA/IA mudou os contadores de inbox
   return updated;
+}
+
+/**
+ * O lead está aguardando uma resposta da IA? = a mensagem textual mais recente é
+ * INBOUND, sem nenhuma OUTBOUND depois. Placeholders de mídia não contam (a IA não
+ * lê o arquivo; mídia sozinha nunca aciona resposta hoje). Usado p/ decidir se a
+ * devolução à IA / o resume por inatividade deve responder a backlog na hora.
+ */
+export async function isLeadAwaitingAiReply(leadId: string): Promise<boolean> {
+  const recent = await prisma.message.findMany({
+    where: { leadId },
+    orderBy: { createdAt: "desc" },
+    take: CONVERSATION_CONTEXT_LIMIT,
+    select: { direction: true, content: true },
+  });
+  for (const m of recent) {
+    if (m.direction === "OUTBOUND") return false; // último turno já respondido
+    if (MEDIA_PLACEHOLDERS.has(m.content)) continue; // mídia não conta como pergunta
+    return true; // INBOUND textual sem resposta depois
+  }
+  return false;
+}
+
+/**
+ * Reconciliação periódica (worker): retorna os leadIds que devem RECEBER uma
+ * resposta da IA agora, mesmo sem inbound novo. Dois gatilhos:
+ *  1. Devolução manual à IA: `aiResumePendingAt` setado pela rota web (handback/
+ *     resolve). É consumido e limpo aqui (one-shot).
+ *  2. Resume por inatividade: handoff humano esfriou além de
+ *     `inactivityResumeMinutes` (config do número) e o lead ainda aguarda.
+ * Em ambos só nudga se `isLeadAwaitingAiReply`. O chamador agenda
+ * `scheduleResponse(id, 0)`; o `respondToLead` revalida todo o estado fresco
+ * (aiPaused, status, cota) — esta função só seleciona candidatos.
+ */
+export async function reconcileAiResume(now: Date): Promise<string[]> {
+  const ids = new Set<string>();
+
+  // 1. Sinais de devolução manual à IA (web grava no banco; worker consome).
+  const pending = await prisma.lead.findMany({
+    where: { aiResumePendingAt: { not: null } },
+    select: { id: true },
+  });
+  if (pending.length > 0) {
+    await prisma.lead.updateMany({
+      where: { id: { in: pending.map((p) => p.id) } },
+      data: { aiResumePendingAt: null },
+    });
+    for (const p of pending) {
+      if (await isLeadAwaitingAiReply(p.id)) ids.add(p.id);
+    }
+  }
+
+  // 2. Resume por inatividade: o relógio do handoff (aiPausedAt) passou do limite
+  //    do número. Sem número não há config de inatividade → não entra.
+  const paused = await prisma.lead.findMany({
+    where: { aiPaused: true, aiPausedAt: { not: null }, whatsAppNumberId: { not: null } },
+    select: { id: true, aiPausedAt: true, whatsAppNumberId: true },
+  });
+  if (paused.length > 0) {
+    const numberIds = [...new Set(paused.map((l) => l.whatsAppNumberId as string))];
+    const nums = await prisma.whatsAppNumber.findMany({
+      where: { id: { in: numberIds } },
+      select: { id: true, inactivityResumeMinutes: true },
+    });
+    const minsById = new Map(nums.map((n) => [n.id, n.inactivityResumeMinutes]));
+    for (const l of paused) {
+      const mins = minsById.get(l.whatsAppNumberId as string) ?? 0;
+      if (mins <= 0 || !l.aiPausedAt) continue;
+      if (now.getTime() - l.aiPausedAt.getTime() < mins * 60_000) continue;
+      if (await isLeadAwaitingAiReply(l.id)) ids.add(l.id);
+    }
+  }
+
+  return [...ids];
 }
 
 /**

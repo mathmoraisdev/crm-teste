@@ -214,6 +214,9 @@ model Lead {
   // IA pausada manualmente p/ este lead (handover humano)
   aiPaused      Boolean        @default(false)
   aiPausedAt    DateTime?
+  // Sinal p/ o worker: IA reativada (devolução/resolve) com inbound pendente →
+  // responde a backlog sem esperar nova mensagem do lead. O worker consome e limpa.
+  aiResumePendingAt DateTime?
   // ── Atendimento humano (inbox / multiatendimento) ──────────────────────
   attendanceStatus AttendanceStatus @default(IA)
   assignedTo       User?            @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
