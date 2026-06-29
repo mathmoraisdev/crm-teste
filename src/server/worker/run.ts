@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import { hourInTz, isWithinWindow, jitterMs } from "@/lib/sendWindow";
-import { processNextJob } from "./dispatcher";
+import { processNextJob, processManualReplies } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
@@ -120,6 +120,18 @@ async function main() {
     // mantém sockets vivos e conecta chips recém-pareados pela UI (gera o QR),
     // mesmo fora da janela comercial — pareamento não depende de horário.
     if (env.WHATSAPP_MODE === "baileys" && pool) await pool.ensureConnections();
+
+    // Drena as respostas manuais do operador enfileiradas pelo web (que não tem
+    // socket). Roda SEMPRE (independe de janela/cap): é resposta reativa de
+    // conversa, não disparo. Latência ≈ WORKER_POLL_MS.
+    if (env.WHATSAPP_MODE === "baileys" && pool) {
+      try {
+        const n = await processManualReplies(new Date());
+        if (n > 0) logger.info({ sent: n }, "[worker] respostas manuais enviadas");
+      } catch (err) {
+        logger.error({ err }, "[worker] processManualReplies falhou");
+      }
+    }
 
     if (Date.now() - lastReap >= env.WORKER_REAP_EVERY_MS) {
       const n = await reclaimStuckJobs(new Date(), env.WORKER_LEASE_MS);

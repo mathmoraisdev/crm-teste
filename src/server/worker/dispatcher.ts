@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
-import { dispatchOutboundJob } from "@/server/services/messaging";
+import { dispatchOutboundJob, dispatchManualReplyJob, MANUAL_REPLY_KIND } from "@/server/services/messaging";
 import { selectNumber } from "@/server/whatsapp/baileys/selection";
 import { decideNoChipAction } from "./nochip";
 
@@ -156,6 +156,7 @@ export async function claimNextJobForAccount(userId: string, now: Date): Promise
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
+      kind: { not: MANUAL_REPLY_KIND }, // resposta manual tem dreno próprio (worker)
       // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
       lead: { is: { userId, user: { is: activeAccountWhere(now) } } },
       OR: [
@@ -201,6 +202,7 @@ export async function processNextJob(now: Date): Promise<boolean> {
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
+      kind: { not: MANUAL_REPLY_KIND }, // resposta manual tem dreno próprio (worker)
       // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
       lead: { is: { user: { is: activeAccountWhere(now) } } },
       OR: [
@@ -298,4 +300,53 @@ export async function processNextJob(now: Date): Promise<boolean> {
     });
     return false;
   }
+}
+
+/**
+ * Drena as respostas MANUAIS do operador (kind=manual_reply) enfileiradas pelo web
+ * — que não tem socket Baileys. Roda a cada tick do worker. Claim atômico
+ * (PENDING→SENDING) por job, envia pelo chip do lead e persiste o Message. Falha
+ * volta p/ PENDING (retry rápido) até 3 tentativas, depois FAILED. Crash entre o
+ * claim e o envio é coberto pelo reaper (recupera SENDING órfão). Retorna quantas
+ * foram enviadas.
+ */
+export async function processManualReplies(now: Date): Promise<number> {
+  const jobs = await prisma.outboundJob.findMany({
+    where: { kind: MANUAL_REPLY_KIND, status: "PENDING", scheduledFor: { lte: now } },
+    orderBy: { scheduledFor: "asc" },
+    take: 20,
+    select: { id: true },
+  });
+  let sent = 0;
+  for (const j of jobs) {
+    // Lock otimista: só processa quem conseguir PENDING→SENDING (multi-worker safe).
+    const claim = await prisma.outboundJob.updateMany({
+      where: { id: j.id, status: "PENDING" },
+      data: { status: "SENDING", attempts: { increment: 1 }, claimedAt: now },
+    });
+    if (claim.count !== 1) continue;
+    try {
+      await dispatchManualReplyJob(j.id);
+      sent++;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const job = await prisma.outboundJob.findUnique({
+        where: { id: j.id },
+        select: { attempts: true },
+      });
+      const failed = (job?.attempts ?? 99) >= 3;
+      await prisma.outboundJob.update({
+        where: { id: j.id },
+        data: failed
+          ? { status: "FAILED", lastError: msg, claimedAt: null }
+          : {
+              status: "PENDING",
+              lastError: msg,
+              claimedAt: null,
+              scheduledFor: new Date(now.getTime() + 10_000),
+            },
+      });
+    }
+  }
+  return sent;
 }

@@ -9,7 +9,8 @@ import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
-import { sendWhatsAppMessage } from "./messaging";
+import { sendWhatsAppMessage, enqueueManualReply } from "./messaging";
+import { env } from "@/lib/env";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
 import { shouldCreateContact } from "./inbound-resolve";
@@ -626,7 +627,14 @@ export async function sendManualReply(leadId: string, userId: string, content: s
     },
   });
   if (!lead) throw new Error("Lead não encontrado");
-  await sendWhatsAppMessage(lead, content);
+  // No Baileys o socket vive só no worker; o web não envia direto (no_socket).
+  // Enfileira a intenção e o worker drena/envia. Mock/cloud-api enviam por HTTP,
+  // então rodam direto no web.
+  if (env.WHATSAPP_MODE === "baileys") {
+    await enqueueManualReply(lead, content);
+  } else {
+    await sendWhatsAppMessage(lead, content);
+  }
   // Operador respondeu pela tela do CRM: renova o relógio de inatividade p/ o
   // resume automático medir o silêncio a partir de agora (não desde a pausa) e
   // atualiza a camada de atendimento (SLA + estado).

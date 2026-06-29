@@ -3,6 +3,16 @@ import { getWhatsApp } from "@/server/whatsapp";
 import { env } from "@/lib/env";
 import { typingDelayMs, sleep } from "@/lib/humanize";
 import { invalidateConversation } from "@/server/cache/keys";
+import { publishTenantEvent } from "@/server/events/bus";
+
+/**
+ * `kind` reservado para a resposta MANUAL do operador no modo Baileys. O socket
+ * vive só no worker, mas o "Enviar" da inbox roda no web (no_socket). Então o web
+ * grava um OutboundJob com este kind (intenção) e o worker o drena e envia pelo
+ * chip do lead (ver processManualReplies / dispatchManualReplyJob). O dispatcher
+ * de CAMPANHA ignora este kind (não aplica rodapé/cap/janela nem muda o status).
+ */
+export const MANUAL_REPLY_KIND = "manual_reply";
 
 /**
  * O pool Baileys é importado de forma PREGUIÇOSA (só quando WHATSAPP_MODE=baileys).
@@ -83,6 +93,97 @@ export async function sendWhatsAppMessage(
     data: { updatedAt: new Date() },
   });
   await invalidateConversation(lead.id); // OUTBOUND novo → contexto da IA mudou
+}
+
+/**
+ * Resolve o chip que envia uma resposta manual: o chip dono da conversa, senão
+ * qualquer um conectado/aquecendo DA CONTA. Usado no enqueue (web).
+ */
+async function resolveReplyChip(
+  userId: string,
+  preferId: string | null,
+): Promise<string | null> {
+  if (preferId) return preferId;
+  const healthy = await prisma.whatsAppNumber.findFirst({
+    where: { userId, status: { in: ["CONNECTED", "WARMING"] } },
+    select: { id: true },
+  });
+  return healthy?.id ?? null;
+}
+
+/**
+ * Enfileira a resposta manual do operador (modo Baileys). Roda no WEB, onde NÃO
+ * há socket Baileys — por isso só grava a intenção (OutboundJob) que o worker
+ * drena e envia. Sem isto o envio direto pelo web falha com `no_socket`.
+ */
+export async function enqueueManualReply(
+  lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
+  text: string,
+): Promise<void> {
+  const numberId = await resolveReplyChip(lead.userId, lead.whatsAppNumberId ?? null);
+  if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
+  await prisma.outboundJob.create({
+    data: {
+      leadId: lead.id,
+      kind: MANUAL_REPLY_KIND,
+      content: text, // resposta humana: SEM rodapé de opt-out
+      status: "PENDING",
+      whatsAppNumberId: numberId,
+      scheduledFor: new Date(),
+    },
+  });
+}
+
+/**
+ * Worker: envia uma resposta manual enfileirada pelo chip do lead e persiste o
+ * Message(OUTBOUND). Rodado por processManualReplies (que faz o claim atômico).
+ * Não aplica rodapé, não muda o status do lead nem respeita janela/cap — é uma
+ * resposta reativa de conversa, não um disparo. Notifica a aba via SSE.
+ */
+export async function dispatchManualReplyJob(jobId: string): Promise<void> {
+  const job = await prisma.outboundJob.findUnique({
+    where: { id: jobId },
+    include: { lead: { select: { id: true, phone: true, userId: true } } },
+  });
+  if (!job || !job.lead || job.kind !== MANUAL_REPLY_KIND) return;
+
+  const pool = await loadPool();
+  // Chip de envio: o do job; se o socket não estiver vivo neste worker (o reaper
+  // zerou ao recuperar um órfão, ou o chip caiu), re-resolve p/ qualquer chip da
+  // conta COM socket vivo. Sem socket vivo nenhum → lança (retry no próximo tick).
+  let numberId: string | null = job.whatsAppNumberId;
+  if (!numberId || !pool.hasLiveSocket(numberId)) {
+    const chips = await prisma.whatsAppNumber.findMany({
+      where: { userId: job.lead.userId, status: { in: ["CONNECTED", "WARMING"] } },
+      select: { id: true },
+    });
+    numberId = chips.find((c) => pool.hasLiveSocket(c.id))?.id ?? null;
+  }
+  if (!numberId) throw new Error("sem número Baileys vivo p/ a resposta manual");
+
+  const out = await pool.send(numberId, job.lead.phone, job.content);
+  if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
+
+  await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        leadId: job.lead.id,
+        direction: "OUTBOUND",
+        content: job.content,
+        providerMessageId: out.providerMessageId,
+        status: "SENT",
+        whatsAppNumberId: numberId,
+      },
+    }),
+    prisma.outboundJob.update({
+      where: { id: jobId },
+      data: { status: "SENT", sentAt: new Date(), whatsAppNumberId: numberId, deferCount: 0 },
+    }),
+    prisma.lead.update({ where: { id: job.lead.id }, data: { updatedAt: new Date() } }),
+  ]);
+  await invalidateConversation(job.lead.id); // OUTBOUND novo → contexto da IA mudou
+  // notifica a aba do operador p/ a thread refletir a mensagem enviada
+  await publishTenantEvent(job.lead.userId, { type: "conversation:changed", leadId: job.lead.id });
 }
 
 /**
