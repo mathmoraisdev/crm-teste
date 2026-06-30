@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot, Reply, X } from "lucide-react";
+import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { LeadDetail } from "@/server/services/lead.service";
@@ -320,7 +320,11 @@ function Bubble({
             <span className="ml-1 line-clamp-2 align-middle">{quoted.content}</span>
           </div>
         )}
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {message.mediaType ? (
+          <MediaAttachment message={message} inbound={inbound} />
+        ) : (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        )}
         <p
           className={cn(
             "mt-0.5 text-[10px]",
@@ -342,5 +346,58 @@ function Bubble({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Anexo de mídia (imagem/PDF) recebido do lead. NÃO carrega o arquivo inline —
+ * mostra só um chip com o nome e um botão "Baixar" que aponta p/ o endpoint
+ * autenticado (/api/media/:id → redireciona p/ a URL assinada do storage).
+ */
+function MediaAttachment({
+  message,
+  inbound,
+}: {
+  message: Message;
+  inbound: boolean;
+}) {
+  const isImage = message.mediaType === "image";
+  const name = message.fileName || (isImage ? "Imagem" : "Documento");
+  return (
+    <a
+      href={`/api/media/${message.id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm transition",
+        inbound
+          ? "border-slate-200 bg-slate-50 hover:bg-slate-100"
+          : "border-white/30 bg-white/10 hover:bg-white/20",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+          inbound ? "bg-brand-100 text-brand-600" : "bg-white/20 text-white",
+        )}
+      >
+        {isImage ? <ImageIcon size={16} /> : <FileText size={16} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{name}</span>
+        <span
+          className={cn(
+            "flex items-center gap-1 text-[11px]",
+            inbound ? "text-slate-400" : "text-brand-100",
+          )}
+        >
+          <Download size={11} /> Baixar {isImage ? "imagem" : "arquivo"}
+        </span>
+      </span>
+      <Paperclip
+        size={14}
+        className={inbound ? "text-slate-300" : "text-brand-100"}
+      />
+    </a>
   );
 }

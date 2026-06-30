@@ -309,6 +309,13 @@ model Message {
   replyTo           Message?         @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
   replyToId         String?
   replies           Message[]        @relation("MessageReply")
+  // Mídia recebida do lead (imagem/PDF). O binário fica no Supabase Storage
+  // (bucket privado); aqui guardamos só o caminho do objeto + metadados. Null
+  // em mensagens de texto e nas anteriores a este campo.
+  mediaPath         String?          // caminho no bucket (NÃO é URL; assinamos sob demanda)
+  mediaType         String?          // "image" | "document"
+  mediaMime         String?          // ex.: "application/pdf", "image/jpeg"
+  fileName          String?          // nome original p/ exibir/baixar ("contrato.pdf")
   createdAt         DateTime         @default(now())
 
   @@index([leadId, createdAt])

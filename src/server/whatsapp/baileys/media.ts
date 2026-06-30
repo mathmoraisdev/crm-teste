@@ -76,3 +76,57 @@ export function cloudApiMediaPlaceholder(type: string): string | null {
 /** Conjunto dos placeholders — usado p/ EXCLUÍ-los do contexto da IA (a IA não lê
  *  mídia; o placeholder é puramente visual p/ o operador, não gasta token). */
 export const MEDIA_PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PH));
+
+// ─────────────────────────────────────────────────────────────
+// Mídia BAIXÁVEL (escopo atual: só imagem e documento/PDF).
+// Áudio/vídeo/figurinha/contato/localização seguem só como placeholder.
+// ─────────────────────────────────────────────────────────────
+
+/** Metadados extraídos de uma mídia baixável do Baileys. */
+export interface DownloadableMedia {
+  mediaType: "image" | "document";
+  mime: string;
+  /** extensão derivada do mime/fileName (sem ponto), ex.: "pdf", "jpg". */
+  ext: string;
+  /** nome de arquivo para exibir/baixar no inbox. */
+  fileName: string;
+}
+
+/** Extensão a partir do mime (fallback "bin"). */
+function extFromMime(mime: string): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "application/pdf": "pdf",
+  };
+  if (map[mime]) return map[mime];
+  // mime "application/vnd...." → pega o sufixo depois de "/" e limpa.
+  const tail = mime.split("/")[1]?.split(/[;+]/)[0]?.replace(/[^a-zA-Z0-9]/g, "");
+  return tail && tail.length <= 5 ? tail.toLowerCase() : "bin";
+}
+
+/**
+ * Se `inner` for uma mídia que SABEMOS baixar (imagem ou documento), devolve seus
+ * metadados; senão null. Mantém o escopo (só imagem/PDF) num só lugar.
+ */
+export function downloadableMedia(inner: unknown): DownloadableMedia | null {
+  if (!inner || typeof inner !== "object") return null;
+  const o = inner as Record<string, any>;
+
+  if (o.imageMessage) {
+    const mime = o.imageMessage.mimetype || "image/jpeg";
+    const ext = extFromMime(mime);
+    return { mediaType: "image", mime, ext, fileName: `imagem.${ext}` };
+  }
+  if (o.documentMessage) {
+    const mime = o.documentMessage.mimetype || "application/octet-stream";
+    const ext = extFromMime(mime);
+    const fileName: string =
+      o.documentMessage.fileName?.trim() || `documento.${ext}`;
+    return { mediaType: "document", mime, ext, fileName };
+  }
+  return null;
+}

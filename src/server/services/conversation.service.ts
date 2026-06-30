@@ -18,6 +18,7 @@ import { isAccountActiveByLead } from "@/server/services/account.service";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
+import { uploadInboundMedia } from "@/server/storage/media-storage";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -180,6 +181,11 @@ export async function ingestInboundMedia(input: {
   whatsAppNumberId?: string;
   placeholder: string;
   providerMessageId: string | null;
+  // Anexo baixado (só imagem/PDF) — ausente p/ tipos que não baixamos.
+  buffer?: Buffer;
+  mediaType?: "image" | "document";
+  mime?: string;
+  fileName?: string;
 }): Promise<void> {
   if (input.providerMessageId) {
     const existing = await prisma.message.findUnique({
@@ -194,12 +200,42 @@ export async function ingestInboundMedia(input: {
     text: input.placeholder,
   });
   if (!lead) return;
+
+  // Se veio arquivo (imagem/PDF) e o storage está configurado, sobe pro bucket
+  // privado e guarda só o caminho. Falha/sem storage → segue só com placeholder.
+  let media: {
+    mediaPath: string;
+    mediaType: string;
+    mediaMime?: string;
+    fileName?: string;
+  } | null = null;
+  if (input.buffer && input.mediaType) {
+    const ext = (input.fileName?.split(".").pop() || input.mime?.split("/")[1] || "bin")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase();
+    const path = await uploadInboundMedia(input.buffer, {
+      leadId: lead.id,
+      messageKey: input.providerMessageId ?? `${lead.id}-${input.buffer.length}`,
+      mime: input.mime ?? "application/octet-stream",
+      ext: ext || "bin",
+    });
+    if (path) {
+      media = {
+        mediaPath: path,
+        mediaType: input.mediaType,
+        mediaMime: input.mime,
+        fileName: input.fileName,
+      };
+    }
+  }
+
   await prisma.message.create({
     data: {
       leadId: lead.id,
       direction: "INBOUND",
       content: input.placeholder,
       providerMessageId: input.providerMessageId ?? undefined,
+      ...(media ?? {}),
     },
   });
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.

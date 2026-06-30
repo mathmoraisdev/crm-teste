@@ -61,13 +61,18 @@ async function bootBaileys(): Promise<Pool> {
             "[worker] handleOperatorMessage falhou",
           );
         }),
-    // Mídia do lead sem legenda: persiste só um placeholder no inbox (sem IA).
+    // Mídia do lead sem legenda: persiste o placeholder no inbox (sem IA) e, p/
+    // imagem/PDF, sobe o arquivo baixado ao storage privado p/ download.
     onInboundMedia: (e) =>
       ingestInboundMedia({
         phone: e.fromPhone,
         whatsAppNumberId: e.whatsAppNumberId,
         placeholder: e.placeholder,
         providerMessageId: e.providerMessageId,
+        buffer: e.buffer,
+        mediaType: e.mediaType,
+        mime: e.mime,
+        fileName: e.fileName,
       }).catch((err) => {
         logger.error(
           { whatsAppNumberId: e.whatsAppNumberId, fromPhone: e.fromPhone, err },

@@ -3,7 +3,9 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
   type WASocket,
+  type WAMessage,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
@@ -14,7 +16,7 @@ import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
 import { jidOf, pickSendJid } from "./jid";
-import { isMediaMessage, mediaPlaceholder } from "./media";
+import { isMediaMessage, mediaPlaceholder, downloadableMedia } from "./media";
 
 const logger = pino({ level: "warn" });
 
@@ -33,12 +35,20 @@ export interface OperatorEvent {
   providerMessageId: string | null;
   whatsAppNumberId: string;
 }
-/** Mídia recebida do lead (sem legenda) — vira placeholder no inbox, sem IA. */
+/** Mídia recebida do lead (sem legenda) — vira placeholder no inbox, sem IA.
+ *  Para imagem/documento, anexa o arquivo baixado (buffer + metadados) p/ o
+ *  serviço subir ao storage; os campos de mídia ficam ausentes p/ tipos que não
+ *  baixamos (áudio/vídeo/etc.), que seguem só como placeholder. */
 export interface InboundMediaEvent {
   fromPhone: string; // E.164 com "+"
   placeholder: string; // rótulo legível ("📷 Imagem")
   providerMessageId: string | null;
   whatsAppNumberId: string;
+  // Anexo baixado (só imagem/PDF):
+  buffer?: Buffer;
+  mediaType?: "image" | "document";
+  mime?: string;
+  fileName?: string;
 }
 export type SendOutcome =
   | { ok: true; providerMessageId: string }
@@ -84,6 +94,40 @@ async function replyUnsupportedMedia(numberId: string, phone: string, label: str
   const r = await send(numberId, phone, MEDIA_NOTICE);
   if (!r.ok) {
     console.warn(`[baileys] "${label}" falha ao avisar mídia não suportada p/ ${phone}: ${r.reason}`);
+  }
+}
+
+// Teto de tamanho p/ baixar mídia do lead. Acima disto cai no placeholder (sem
+// download) — protege memória do worker e custo de storage/egress.
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // 25 MB
+
+/** Baixa o binário de uma mídia (imagem/PDF) do lead, ou null se exceder o teto
+ *  ou falhar. Falha NÃO interrompe o inbound: o placeholder ainda é registrado. */
+async function tryDownloadMedia(
+  sock: WASocket,
+  m: WAMessage,
+  dl: { mediaType: string; mime: string },
+  label: string,
+): Promise<Buffer | null> {
+  try {
+    const buf = (await downloadMediaMessage(
+      m,
+      "buffer",
+      {},
+      { logger, reuploadRequest: sock.updateMediaMessage },
+    )) as Buffer;
+    if (buf.length > MAX_MEDIA_BYTES) {
+      console.warn(
+        `[baileys] "${label}" mídia ${dl.mediaType} (${buf.length}B) acima do teto — só placeholder.`,
+      );
+      return null;
+    }
+    return buf;
+  } catch (err) {
+    console.warn(
+      `[baileys] "${label}" falha ao baixar mídia ${dl.mediaType}: ${(err as Error).message}`,
+    );
+    return null;
   }
 }
 
@@ -252,17 +296,28 @@ export async function connectNumber(numberId: string): Promise<void> {
             `[baileys] "${rec.label}" inbound NÃO descriptografado de ${remoteJid} (id=${m.key.id} stub=${m.messageStubType ?? "—"}) — mensagem perdida.`,
           );
         } else if (!fromMe && pnJid && isMediaMessage(inner)) {
-          // Mídia de um lead (sem legenda): não lemos o arquivo. Registra um
-          // placeholder no inbox (operador vê que chegou algo) e avisa o lead que
+          // Mídia de um lead (sem legenda). A IA não lê o arquivo, mas para
+          // imagem/PDF nós o BAIXAMOS para o operador acessar no inbox (download).
+          // Demais tipos seguem só como placeholder. Em ambos avisamos o lead que
           // só lemos texto (anti-spam: 1x a cada 5 min).
           const phone = `+${pnJid.split("@")[0]}`;
           const placeholder = mediaPlaceholder(inner);
           if (placeholder) {
+            const dl = downloadableMedia(inner);
+            const file = dl ? await tryDownloadMedia(sock, m, dl, rec.label) : null;
             await handlers.onInboundMedia?.({
               fromPhone: phone,
               placeholder,
               providerMessageId: m.key.id ?? null,
               whatsAppNumberId: numberId,
+              ...(file && dl
+                ? {
+                    buffer: file,
+                    mediaType: dl.mediaType,
+                    mime: dl.mime,
+                    fileName: dl.fileName,
+                  }
+                : {}),
             });
           }
           await replyUnsupportedMedia(numberId, phone, rec.label);

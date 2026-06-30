@@ -80,6 +80,13 @@ const schema = z.object({
   CONSULTANT_WHATSAPP: z.string().optional().default(""), // número que recebe leads do consultor
   ADMIN_EMAILS: z.string().optional().default(""), // e-mails admin (separados por vírgula)
   SENTRY_DSN: z.string().optional().default(""), // DSN do Sentry (server-side)
+
+  // Supabase Storage — guarda mídia recebida do lead (imagem/PDF) em bucket
+  // PRIVADO; o binário nunca vai pro Postgres. Opcionais: sem elas, a mídia
+  // segue só como placeholder no inbox (degradação segura, igual hoje).
+  SUPABASE_URL: z.string().optional().default(""),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(""), // chave de serviço (server-only)
+  SUPABASE_MEDIA_BUCKET: z.string().default("whatsapp-media"),
   // Dias de teste grátis para cadastros novos. Padrão 0 = nasce SUSPENSO (sem
   // trial automático); o admin libera o teste manualmente no /financeiro.
   TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),
@@ -125,3 +132,8 @@ export const isAiConfigured = env.OPENAI_API_KEY.length > 0;
 
 /** BYOK exige a chave mestra de 32 bytes (64 hex). */
 export const isEncryptionConfigured = /^[0-9a-fA-F]{64}$/.test(env.ENCRYPTION_KEY);
+
+/** Storage de mídia (Supabase) só liga com URL + service role. Sem elas, a mídia
+ *  recebida do lead continua virando apenas placeholder no inbox (sem download). */
+export const isMediaStorageConfigured =
+  env.SUPABASE_URL.length > 0 && env.SUPABASE_SERVICE_ROLE_KEY.length > 0;
