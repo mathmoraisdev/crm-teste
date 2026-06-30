@@ -189,6 +189,7 @@ export function InboxView() {
                     <div className="flex items-center gap-2">
                       <span className="truncate font-bold text-ink">{detail.name}</span>
                       {meta && <Badge tone={meta.tone}>{meta.label}</Badge>}
+                      {detail.optOut && <Badge tone="red">Opt-out</Badge>}
                     </div>
                     <p className="text-xs text-slate-400">
                       {formatPhone(detail.phone)}

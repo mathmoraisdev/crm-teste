@@ -62,6 +62,7 @@ export const ConversationListItem = memo(function ConversationListItem({
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <Badge tone={meta.tone}>{meta.label}</Badge>
+        {conversation.optOut && <Badge tone="red">Opt-out</Badge>}
         {conversation.assignedTo && (
           <span className="text-[11px] text-slate-400">{conversation.assignedTo.name}</span>
         )}

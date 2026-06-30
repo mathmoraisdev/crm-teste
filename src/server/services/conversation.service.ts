@@ -205,6 +205,8 @@ export async function ingestInboundMedia(input: {
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
   await invalidateConversation(lead.id);
   await invalidateLeadCaches(lead.userId);
+  // Lead resolvido que manda mídia também reabre no inbox p/ o operador ver.
+  await reopenIfResolved(lead);
 }
 
 /**
@@ -213,6 +215,27 @@ export async function ingestInboundMedia(input: {
  * da IA — isso é `respondToLead`, que o worker pode adiar/agrupar (debounce).
  * Devolve se vale responder e o atraso sugerido (timing por número).
  */
+/**
+ * Lead RESOLVIDO que volta a falar → reabre a conversa no inbox. Sem isso ela fica
+ * presa em RESOLVIDA (some das abas fila/minhas/todas) mesmo com o lead ativo.
+ *  - IA no controle (aiPaused=false) → volta p/ "IA" (a IA segue respondendo).
+ *  - Operador no controle (aiPaused=true) → volta p/ "FILA" p/ um humano reassumir.
+ */
+async function reopenIfResolved(lead: {
+  id: string;
+  userId: string;
+  attendanceStatus: string;
+  aiPaused: boolean;
+}): Promise<void> {
+  if (lead.attendanceStatus !== "RESOLVIDA") return;
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { attendanceStatus: lead.aiPaused ? "FILA" : "IA" },
+  });
+  // Mudou de aba (RESOLVIDA → IA/FILA) → atualiza contadores/facets do inbox.
+  await invalidateLeadCaches(lead.userId);
+}
+
 export async function ingestInbound(input: InboundInput): Promise<IngestResult> {
   // 1. Dedupe
   if (input.providerMessageId) {
@@ -276,6 +299,10 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     ]);
     return { leadId: lead.id, respond: false, delayMs: 0 };
   }
+
+  // Lead resolvido voltou a falar → reabre no inbox (antes do gate de billing,
+  // pois mesmo com conta suspensa o operador precisa ver a conversa reativa).
+  await reopenIfResolved(lead);
 
   // Gate de billing: conta suspensa (inadimplência) → a IA silencia. O inbound
   // JÁ foi persistido acima (operador continua vendo o que chegou); só não

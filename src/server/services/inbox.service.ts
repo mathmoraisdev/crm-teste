@@ -21,6 +21,7 @@ export interface InboxConversation {
   unread: boolean;
   whatsAppNumber: string | null;
   queuedAt: Date | null;
+  optOut: boolean;
 }
 
 export interface InboxCounts {
@@ -130,6 +131,7 @@ export async function listConversations(
       unread: !!lastIn && lastIn.getTime() > readAt,
       whatsAppNumber: l.whatsAppNumber?.displayName?.trim() || l.whatsAppNumber?.label || null,
       queuedAt: l.queuedAt,
+      optOut: l.optOut,
     };
   });
 
