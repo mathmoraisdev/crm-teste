@@ -9,6 +9,9 @@ import { consumeAiCredit, resolveAiModelForUser } from "@/server/services/entitl
 import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
+import { listActiveOffers } from "./offer.service";
+import { sendOffer } from "./sales.service";
+import { renderActiveOffers } from "@/server/ai/attendance-context";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import {
   sendWhatsAppMessage,
@@ -510,6 +513,7 @@ export async function respondToLead(leadId: string): Promise<void> {
           persona: true, knowledgeBase: true,
           businessHours: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
+          salesEnabled: true,
           contextResetMinutes: true,
         },
       })
@@ -542,14 +546,38 @@ export async function respondToLead(leadId: string): Promise<void> {
   let shouldSchedule = false;
   let shouldDiscard = false;
 
-  // 4a. Qualificação opcional — atualiza score/funil e pode pedir descarte/agenda.
+  // Modo vendas: só quando o número tem `salesEnabled`. Carrega as ofertas ATIVAS
+  // (fonte do preço + catálogo p/ a IA escolher) e injeta no contexto da
+  // qualificação. Sem número não há como escopar ofertas.
+  const salesOn = (company?.salesEnabled ?? false) && !!lead.whatsAppNumberId;
+  const activeOffers = salesOn && mode.qualify ? await listActiveOffers(lead.whatsAppNumberId!) : [];
+  const offersBlock = activeOffers.length ? renderActiveOffers(activeOffers) : undefined;
+
+  // 4a. Qualificação opcional — atualiza score/funil e pode pedir descarte/agenda/venda.
   if (mode.qualify) {
-    const qual = await qualifyLead({ ai, leadId: lead.id, leadName: lead.name, conversation });
+    const qual = await qualifyLead({ ai, leadId: lead.id, leadName: lead.name, conversation, offersBlock });
     const d = decidePipeline({ current: status, score: qual.score, nextAction: qual.nextAction });
-    shouldSchedule = d.shouldSchedule && mode.allowSchedule;
-    shouldDiscard = d.shouldDiscard;
-    if (d.status !== status) {
-      await prisma.lead.update({ where: { id: lead.id }, data: { status: d.status } });
+
+    // 4a-i. Venda: a IA sinalizou intenção de compra. Precede agenda/resposta.
+    // Só dispara se o modo vendas está ligado E há uma oferta resolvível (a
+    // escolhida pela IA, ou a única ativa). Sem isso, cai na resposta livre.
+    if (d.shouldOffer) {
+      if (salesOn) {
+        const offerId = qual.offerId ?? (activeOffers.length === 1 ? activeOffers[0].id : null);
+        if (offerId) {
+          if (!(await aiStillActive(lead.id))) return; // operador assumiu durante a geração
+          const r = await sendOffer(lead, offerId);
+          if (r.sent) return; // Pix enviado (lead → OFERTA_ENVIADA); encerra o turno
+        }
+      }
+      // sem oferta resolvível / vendas off / falha → NÃO move o status; segue p/
+      // a resposta livre (a IA pede esclarecimento no atendimento).
+    } else {
+      shouldSchedule = d.shouldSchedule && mode.allowSchedule;
+      shouldDiscard = d.shouldDiscard;
+      if (d.status !== status) {
+        await prisma.lead.update({ where: { id: lead.id }, data: { status: d.status } });
+      }
     }
   }
 

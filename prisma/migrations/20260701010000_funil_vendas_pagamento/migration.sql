@@ -12,6 +12,9 @@ CREATE TYPE "SaleStatus" AS ENUM ('PENDING', 'PAID', 'EXPIRED', 'CANCELED');
 ALTER TYPE "LeadStatus" ADD VALUE 'OFERTA_ENVIADA' BEFORE 'DESCARTADO';
 ALTER TYPE "LeadStatus" ADD VALUE 'PAGO' BEFORE 'DESCARTADO';
 
+-- AlterTable: toggle "Modo vendas" por número (espelha qualifyEnabled/scheduleEnabled).
+ALTER TABLE "WhatsAppNumber" ADD COLUMN "salesEnabled" BOOLEAN NOT NULL DEFAULT false;
+
 -- AlterTable: credencial de pagamento BYOK no dono da conta.
 ALTER TABLE "User" ADD COLUMN "paymentProvider" "PaymentProvider";
 ALTER TABLE "User" ADD COLUMN "paymentKeyEnc" TEXT;
