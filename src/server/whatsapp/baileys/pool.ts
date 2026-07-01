@@ -17,6 +17,7 @@ import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
 import { jidOf, pickSendJid } from "./jid";
 import { isMediaMessage, mediaPlaceholder, downloadableMedia } from "./media";
+import { shouldTranscribe } from "@/server/ai/transcribe-policy";
 
 const logger = pino({ level: "warn" });
 
@@ -49,6 +50,7 @@ export interface InboundMediaEvent {
   mediaType?: "image" | "audio" | "document";
   mime?: string;
   fileName?: string;
+  audioSeconds?: number | null; // duração da nota de voz (guardrail de áudio longo)
 }
 export type SendOutcome =
   | { ok: true; providerMessageId: string }
@@ -302,6 +304,7 @@ export async function connectNumber(numberId: string): Promise<void> {
           // só lemos texto (anti-spam: 1x a cada 5 min).
           const phone = `+${pnJid.split("@")[0]}`;
           const placeholder = mediaPlaceholder(inner);
+          const audioSeconds = (inner as any)?.audioMessage?.seconds ?? null;
           if (placeholder) {
             const dl = downloadableMedia(inner);
             const file = dl ? await tryDownloadMedia(sock, m, dl, rec.label) : null;
@@ -310,6 +313,7 @@ export async function connectNumber(numberId: string): Promise<void> {
               placeholder,
               providerMessageId: m.key.id ?? null,
               whatsAppNumberId: numberId,
+              audioSeconds,
               ...(file && dl
                 ? {
                     buffer: file,
@@ -319,8 +323,23 @@ export async function connectNumber(numberId: string): Promise<void> {
                   }
                 : {}),
             });
+            // Áudio curto elegível → não avisa (a IA vai responder). Áudio longo
+            // ou não transcritível → mantém o "só leio texto" de sempre.
+            // `shouldTranscribe` é fonte única da verdade: mesmo predicado aqui
+            // (decide o aviso) e no serviço (decide transcrever) — sem divergência.
+            const willTranscribe =
+              dl?.mediaType === "audio" &&
+              !!file &&
+              shouldTranscribe(
+                { seconds: audioSeconds },
+                { enabled: env.TRANSCRIBE_ENABLED, maxSeconds: env.TRANSCRIBE_MAX_SECONDS },
+              );
+            if (!willTranscribe) {
+              await replyUnsupportedMedia(numberId, phone, rec.label);
+            }
+          } else {
+            await replyUnsupportedMedia(numberId, phone, rec.label);
           }
-          await replyUnsupportedMedia(numberId, phone, rec.label);
         }
         continue;
       }
