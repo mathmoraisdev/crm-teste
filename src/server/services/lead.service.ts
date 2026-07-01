@@ -136,6 +136,12 @@ export async function getLeadDetail(
       },
       qualification: true,
       meeting: true,
+      // Venda mais recente (funil de vendas): oferta, valor, status e Pix.
+      sales: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { offer: { select: { name: true } } },
+      },
     },
   });
 }

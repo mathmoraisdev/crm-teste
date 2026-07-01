@@ -15,8 +15,16 @@ import { ConversationView } from "@/components/ConversationView";
 import { QualificationPanel } from "@/components/QualificationPanel";
 import { TagPicker } from "@/components/TagPicker";
 import { formatPhone } from "@/lib/phone";
+import { formatCentsBRL } from "@/lib/money";
 import { resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { LeadDetail } from "@/server/services/lead.service";
+
+const SALE_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Aguardando pagamento",
+  PAID: "Pago",
+  EXPIRED: "Expirado",
+  CANCELED: "Cancelado",
+};
 
 export function LeadDetailView({ leadId }: { leadId: string }) {
   const router = useRouter();
@@ -145,12 +153,13 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             />
           </Card>
         </div>
-        <div>
+        <div className="space-y-4">
           <QualificationPanel
             qualification={lead.qualification}
             meeting={lead.meeting}
             customFields={lead.customFields}
           />
+          {lead.sales.length > 0 && <SalePanel sale={lead.sales[0]} />}
         </div>
       </div>
 
@@ -217,5 +226,48 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         onClose={() => setDeleteOpen(false)}
       />
     </div>
+  );
+}
+
+/** Painel da venda mais recente do lead (oferta, valor, status, Pix). */
+function SalePanel({ sale }: { sale: LeadDetail["sales"][number] }) {
+  const tone =
+    sale.status === "PAID"
+      ? "text-brand-700"
+      : sale.status === "PENDING"
+        ? "text-amber-700"
+        : "text-slate-500";
+  return (
+    <Card>
+      <CardHeader title="Venda" subtitle="Cobrança gerada pela IA (Pix)." />
+      <div className="space-y-2 px-5 py-4 text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-500">Oferta</span>
+          <span className="font-medium text-ink">{sale.offer?.name ?? "—"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-500">Valor</span>
+          <span className="font-medium text-ink">{formatCentsBRL(sale.amountCents)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-slate-500">Status</span>
+          <span className={`font-semibold ${tone}`}>
+            {SALE_STATUS_LABEL[sale.status] ?? sale.status}
+          </span>
+        </div>
+        {sale.status === "PENDING" && sale.pixCopiaECola && (
+          <div className="pt-1">
+            <p className="mb-1 text-xs font-medium text-slate-500">Pix copia e cola</p>
+            <textarea
+              readOnly
+              value={sale.pixCopiaECola}
+              rows={3}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600"
+            />
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
