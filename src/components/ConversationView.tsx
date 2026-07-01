@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
+import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 type Message = LeadDetail["messages"][number];
@@ -42,6 +43,9 @@ export function ConversationView({
   const [reply, setReply] = useState("");
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  // Anexo selecionado p/ enviar ao lead (imagem/documento/áudio).
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Mensagem citada (reply): o operador clicou "responder" numa bolha.
   const [quoting, setQuoting] = useState<Message | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
@@ -102,6 +106,13 @@ export function ConversationView({
     replyInputRef.current?.focus();
   }
 
+  // Envio manual (texto ou anexo): se há arquivo selecionado, envia o anexo (com
+  // o texto como legenda); senão envia só o texto. Fonte única do "Enviar".
+  async function submitReply() {
+    if (file) return sendFile();
+    return sendReply();
+  }
+
   // Resposta manual do operador, enviada ao lead pelo mesmo chip.
   async function sendReply() {
     const content = reply.trim();
@@ -118,6 +129,31 @@ export function ConversationView({
       if (!res.ok) throw new Error(data.error ?? "Falha ao enviar resposta");
       setReply("");
       setQuoting(null);
+      onReplied();
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  // Envia o anexo selecionado ao lead (multipart). O texto do input vira legenda.
+  async function sendFile() {
+    if (!file) return;
+    setReplying(true);
+    setReplyError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (reply.trim()) fd.append("caption", reply.trim());
+      if (quoting?.id) fd.append("replyToMessageId", quoting.id);
+      const res = await fetch(`/api/leads/${leadId}/send-file`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Falha ao enviar arquivo");
+      setReply("");
+      setFile(null);
+      setQuoting(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       onReplied();
     } catch (e) {
       setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
@@ -204,7 +240,45 @@ export function ConversationView({
                     </button>
                   </div>
                 )}
+                {/* Anexo selecionado: chip com o nome + remover. */}
+                {file && (
+                  <div className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <Paperclip size={14} className="shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-600">
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                      aria-label="Remover anexo"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                  {/* Input de arquivo oculto + botão de anexo (clip). */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={replying}
+                    className="justify-center sm:w-auto"
+                    aria-label="Anexar arquivo"
+                    title="Anexar arquivo"
+                  >
+                    <Paperclip size={16} />
+                  </Button>
                   <textarea
                     ref={replyInputRef}
                     value={reply}
@@ -212,17 +286,19 @@ export function ConversationView({
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        sendReply();
+                        submitReply();
                       }
                     }}
                     rows={1}
-                    placeholder="Responder manualmente ao lead…"
+                    placeholder={
+                      file ? "Legenda (opcional)…" : "Responder manualmente ao lead…"
+                    }
                     className="w-full flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />
                   <Button
-                    onClick={sendReply}
+                    onClick={submitReply}
                     loading={replying}
-                    disabled={!reply.trim()}
+                    disabled={!reply.trim() && !file}
                     className="w-full justify-center sm:w-auto"
                   >
                     <Send size={16} /> Enviar
@@ -230,8 +306,8 @@ export function ConversationView({
                 </div>
                 {replyError && <p className="mt-1 text-xs text-red-600">{replyError}</p>}
                 <p className="mt-1 text-xs text-slate-400">
-                  A mensagem vai para o lead pelo mesmo número. A IA não responde
-                  enquanto você está no controle.
+                  A mensagem (ou arquivo) vai para o lead pelo mesmo número. A IA não
+                  responde enquanto você está no controle.
                 </p>
               </>
             ) : (
@@ -321,7 +397,13 @@ function Bubble({
           </div>
         )}
         {message.mediaType ? (
-          <MediaAttachment message={message} inbound={inbound} />
+          <>
+            <MediaAttachment message={message} inbound={inbound} />
+            {/* Legenda/transcrição junto do anexo (oculta o placeholder "📷 Imagem"). */}
+            {!MEDIA_PLACEHOLDERS.has(message.content) && (
+              <p className="mt-1 whitespace-pre-wrap">{message.content}</p>
+            )}
+          </>
         ) : (
           <p className="whitespace-pre-wrap">{message.content}</p>
         )}
@@ -378,8 +460,31 @@ function MediaAttachment({
     );
   }
 
-  const isImage = message.mediaType === "image";
-  const name = message.fileName || (isImage ? "Imagem" : "Documento");
+  // Imagem: miniatura clicável inline (abre o original assinado numa aba nova) em
+  // vez de um chip de download — a conversa fica visual, igual ao WhatsApp. O <img>
+  // segue o redirect 302 do endpoint p/ a URL assinada do storage.
+  if (message.mediaType === "image") {
+    return (
+      <a
+        href={`/api/media/${message.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block"
+        title={message.fileName || "Imagem"}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/api/media/${message.id}`}
+          alt={message.fileName || "Imagem"}
+          loading="lazy"
+          className="max-h-64 w-auto max-w-[240px] rounded-lg object-cover"
+        />
+      </a>
+    );
+  }
+
+  // Documento/PDF: chip com nome + botão "Baixar".
+  const name = message.fileName || "Documento";
   return (
     <a
       href={`/api/media/${message.id}`}
@@ -398,7 +503,7 @@ function MediaAttachment({
           inbound ? "bg-brand-100 text-brand-600" : "bg-white/20 text-white",
         )}
       >
-        {isImage ? <ImageIcon size={16} /> : <FileText size={16} />}
+        <FileText size={16} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{name}</span>
@@ -408,7 +513,7 @@ function MediaAttachment({
             inbound ? "text-slate-400" : "text-brand-100",
           )}
         >
-          <Download size={11} /> Baixar {isImage ? "imagem" : "arquivo"}
+          <Download size={11} /> Baixar arquivo
         </span>
       </span>
       <Paperclip

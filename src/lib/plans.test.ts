@@ -17,6 +17,11 @@ describe("PLAN_LIMITS", () => {
     expect(PLAN_LIMITS.PROFISSIONAL.allowStrongModel).toBe(false);
     expect(PLAN_LIMITS.ESCALA.allowStrongModel).toBe(false);
   });
+  it("só PROFISSIONAL e ESCALA liberam vendas (funil de pagamento)", () => {
+    expect(PLAN_LIMITS.INICIAL.sales).toBe(false);
+    expect(PLAN_LIMITS.PROFISSIONAL.sales).toBe(true);
+    expect(PLAN_LIMITS.ESCALA.sales).toBe(true);
+  });
   it("planLabel devolve o rótulo PT-BR", () => {
     expect(planLabel("PROFISSIONAL")).toBe("Profissional");
     expect(planLabel(null)).toBe("—");

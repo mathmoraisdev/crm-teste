@@ -16,6 +16,15 @@ export function createMockWhatsApp(): WhatsAppService {
       return { providerMessageId };
     },
 
+    async sendMedia(to, media) {
+      const providerMessageId = `mock-media-${Date.now()}-${++counter}`;
+      console.log(
+        `[whatsapp:mock] → ${to} [${media.mediaType}:${media.fileName ?? media.mime} ${media.buffer.length}B]` +
+          (media.caption ? `\n   ${media.caption}` : ""),
+      );
+      return { providerMessageId };
+    },
+
     async sendTemplate(to, templateName, lang, variables) {
       const providerMessageId = `mock-tpl-${Date.now()}-${++counter}`;
       console.log(

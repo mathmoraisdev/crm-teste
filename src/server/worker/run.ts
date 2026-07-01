@@ -16,9 +16,8 @@ let pool: Pool | null = null;
 /** Boot do modo Baileys: importa o pool, liga inbound/ack ao domínio e conecta. */
 async function bootBaileys(): Promise<Pool> {
   const p = await import("@/server/whatsapp/baileys/pool");
-  const { ingestInbound, ingestInboundMedia, handleOperatorMessage } = await import(
-    "@/server/services/conversation.service"
-  );
+  const { ingestInbound, ingestInboundMedia, handleOperatorMessage, handleOperatorMedia } =
+    await import("@/server/services/conversation.service");
   const { scheduleResponse, cancelResponse } = await import("./respond-queue");
   const { applyAck } = await import("@/server/services/webhook.service");
   p.registerHandlers({
@@ -59,6 +58,29 @@ async function bootBaileys(): Promise<Pool> {
           logger.error(
             { whatsAppNumberId: e.whatsAppNumberId, toPhone: e.toPhone, err },
             "[worker] handleOperatorMessage falhou",
+          );
+        }),
+    // Operador respondeu com ARQUIVO pelo próprio zap (fromMe mídia): registra
+    // como OUTBOUND (com o anexo) e cancela qualquer resposta em debounce.
+    onOperatorMedia: (e) =>
+      handleOperatorMedia({
+        toPhone: e.toPhone,
+        placeholder: e.placeholder,
+        providerMessageId: e.providerMessageId,
+        whatsAppNumberId: e.whatsAppNumberId,
+        caption: e.caption,
+        buffer: e.buffer,
+        mediaType: e.mediaType,
+        mime: e.mime,
+        fileName: e.fileName,
+      })
+        .then((r) => {
+          if (r.leadId) cancelResponse(r.leadId);
+        })
+        .catch((err) => {
+          logger.error(
+            { whatsAppNumberId: e.whatsAppNumberId, toPhone: e.toPhone, err },
+            "[worker] handleOperatorMedia falhou",
           );
         }),
     // Mídia do lead sem legenda: persiste o placeholder no inbox (sem IA) e, p/

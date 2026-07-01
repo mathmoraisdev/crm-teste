@@ -5,6 +5,17 @@ import { env } from "@/lib/env";
 import { typingDelayMs, sleep } from "@/lib/humanize";
 import { invalidateConversation } from "@/server/cache/keys";
 import { publishTenantEvent } from "@/server/events/bus";
+import { downloadMediaBuffer } from "@/server/storage/media-storage";
+import { MEDIA_TYPE_PLACEHOLDER } from "@/server/whatsapp/baileys/media";
+import type { SendMedia } from "@/server/whatsapp/baileys/pool";
+
+/** Metadados de um anexo de saída já no storage (o web sobe antes de enfileirar). */
+export interface OutboundMedia {
+  mediaPath: string;
+  mediaType: "image" | "document" | "audio";
+  mediaMime: string;
+  fileName?: string | null;
+}
 
 /**
  * `kind` reservado para a resposta MANUAL do operador no modo Baileys. O socket
@@ -135,6 +146,47 @@ export async function sendWhatsAppMessage(
 }
 
 /**
+ * Envio DIRETO de anexo (mock/cloud-api): sobe o media pelo provedor e persiste
+ * como Message(OUTBOUND) com o ponteiro do storage (p/ o inbox renderizar). O
+ * buffer já veio do web (upload da rota); `media.mediaPath` é só p/ a Message.
+ * No Baileys este caminho NÃO roda — lá o web enfileira e o worker envia.
+ */
+export async function sendWhatsAppMedia(
+  lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
+  media: OutboundMedia & { buffer: Buffer },
+  opts: { caption?: string; replyToMessageId?: string | null; source?: MessageSource } = {},
+): Promise<void> {
+  const source: MessageSource = opts.source ?? "OPERATOR";
+  const quoted = await resolveQuotedRef(lead.id, opts.replyToMessageId ?? null);
+  const wa = getWhatsApp();
+  const { providerMessageId } = await wa.sendMedia(lead.phone, {
+    buffer: media.buffer,
+    mediaType: media.mediaType,
+    mime: media.mediaMime,
+    fileName: media.fileName ?? undefined,
+    caption: opts.caption,
+  });
+  await prisma.message.create({
+    data: {
+      leadId: lead.id,
+      direction: "OUTBOUND",
+      // legenda quando houver; senão o placeholder ("📷 Imagem") p/ a bolha.
+      content: opts.caption?.trim() ? opts.caption : MEDIA_TYPE_PLACEHOLDER[media.mediaType],
+      providerMessageId,
+      status: "SENT",
+      replyToId: quoted?.messageId ?? null,
+      source,
+      mediaPath: media.mediaPath,
+      mediaType: media.mediaType,
+      mediaMime: media.mediaMime,
+      fileName: media.fileName,
+    },
+  });
+  await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
+  await invalidateConversation(lead.id);
+}
+
+/**
  * Resolve o chip que envia uma resposta manual: o chip dono da conversa, senão
  * qualquer um conectado/aquecendo DA CONTA. Usado no enqueue (web).
  */
@@ -176,6 +228,36 @@ export async function enqueueManualReply(
 }
 
 /**
+ * Enfileira o ENVIO de um anexo pelo operador (modo Baileys). O web já subiu o
+ * arquivo ao storage (media.mediaPath); aqui só grava a intenção. O worker baixa
+ * o buffer e envia pelo chip (dispatchManualReplyJob). `caption` é a legenda
+ * opcional (vira o texto/content do job).
+ */
+export async function enqueueManualMedia(
+  lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
+  media: OutboundMedia,
+  opts: { caption?: string; replyToMessageId?: string | null } = {},
+): Promise<void> {
+  const numberId = await resolveReplyChip(lead.userId, lead.whatsAppNumberId ?? null);
+  if (!numberId) throw new Error("sem número Baileys disponível p/ responder");
+  await prisma.outboundJob.create({
+    data: {
+      leadId: lead.id,
+      kind: MANUAL_REPLY_KIND,
+      content: opts.caption ?? "", // legenda (pode ser vazia)
+      status: "PENDING",
+      whatsAppNumberId: numberId,
+      scheduledFor: new Date(),
+      replyToMessageId: opts.replyToMessageId ?? null,
+      mediaPath: media.mediaPath,
+      mediaType: media.mediaType,
+      mediaMime: media.mediaMime,
+      fileName: media.fileName,
+    },
+  });
+}
+
+/**
  * Worker: envia uma resposta manual enfileirada pelo chip do lead e persiste o
  * Message(OUTBOUND). Rodado por processManualReplies (que faz o claim atômico).
  * Não aplica rodapé, não muda o status do lead nem respeita janela/cap — é uma
@@ -206,20 +288,47 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
   // gravar o vínculo (replyToId) na resposta. null se o job não cita nada.
   const quoted = await resolveQuotedRef(job.lead.id, job.replyToMessageId ?? null);
 
-  const out = await pool.send(numberId, job.lead.phone, job.content, quoted?.quote);
+  // Anexo: o web subiu ao storage (job.mediaPath). Baixa o buffer p/ enviar pelo
+  // chip. Falha de download → lança (retry no próximo tick, sem perder o job).
+  let media: SendMedia | null = null;
+  if (job.mediaPath && job.mediaType) {
+    const buffer = await downloadMediaBuffer(job.mediaPath);
+    if (!buffer) throw new Error("falha ao baixar anexo do storage p/ envio");
+    media = {
+      buffer,
+      mediaType: job.mediaType as SendMedia["mediaType"],
+      mime: job.mediaMime ?? "application/octet-stream",
+      fileName: job.fileName ?? undefined,
+    };
+  }
+
+  const out = await pool.send(numberId, job.lead.phone, job.content, quoted?.quote, media);
   if (!out.ok) throw new Error(`baileys reply falhou: ${out.reason}`);
+
+  // content da Message: legenda quando houver; anexo sem legenda → placeholder
+  // ("📷 Imagem") p/ a bolha ter algo e o filtro de contexto da IA descartar.
+  const storedContent =
+    media && !job.content.trim() ? MEDIA_TYPE_PLACEHOLDER[media.mediaType] : job.content;
 
   await prisma.$transaction([
     prisma.message.create({
       data: {
         leadId: job.lead.id,
         direction: "OUTBOUND",
-        content: job.content,
+        content: storedContent,
         providerMessageId: out.providerMessageId,
         status: "SENT",
         whatsAppNumberId: numberId,
         replyToId: quoted?.messageId ?? null,
         source: "OPERATOR", // resposta manual do operador (inbox CRM)
+        ...(media
+          ? {
+              mediaPath: job.mediaPath,
+              mediaType: job.mediaType,
+              mediaMime: job.mediaMime,
+              fileName: job.fileName,
+            }
+          : {}),
       },
     }),
     prisma.outboundJob.update({

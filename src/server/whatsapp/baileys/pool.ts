@@ -16,7 +16,7 @@ import { prisma } from "@/server/db/client";
 import { classifyDisconnect } from "./bansignals";
 import { useDbAuthState } from "./authstate";
 import { jidOf, pickSendJid } from "./jid";
-import { isMediaMessage, mediaPlaceholder, downloadableMedia } from "./media";
+import { isMediaMessage, mediaPlaceholder, downloadableMedia, mediaCaption } from "./media";
 import { shouldTranscribe } from "@/server/ai/transcribe-policy";
 
 const logger = pino({ level: "warn" });
@@ -35,6 +35,21 @@ export interface OperatorEvent {
   text: string;
   providerMessageId: string | null;
   whatsAppNumberId: string;
+}
+/** Mídia `fromMe` (não do bot): o operador respondeu com ARQUIVO pelo próprio
+ *  WhatsApp do número. Espelha InboundMediaEvent, mas vira OUTBOUND no CRM. */
+export interface OperatorMediaEvent {
+  toPhone: string; // destinatário (lead), E.164 com "+"
+  placeholder: string; // rótulo legível ("📷 Imagem")
+  providerMessageId: string | null;
+  whatsAppNumberId: string;
+  /** legenda que o operador digitou junto do arquivo (imagem/vídeo/doc), se houver. */
+  caption?: string | null;
+  // Anexo baixado (imagem/áudio/PDF); ausente p/ tipos que não baixamos:
+  buffer?: Buffer;
+  mediaType?: "image" | "audio" | "document";
+  mime?: string;
+  fileName?: string;
 }
 /** Mídia recebida do lead (sem legenda) — vira placeholder no inbox, sem IA.
  *  Para imagem/documento, anexa o arquivo baixado (buffer + metadados) p/ o
@@ -63,6 +78,8 @@ type Handlers = {
   onOperatorMessage?: (e: OperatorEvent) => Promise<void>;
   /** opcional: mídia do lead sem legenda → persiste placeholder no inbox (sem IA). */
   onInboundMedia?: (e: InboundMediaEvent) => Promise<void>;
+  /** opcional: arquivo enviado pelo operador pelo próprio zap → OUTBOUND no CRM. */
+  onOperatorMedia?: (e: OperatorMediaEvent) => Promise<void>;
 };
 
 const sockets = new Map<string, WASocket>();
@@ -340,6 +357,35 @@ export async function connectNumber(numberId: string): Promise<void> {
           } else {
             await replyUnsupportedMedia(numberId, phone, rec.label);
           }
+        } else if (fromMe && pnJid && isMediaMessage(inner)) {
+          // Operador respondeu com ARQUIVO pelo próprio WhatsApp (fromMe). Espelha
+          // o download do inbound, mas grava OUTBOUND (histórico do CRM); NÃO avisa
+          // "só leio texto" nem transcreve — é resposta humana, não uma pergunta.
+          // Ecos do nosso próprio envio de mídia (fila de saída) já vêm marcados
+          // em sentByBot → não duplica.
+          if (!(m.key.id && sentByBot.has(m.key.id))) {
+            const phone = `+${pnJid.split("@")[0]}`;
+            const placeholder = mediaPlaceholder(inner);
+            if (placeholder) {
+              const dl = downloadableMedia(inner);
+              const file = dl ? await tryDownloadMedia(sock, m, dl, rec.label) : null;
+              await handlers.onOperatorMedia?.({
+                toPhone: phone,
+                placeholder,
+                providerMessageId: m.key.id ?? null,
+                whatsAppNumberId: numberId,
+                caption: mediaCaption(inner), // legenda digitada junto do arquivo
+                ...(file && dl
+                  ? {
+                      buffer: file,
+                      mediaType: dl.mediaType,
+                      mime: dl.mime,
+                      fileName: dl.fileName,
+                    }
+                  : {}),
+              });
+            }
+          }
         }
         continue;
       }
@@ -424,11 +470,34 @@ export interface QuotedRef {
   fromMe: boolean;
 }
 
+/** Anexo de saída (imagem/documento/áudio) p/ o envio pelo chip. */
+export interface SendMedia {
+  buffer: Buffer;
+  mediaType: "image" | "document" | "audio";
+  mime: string;
+  fileName?: string;
+}
+
+/** Monta o conteúdo de mídia do Baileys. `caption` = texto (legenda); áudio não
+ *  suporta legenda. Documento precisa de fileName p/ o WhatsApp exibir o nome. */
+function baileysMediaContent(media: SendMedia, caption?: string) {
+  const mimetype = media.mime;
+  if (media.mediaType === "image") return { image: media.buffer, mimetype, caption };
+  if (media.mediaType === "audio") return { audio: media.buffer, mimetype };
+  return {
+    document: media.buffer,
+    mimetype,
+    fileName: media.fileName ?? "arquivo",
+    caption,
+  };
+}
+
 export async function send(
   numberId: string,
   phone: string,
   text: string,
   quoted?: QuotedRef | null,
+  media?: SendMedia | null,
 ): Promise<SendOutcome> {
   const sock = sockets.get(numberId);
   if (!sock) return { ok: false, reason: "no_socket" };
@@ -455,9 +524,12 @@ export async function send(
                 message: { conversation: quoted.text },
               }
             : undefined;
+          // Mídia → conteúdo de anexo (texto vira legenda); senão texto puro.
+          const caption = text?.trim() ? text : undefined;
+          const content = media ? baileysMediaContent(media, caption) : { text };
           const r = await sock.sendMessage(
             jid,
-            { text },
+            content,
             quotedMsg ? { quoted: quotedMsg } : undefined,
           );
           // marca SÍNCRONO o id do nosso envio antes do eco fromMe chegar, p/ não

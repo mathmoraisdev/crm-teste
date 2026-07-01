@@ -46,7 +46,9 @@ async function ensureBucket(sb: SupabaseClient): Promise<void> {
 /**
  * Sobe o buffer pro bucket privado. Retorna o `path` do objeto (a ser salvo na
  * Message) ou null se o storage não está configurado ou o upload falhou — nos
- * dois casos o chamador segue só com o placeholder textual.
+ * dois casos o chamador segue só com o placeholder textual. Uploader GENÉRICO:
+ * serve tanto a mídia recebida do lead quanto a enviada pelo operador (o path já
+ * é escopado por lead + messageKey único, sem colisão entre direções).
  */
 export async function uploadInboundMedia(
   buffer: Buffer,
@@ -69,6 +71,22 @@ export async function uploadInboundMedia(
     return null;
   }
   return path;
+}
+
+/**
+ * Baixa o binário de um objeto do bucket privado (buffer). Usado pelo worker p/
+ * enviar um anexo de saída pelo chip (o web subiu o arquivo; o worker o reenvia).
+ * Retorna null se o storage não está configurado ou o download falhou.
+ */
+export async function downloadMediaBuffer(path: string): Promise<Buffer | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  const { data, error } = await sb.storage.from(env.SUPABASE_MEDIA_BUCKET).download(path);
+  if (error || !data) {
+    console.warn(`[media-storage] download "${path}" falhou: ${error?.message}`);
+    return null;
+  }
+  return Buffer.from(await data.arrayBuffer());
 }
 
 /**

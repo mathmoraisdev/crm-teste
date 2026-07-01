@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { prisma } from "@/server/db/client";
 import type { AttendanceStatus } from "@prisma/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
@@ -9,7 +10,12 @@ import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
-import { sendWhatsAppMessage, enqueueManualReply } from "./messaging";
+import {
+  sendWhatsAppMessage,
+  enqueueManualReply,
+  sendWhatsAppMedia,
+  enqueueManualMedia,
+} from "./messaging";
 import { env } from "@/lib/env";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
@@ -120,12 +126,13 @@ async function computeConversation(
     take: CONVERSATION_CONTEXT_LIMIT,
     select: { direction: true, content: true, createdAt: true },
   });
-  // Exclui os placeholders de mídia ("📷 Imagem" etc.): a IA não lê o arquivo, e
-  // mandar o rótulo no transcript só confunde/gasta token. O operador continua
-  // vendo no inbox (que lê as Messages cruas, não passa por aqui).
+  // Exclui os placeholders de mídia ("📷 Imagem" etc.) em AMBAS as direções: a IA
+  // não lê o arquivo do lead (INBOUND) e o rótulo de um arquivo que o operador
+  // mandou pelo zap (OUTBOUND) não é uma resposta textual — em ambos só confunde/
+  // gasta token. O operador continua vendo no inbox (que lê as Messages cruas).
   const chronological = messages
     .reverse()
-    .filter((m) => !(m.direction === "INBOUND" && MEDIA_PLACEHOLDERS.has(m.content)));
+    .filter((m) => !MEDIA_PLACEHOLDERS.has(m.content));
   return sessionWindow(chronological, resetMinutes).map((m) => ({
     direction: m.direction,
     content: m.content,
@@ -773,6 +780,55 @@ export async function sendManualReply(
 }
 
 /**
+ * Envio manual de ANEXO pelo operador (imagem/documento/áudio pela inbox). O
+ * arquivo já foi subido ao storage pela rota (media.mediaPath); o buffer viaja
+ * junto só p/ o caminho direto (mock/cloud-api). No Baileys enfileira (o worker
+ * envia); nos demais envia na hora. Espelha sendManualReply nos efeitos de
+ * atendimento (SLA, relógio de inatividade, contadores). Escopado por conta.
+ */
+export async function sendManualMedia(
+  leadId: string,
+  userId: string,
+  media: {
+    buffer: Buffer;
+    mediaPath: string;
+    mediaType: "image" | "document" | "audio";
+    mediaMime: string;
+    fileName?: string | null;
+  },
+  opts: { caption?: string; replyToMessageId?: string | null } = {},
+) {
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, userId },
+    select: {
+      id: true, phone: true, userId: true, whatsAppNumberId: true, aiPaused: true,
+      queuedAt: true, firstResponseAt: true, attendanceStatus: true,
+    },
+  });
+  if (!lead) throw new Error("Lead não encontrado");
+  const meta = {
+    mediaPath: media.mediaPath,
+    mediaType: media.mediaType,
+    mediaMime: media.mediaMime,
+    fileName: media.fileName ?? null,
+  };
+  if (env.WHATSAPP_MODE === "baileys") {
+    await enqueueManualMedia(lead, meta, opts);
+  } else {
+    await sendWhatsAppMedia(lead, { ...meta, buffer: media.buffer }, { ...opts, source: "OPERATOR" });
+  }
+  // Mesmos efeitos de uma resposta manual de texto: renova o relógio de
+  // inatividade (lead pausado) e movimenta o atendimento (SLA + estado).
+  const data: Record<string, unknown> = {};
+  if (lead.aiPaused) data.aiPausedAt = new Date();
+  applyManualResponseAttendance(lead, data);
+  if (Object.keys(data).length > 0) {
+    await prisma.lead.update({ where: { id: lead.id }, data });
+  }
+  await invalidateLeadCaches(userId);
+}
+
+/**
  * Efeitos de uma resposta humana sobre a camada de atendimento (mutável `data`):
  *  - fecha o SLA (firstResponseAt) na 1ª resposta após entrar na fila;
  *  - ATENDENDO → AGUARDANDO (operador respondeu, bola com o cliente).
@@ -815,10 +871,6 @@ export async function handleOperatorMessage(input: {
   });
   if (!lead) return { leadId: null };
 
-  const num = await prisma.whatsAppNumber.findUnique({
-    where: { id: input.whatsAppNumberId },
-    select: { autoPauseOnHumanReply: true },
-  });
   try {
     await prisma.message.create({
       data: {
@@ -840,14 +892,121 @@ export async function handleOperatorMessage(input: {
     }
     throw e;
   }
-  // OUTBOUND novo (resposta humana pelo zap) → invalida contexto da IA.
+  await applyOperatorHandoff(lead, input.whatsAppNumberId);
+  return { leadId: lead.id };
+}
+
+/**
+ * Arquivo enviado pelo operador pelo PRÓPRIO WhatsApp do número (fromMe mídia):
+ * grava como Message(OUTBOUND) com o anexo (mediaPath/mediaType/...) p/ aparecer
+ * no inbox, igual ao que o lead manda — fechando o buraco de histórico. Reaproveita
+ * o mesmo uploader e o mesmo handoff da resposta de texto (handleOperatorMessage).
+ * NÃO transcreve (é resposta humana de saída, não pergunta) nem avisa "só leio texto".
+ */
+export async function handleOperatorMedia(input: {
+  toPhone: string;
+  placeholder: string;
+  providerMessageId: string | null;
+  whatsAppNumberId: string;
+  caption?: string | null;
+  buffer?: Buffer;
+  mediaType?: "image" | "audio" | "document";
+  mime?: string;
+  fileName?: string;
+}): Promise<{ leadId: string | null }> {
+  // Backup ao filtro em memória do pool (sentByBot): id já gravado = nosso envio.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findUnique({
+      where: { providerMessageId: input.providerMessageId },
+      select: { leadId: true },
+    });
+    if (existing) return { leadId: existing.leadId };
+  }
+  const lead = await resolveLead({
+    whatsAppNumberId: input.whatsAppNumberId,
+    phone: input.toPhone,
+    text: input.placeholder,
+  });
+  if (!lead) return { leadId: null };
+
+  // Sobe o arquivo (se baixável e o storage estiver configurado) — mesmo uploader
+  // do inbound; falha/sem storage → segue só com o placeholder textual.
+  let media: {
+    mediaPath: string;
+    mediaType: string;
+    mediaMime?: string;
+    fileName?: string;
+  } | null = null;
+  if (input.buffer && input.mediaType) {
+    const ext = (input.fileName?.split(".").pop() || input.mime?.split("/")[1] || "bin")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase();
+    const path = await uploadInboundMedia(input.buffer, {
+      leadId: lead.id,
+      // providerMessageId é único; sem ele (raro), UUID evita colisão de path.
+      messageKey: input.providerMessageId ?? `out-${crypto.randomUUID()}`,
+      mime: input.mime ?? "application/octet-stream",
+      ext: ext || "bin",
+    });
+    if (path) {
+      media = {
+        mediaPath: path,
+        mediaType: input.mediaType,
+        mediaMime: input.mime,
+        fileName: input.fileName,
+      };
+    }
+  }
+
+  try {
+    await prisma.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "OUTBOUND",
+        // legenda quando o operador digitou junto; senão o placeholder ("📷 Imagem").
+        content: input.caption?.trim() ? input.caption : input.placeholder,
+        providerMessageId: input.providerMessageId ?? undefined,
+        status: "SENT",
+        whatsAppNumberId: input.whatsAppNumberId,
+        source: "OPERATOR",
+        ...(media ?? {}),
+      },
+    });
+  } catch (e) {
+    // Race com o eco do próprio bot (mesmo providerMessageId) → não duplica.
+    if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") {
+      return { leadId: lead.id };
+    }
+    throw e;
+  }
+  await applyOperatorHandoff(lead, input.whatsAppNumberId);
+  return { leadId: lead.id };
+}
+
+/**
+ * Efeitos de uma resposta manual do operador FEITA PELO ZAP (texto ou mídia) sobre
+ * o estado da conversa. Fonte única p/ handleOperatorMessage e handleOperatorMedia:
+ *  - invalida o contexto da IA (novo OUTBOUND);
+ *  - pausa a IA (handoff automático) só se o número tiver autoPauseOnHumanReply;
+ *  - renova o relógio de inatividade quando o lead já estava pausado (senão o
+ *    resume automático reativaria a IA no meio do atendimento humano pelo zap);
+ *  - fecha o SLA e move ATENDENDO→AGUARDANDO (applyManualResponseAttendance).
+ */
+async function applyOperatorHandoff(
+  lead: {
+    id: string;
+    aiPaused: boolean;
+    queuedAt: Date | null;
+    firstResponseAt: Date | null;
+    attendanceStatus: AttendanceStatus;
+  },
+  whatsAppNumberId: string,
+): Promise<void> {
   await invalidateConversation(lead.id);
-  // Duas responsabilidades distintas:
-  //  - pausar a IA (handoff automático) só se o número tiver autoPauseOnHumanReply;
-  //  - renovar o relógio de inatividade SEMPRE que o humano falar com um lead já
-  //    pausado (senão o resume automático reativaria a IA no meio do atendimento
-  //    humano feito pelo zap). Espelha sendManualReply.
-  // Resposta humana pelo zap conta no inbox: fecha o SLA e move ATENDENDO→AGUARDANDO.
+  const num = await prisma.whatsAppNumber.findUnique({
+    where: { id: whatsAppNumberId },
+    select: { autoPauseOnHumanReply: true },
+  });
   const data: Record<string, unknown> = {};
   if (num?.autoPauseOnHumanReply) {
     data.aiPaused = true;
@@ -859,5 +1018,4 @@ export async function handleOperatorMessage(input: {
   if (Object.keys(data).length > 0) {
     await prisma.lead.update({ where: { id: lead.id }, data });
   }
-  return { leadId: lead.id };
 }

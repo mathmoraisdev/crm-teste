@@ -17,6 +17,9 @@ export function createBaileysWhatsApp(): WhatsAppService {
     async sendMessage() {
       return err();
     },
+    async sendMedia() {
+      return err();
+    },
     async sendTemplate() {
       return err();
     },

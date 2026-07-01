@@ -5,12 +5,13 @@ import { modelCreditWeight } from "@/lib/ai-models";
 import { resolveProviderForUser } from "@/server/ai/resolve";
 
 /** Features booleanas da régua de planos (ver PLAN_LIMITS). */
-export type PlanFeature = "qualify" | "schedule" | "campaigns";
+export type PlanFeature = "qualify" | "schedule" | "campaigns" | "sales";
 
 const FEATURE_LABEL: Record<PlanFeature, string> = {
   qualify: "qualificação por IA",
   schedule: "agendamento e lembretes",
   campaigns: "campanhas",
+  sales: "funil de vendas com cobrança",
 };
 
 /**

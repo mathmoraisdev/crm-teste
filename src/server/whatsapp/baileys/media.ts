@@ -79,9 +79,33 @@ export function cloudApiMediaPlaceholder(type: string): string | null {
   return CLOUD_MEDIA_LABELS[type] ?? null;
 }
 
+/** Legenda (caption) de uma mídia do Baileys (já desaninhada), se houver. Imagem,
+ *  vídeo e documento podem trazer `caption`; áudio/figurinha não. Retorna null se
+ *  não houver texto — p/ preservar a legenda que o operador digitou junto do
+ *  arquivo (senão o texto some do histórico). */
+export function mediaCaption(inner: unknown): string | null {
+  if (!inner || typeof inner !== "object") return null;
+  const o = inner as Record<string, any>;
+  const cap: unknown =
+    o.imageMessage?.caption ??
+    o.videoMessage?.caption ??
+    o.documentMessage?.caption ??
+    null;
+  return typeof cap === "string" && cap.trim() ? cap : null;
+}
+
 /** Conjunto dos placeholders — usado p/ EXCLUÍ-los do contexto da IA (a IA não lê
  *  mídia; o placeholder é puramente visual p/ o operador, não gasta token). */
 export const MEDIA_PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PH));
+
+/** Placeholder textual p/ um anexo de SAÍDA (operador enviou pela inbox), quando
+ *  não há legenda. Vira o `content` da Message p/ a bolha ter algo e o filtro de
+ *  contexto da IA descartar. */
+export const MEDIA_TYPE_PLACEHOLDER: Record<"image" | "audio" | "document", string> = {
+  image: PH.image,
+  audio: PH.audio,
+  document: PH.document,
+};
 
 // ─────────────────────────────────────────────────────────────
 // Mídia BAIXÁVEL (escopo atual: imagem, áudio e documento/PDF).
