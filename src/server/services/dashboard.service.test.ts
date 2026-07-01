@@ -65,6 +65,32 @@ describe("getDashboard", () => {
     expect(data.aiSla.avgResponseSeconds).toBe(20); // (30 + 10) / 2
   });
 
+  it("aceita intervalo explícito (from/to) e devolve o range aplicado", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.lead.groupBy as any).mockResolvedValue([]);
+    (prisma.lead.findMany as any).mockResolvedValue([]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    (prisma.message.findMany as any).mockResolvedValue([]);
+    (prisma.whatsAppNumber.findMany as any).mockResolvedValue([]);
+    (prisma.outboundJob.groupBy as any).mockResolvedValue([]);
+    (prisma.campaign.findMany as any).mockResolvedValue([]);
+    (prisma.meeting.count as any).mockResolvedValue(0);
+    (prisma.user.findMany as any).mockResolvedValue([]);
+
+    const from = new Date("2026-06-01T00:00:00.000Z");
+    const to = new Date("2026-06-10T23:59:59.999Z");
+    const { getDashboard } = await import("./dashboard.service");
+    const data = await getDashboard("dono-1", { from, to });
+
+    expect(data.rangeStart).toBe(from.toISOString());
+    expect(data.rangeEnd).toBe(to.toISOString());
+    expect(data.days).toBe(10); // span do intervalo
+
+    // A janela (createdAt gte/lte) foi aplicada ao funil (groupBy por status).
+    const funnelCall = (prisma.lead.groupBy as any).mock.calls.find((c: any[]) => c[0]?.by?.includes("status"));
+    expect(funnelCall[0].where.createdAt).toEqual({ gte: from, lte: to });
+  });
+
   it("calcula taxas e funil a partir dos grupos", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.lead.groupBy as any).mockImplementation(({ by }: any) => {

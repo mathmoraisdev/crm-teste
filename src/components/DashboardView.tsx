@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,12 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
+/** "YYYY-MM-DD" → "DD/MM/YYYY" (sem depender de fuso). */
+function brDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "—";
   if (seconds < 60) return `${seconds}s`;
@@ -38,13 +44,23 @@ function formatDuration(seconds: number | null): string {
 
 export function DashboardView() {
   const [days, setDays] = useState(30);
+  // Intervalo customizado (De/Até). Quando ambos preenchidos, tem precedência
+  // sobre os presets de dias.
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [data, setData] = useState<DashboardData | null>(null);
   const [labels, setLabels] = useState<PipelineLabels>({});
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (d: number) => {
+  const customActive = !!from && !!to && from <= to;
+  const query = useMemo(
+    () => (customActive ? `from=${from}&to=${to}` : `days=${days}`),
+    [customActive, from, to, days],
+  );
+
+  const load = useCallback(async (q: string) => {
     try {
-      const res = await fetch(`/api/dashboard?days=${d}`, { cache: "no-store" });
+      const res = await fetch(`/api/dashboard?${q}`, { cache: "no-store" });
       const json = await res.json();
       setData(json.data as DashboardData);
     } catch {
@@ -53,8 +69,8 @@ export function DashboardView() {
   }, []);
 
   useEffect(() => {
-    load(days);
-  }, [days, load]);
+    load(query);
+  }, [query, load]);
 
   useEffect(() => {
     fetch("/api/account/pipeline-labels", { cache: "no-store" })
@@ -63,14 +79,23 @@ export function DashboardView() {
       .catch(() => {});
   }, []);
 
+  function selectPreset(p: number) {
+    // Preset limpa o intervalo customizado.
+    setFrom("");
+    setTo("");
+    setDays(p);
+  }
+
   async function refresh() {
     setRefreshing(true);
-    await load(days);
+    await load(query);
     setRefreshing(false);
   }
 
   const statusMeta = resolveStatusMeta(labels);
   const maxFunnel = data ? Math.max(1, ...data.funnel.map((f) => f.count)) : 1;
+  // Rótulo do período p/ os cartões/subtítulos: intervalo customizado ou "últimos N dias".
+  const rangeText = customActive ? `${brDate(from)}–${brDate(to)}` : `últimos ${days} dias`;
 
   return (
     <div className="space-y-5">
@@ -83,15 +108,15 @@ export function DashboardView() {
             Métricas do funil, conversão e atividade.
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex rounded-xl bg-[#EBF0ED] p-[3px]">
             {PERIODS.map((p) => (
               <button
                 key={p}
-                onClick={() => setDays(p)}
+                onClick={() => selectPreset(p)}
                 className={cn(
                   "rounded-lg px-3.5 py-1.5 text-[13px] font-bold transition-colors",
-                  days === p
+                  !customActive && days === p
                     ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
                     : "text-slate-500 hover:text-ink",
                 )}
@@ -100,6 +125,39 @@ export function DashboardView() {
               </button>
             ))}
           </div>
+
+          {/* Intervalo específico (De/Até) — tem precedência sobre os presets. */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-1">
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+              aria-label="Data inicial"
+              className="rounded-md px-1.5 py-1 text-[13px] text-ink focus:outline-none"
+            />
+            <span className="text-slate-400">–</span>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+              aria-label="Data final"
+              className="rounded-md px-1.5 py-1 text-[13px] text-ink focus:outline-none"
+            />
+            {customActive && (
+              <button
+                onClick={() => {
+                  setFrom("");
+                  setTo("");
+                }}
+                className="ml-0.5 rounded-md px-1.5 py-1 text-[12px] font-semibold text-slate-500 hover:text-ink"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+
           <Button variant="secondary" size="sm" onClick={refresh} loading={refreshing}>
             <RefreshCw size={14} /> Atualizar
           </Button>
@@ -128,18 +186,18 @@ export function DashboardView() {
             <StatCard
               label="Reuniões confirmadas"
               value={data.totals.confirmedMeetings}
-              hint={`últimos ${data.days} dias`}
+              hint={`${rangeText}`}
               dark
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <StatCard label="Mensagens recebidas" value={data.totals.inbound} hint={`últimos ${data.days} dias`} />
-            <StatCard label="Mensagens enviadas" value={data.totals.outbound} hint={`últimos ${data.days} dias`} />
+            <StatCard label="Mensagens recebidas" value={data.totals.inbound} hint={`${rangeText}`} />
+            <StatCard label="Mensagens enviadas" value={data.totals.outbound} hint={`${rangeText}`} />
             <StatCard
               label="Novos leads"
               value={data.newLeadsPerDay.reduce((s, p) => s + p.count, 0)}
-              hint={`últimos ${data.days} dias`}
+              hint={`${rangeText}`}
             />
           </div>
 
@@ -168,7 +226,7 @@ export function DashboardView() {
 
           {/* Funil */}
           <Card>
-            <CardHeader title="Funil" subtitle={`Distribuição por etapa · ${data.days} dias`} />
+            <CardHeader title="Funil" subtitle={`Distribuição por etapa · ${rangeText}`} />
             <div className="space-y-2.5 px-4 py-4">
               {data.funnel.map((f) => {
                 const meta = statusMeta[f.status];
@@ -223,7 +281,7 @@ export function DashboardView() {
 
             {/* Por campanha */}
             <Card className="overflow-hidden">
-              <CardHeader title="Por campanha" subtitle={`Envios · ${data.days} dias`} />
+              <CardHeader title="Por campanha" subtitle={`Envios · ${rangeText}`} />
               {data.byCampaign.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">Sem envios no período.</p>
               ) : (
@@ -253,7 +311,7 @@ export function DashboardView() {
           <Card className="overflow-hidden">
             <CardHeader
               title="Resolvidas por atendente"
-              subtitle={`Conversas encerradas · ${data.days} dias`}
+              subtitle={`Conversas encerradas · ${rangeText}`}
             />
             {data.resolvedByAgent.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">

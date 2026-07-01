@@ -27,6 +27,8 @@ export interface DailyPoint {
 
 export interface DashboardData {
   days: number;
+  rangeStart: string; // ISO — início do intervalo aplicado
+  rangeEnd: string; // ISO — fim do intervalo aplicado
   totals: {
     leads: number;
     qualified: number;
@@ -70,15 +72,24 @@ function dayKey(d: Date): string {
 }
 
 /**
- * Métricas do painel da conta no período (default 30 dias). Usa groupBy/count
- * (sem N+1). Taxas nunca dividem por zero.
+ * Métricas do painel da conta num intervalo. Aceita presets (`days`, default 30)
+ * OU um intervalo explícito (`from`/`to`). TODO o painel — inclusive funil e
+ * cartões de topo — é escopado por `Lead.createdAt` dentro da janela. Usa
+ * groupBy/count (sem N+1). Taxas nunca dividem por zero.
  */
 export async function getDashboard(
   userId: string,
-  opts: { days?: number } = {},
+  opts: { days?: number; from?: Date; to?: Date } = {},
 ): Promise<DashboardData> {
-  const days = Math.max(1, Math.min(365, opts.days ?? 30));
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  // Janela: `from`/`to` explícitos têm precedência; senão, `days` a partir de agora.
+  const until = opts.to ?? new Date();
+  const rawSince = opts.from ?? new Date(until.getTime() - Math.max(1, Math.min(365, opts.days ?? 30)) * 86_400_000);
+  // Protege o bucket diário: no máx. 366 dias de span.
+  const spanDays = Math.max(1, Math.min(366, Math.ceil((until.getTime() - rawSince.getTime()) / 86_400_000)));
+  const since = rawSince;
+  const days = spanDays;
+  // Janela reutilizada em todas as queries por período (createdAt).
+  const window = { gte: since, lte: until };
 
   const [
     funnelGroups,
@@ -90,41 +101,41 @@ export async function getDashboard(
     campaigns,
     confirmedMeetings,
   ] = await Promise.all([
-    prisma.lead.groupBy({ by: ["status"], where: { userId }, _count: { _all: true } }),
+    prisma.lead.groupBy({ by: ["status"], where: { userId, createdAt: window }, _count: { _all: true } }),
     prisma.message.groupBy({
       by: ["direction"],
-      where: { lead: { userId }, createdAt: { gte: since } },
+      where: { lead: { userId }, createdAt: window },
       _count: { _all: true },
     }),
     prisma.lead.findMany({
-      where: { userId, createdAt: { gte: since } },
+      where: { userId, createdAt: window },
       select: { createdAt: true },
     }),
-    prisma.lead.groupBy({ by: ["whatsAppNumberId"], where: { userId }, _count: { _all: true } }),
+    prisma.lead.groupBy({ by: ["whatsAppNumberId"], where: { userId, createdAt: window }, _count: { _all: true } }),
     prisma.whatsAppNumber.findMany({
       where: { userId },
       select: { id: true, label: true, displayName: true },
     }),
     prisma.outboundJob.groupBy({
       by: ["campaignId", "status"],
-      where: { lead: { userId }, createdAt: { gte: since } },
+      where: { lead: { userId }, createdAt: window },
       _count: { _all: true },
     }),
     prisma.campaign.findMany({ where: { userId }, select: { id: true, name: true } }),
     prisma.meeting.count({
-      where: { lead: { userId }, status: "CONFIRMED", scheduledAt: { gte: since } },
+      where: { lead: { userId }, status: "CONFIRMED", scheduledAt: window },
     }),
   ]);
 
   // SLA de 1ª resposta humana + resolvidas por atendente + mensagens p/ o SLA da IA.
   const [slaLeads, resolvedGroups, members, aiSlaMessages] = await Promise.all([
     prisma.lead.findMany({
-      where: { userId, queuedAt: { not: null }, firstResponseAt: { not: null, gte: since } },
+      where: { userId, queuedAt: { not: null }, firstResponseAt: { not: null, ...window } },
       select: { queuedAt: true, firstResponseAt: true },
     }),
     prisma.lead.groupBy({
       by: ["assignedToId"],
-      where: { userId, attendanceStatus: "RESOLVIDA", firstResponseAt: { gte: since } },
+      where: { userId, attendanceStatus: "RESOLVIDA", firstResponseAt: window },
       _count: { _all: true },
     }),
     prisma.user.findMany({
@@ -136,7 +147,7 @@ export async function getDashboard(
     prisma.message.findMany({
       where: {
         lead: { userId },
-        createdAt: { gte: since },
+        createdAt: window,
         OR: [{ direction: "INBOUND" }, { direction: "OUTBOUND", source: "AI" }],
       },
       select: { leadId: true, direction: true, createdAt: true },
@@ -255,6 +266,8 @@ export async function getDashboard(
 
   return {
     days,
+    rangeStart: since.toISOString(),
+    rangeEnd: until.toISOString(),
     totals: {
       leads: totalLeads,
       qualified,
