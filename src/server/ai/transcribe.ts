@@ -49,9 +49,24 @@ export async function transcribeAudio(
     });
     const text = (res.text ?? "").trim();
     if (!text) return null;
-    return text.length > env.TRANSCRIBE_MAX_CHARS
-      ? text.slice(0, env.TRANSCRIBE_MAX_CHARS) + "…"
-      : text;
+    const out =
+      text.length > env.TRANSCRIBE_MAX_CHARS
+        ? text.slice(0, env.TRANSCRIBE_MAX_CHARS) + "…"
+        : text;
+    // Observabilidade (custo/volume): provider, modelo e tamanhos — acompanhar em
+    // prod antes de decidir sobre teto de minutos por plano (Fase 5).
+    logger.info(
+      {
+        provider: env.TRANSCRIBE_PROVIDER,
+        model: resolved.model,
+        bytes: buffer.length,
+        rawChars: text.length,
+        outChars: out.length,
+        truncated: text.length > env.TRANSCRIBE_MAX_CHARS,
+      },
+      "[transcribe] transcrição concluída",
+    );
+    return out;
   } catch (err) {
     logger.warn({ err, provider: env.TRANSCRIBE_PROVIDER }, "[transcribe] falha na transcrição");
     return null;
