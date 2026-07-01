@@ -84,6 +84,7 @@ export interface WhatsAppNumberListItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  salesEnabled: boolean;
   reminderDayBeforeTemplate: string | null;
   reminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
@@ -121,6 +122,7 @@ export async function listWhatsAppNumbers(
         autoReplyEnabled: true,
         qualifyEnabled: true,
         scheduleEnabled: true,
+        salesEnabled: true,
         reminderDayBeforeTemplate: true,
         reminderHourBeforeTemplate: true,
         replyDelaySeconds: true,
@@ -160,6 +162,7 @@ export async function updateWhatsAppNumber(
     autoReplyEnabled?: boolean;
     qualifyEnabled?: boolean;
     scheduleEnabled?: boolean;
+    salesEnabled?: boolean;
     reminderDayBeforeTemplate?: string | null;
     reminderHourBeforeTemplate?: string | null;
     replyDelaySeconds?: number;
@@ -178,6 +181,7 @@ export async function updateWhatsAppNumber(
   // (desligar é sempre livre). Grandfather/admin passam direto no assertFeature.
   if (data.qualifyEnabled === true) await assertFeature(userId, "qualify");
   if (data.scheduleEnabled === true) await assertFeature(userId, "schedule");
+  if (data.salesEnabled === true) await assertFeature(userId, "sales");
   // Modelo avançado só grava em plano que permite (grandfather/admin passam).
   if (data.aiModel !== undefined) await assertModelAllowedForPlan(userId, data.aiModel);
   // Monta o patch só com o que veio (undefined = não mexe; null limpa o campo).
@@ -197,6 +201,7 @@ export async function updateWhatsAppNumber(
   if (data.autoReplyEnabled !== undefined) patch.autoReplyEnabled = data.autoReplyEnabled;
   if (data.qualifyEnabled !== undefined) patch.qualifyEnabled = data.qualifyEnabled;
   if (data.scheduleEnabled !== undefined) patch.scheduleEnabled = data.scheduleEnabled;
+  if (data.salesEnabled !== undefined) patch.salesEnabled = data.salesEnabled;
   if (data.reminderDayBeforeTemplate !== undefined) patch.reminderDayBeforeTemplate = data.reminderDayBeforeTemplate;
   if (data.reminderHourBeforeTemplate !== undefined) patch.reminderHourBeforeTemplate = data.reminderHourBeforeTemplate;
   if (data.replyDelaySeconds !== undefined) patch.replyDelaySeconds = data.replyDelaySeconds;

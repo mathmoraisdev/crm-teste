@@ -17,7 +17,10 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const [numbers, user] = await Promise.all([
     listWhatsAppNumbers(userId),
-    prisma.user.findUnique({ where: { id: userId }, select: { aiProvider: true, email: true, plan: true } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { aiProvider: true, email: true, plan: true, paymentProvider: true },
+    }),
   ]);
   // converte o QR cru em data URL p/ a UI renderizar como <img>
   const withQr = await Promise.all(
@@ -34,7 +37,21 @@ export async function GET() {
     !user?.plan || (user.email && isAdminEmail(user.email))
       ? true
       : PLAN_LIMITS[user.plan].allowStrongModel;
-  return NextResponse.json({ numbers: withQr, mode: env.WHATSAPP_MODE, provider, allowStrongModel });
+  // Funil de vendas: grandfather/admin → sim; senão conforme o plano. Também
+  // informa se já há um gateway de pagamento conectado (p/ o aviso na UI).
+  const salesAllowed =
+    !user?.plan || (user.email && isAdminEmail(user.email))
+      ? true
+      : PLAN_LIMITS[user.plan].sales;
+  const paymentConnected = !!user?.paymentProvider;
+  return NextResponse.json({
+    numbers: withQr,
+    mode: env.WHATSAPP_MODE,
+    provider,
+    allowStrongModel,
+    salesAllowed,
+    paymentConnected,
+  });
 }
 
 const createSchema = z.object({

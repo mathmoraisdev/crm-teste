@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AI_MODELS_BY_PROVIDER, type AiProviderName } from "@/lib/ai-models";
+import { OffersManager } from "@/components/OffersManager";
 
 interface NumberItem {
   id: string;
@@ -28,6 +29,7 @@ interface NumberItem {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  salesEnabled: boolean;
   reminderDayBeforeTemplate: string | null;
   reminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
@@ -48,6 +50,7 @@ interface ServiceConfig {
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
+  salesEnabled: boolean;
   reminderDayBeforeTemplate: string;
   reminderHourBeforeTemplate: string;
   replyDelaySeconds: number;
@@ -94,6 +97,9 @@ export function WhatsAppNumbersPanel() {
   const [provider, setProvider] = useState<AiProviderName>("OPENAI");
   // Conta libera o modelo avançado (strong)? Vem do plano (grandfather/admin = true).
   const [allowStrongModel, setAllowStrongModel] = useState(false);
+  // Funil de vendas liberado no plano + se já há gateway de pagamento conectado.
+  const [salesAllowed, setSalesAllowed] = useState(false);
+  const [paymentConnected, setPaymentConnected] = useState(false);
 
   // estado do modal de pareamento
   const [open, setOpen] = useState(false);
@@ -131,6 +137,8 @@ export function WhatsAppNumbersPanel() {
         setProvider(data.provider);
       }
       setAllowStrongModel(Boolean(data.allowStrongModel));
+      setSalesAllowed(Boolean(data.salesAllowed));
+      setPaymentConnected(Boolean(data.paymentConnected));
     } catch {
       /* mantém estado anterior */
     }
@@ -278,6 +286,7 @@ export function WhatsAppNumbersPanel() {
       autoReplyEnabled: n.autoReplyEnabled,
       qualifyEnabled: n.qualifyEnabled,
       scheduleEnabled: n.scheduleEnabled,
+      salesEnabled: n.salesEnabled,
       reminderDayBeforeTemplate: n.reminderDayBeforeTemplate ?? "",
       reminderHourBeforeTemplate: n.reminderHourBeforeTemplate ?? "",
       replyDelaySeconds: n.replyDelaySeconds,
@@ -306,6 +315,7 @@ export function WhatsAppNumbersPanel() {
         autoReplyEnabled: service.autoReplyEnabled,
         qualifyEnabled: service.qualifyEnabled,
         scheduleEnabled: service.scheduleEnabled,
+        salesEnabled: service.salesEnabled,
         reminderDayBeforeTemplate: service.reminderDayBeforeTemplate.trim() || null,
         reminderHourBeforeTemplate: service.reminderHourBeforeTemplate.trim() || null,
         replyDelaySeconds: service.replyDelaySeconds,
@@ -915,7 +925,30 @@ export function WhatsAppNumbersPanel() {
                 />
                 Agendar compromissos
               </label>
+              {salesAllowed && (
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={service.salesEnabled}
+                    onChange={(e) => setService({ ...service, salesEnabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                  />
+                  Modo vendas (IA cobra via Pix)
+                </label>
+              )}
             </div>
+
+            {salesAllowed && service.salesEnabled && serviceFor && (
+              <div className="space-y-3">
+                {!paymentConnected && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Nenhum gateway conectado. Conecte um Mercado Pago ou Asaas em{" "}
+                    <strong>Configurações → Receber pagamentos (Pix)</strong> para a IA gerar cobranças.
+                  </p>
+                )}
+                <OffersManager numberId={serviceFor.id} />
+              </div>
+            )}
 
             {service.scheduleEnabled && (
               <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">

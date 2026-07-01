@@ -39,6 +39,7 @@ const updateSchema = z
     autoReplyEnabled: z.boolean().optional(),
     qualifyEnabled: z.boolean().optional(),
     scheduleEnabled: z.boolean().optional(),
+    salesEnabled: z.boolean().optional(),
     // texto dos lembretes de reunião (placeholders {{nome}} {{quando}} {{link}})
     reminderDayBeforeTemplate: z.string().max(1000).nullable().optional(),
     reminderHourBeforeTemplate: z.string().max(1000).nullable().optional(),
