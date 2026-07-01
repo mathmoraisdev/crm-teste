@@ -702,7 +702,7 @@ export function WhatsAppNumbersPanel() {
               </p>
               {!allowStrongModel && (
                 <p className="mt-1 text-xs text-amber-600">
-                  Modelos avançados disponíveis no Profissional/Escala ou com sua própria chave (BYOK).
+                  Modelos avançados disponíveis apenas com sua própria chave de IA (BYOK).
                 </p>
               )}
             </div>

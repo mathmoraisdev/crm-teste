@@ -70,7 +70,7 @@ describe("assertModelAllowedForPlan", () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
     const { assertModelAllowedForPlan } = await import("./numbers.service");
-    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).rejects.toThrow(/não está disponível/i);
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).rejects.toThrow(/própria chave.*BYOK/i);
   });
 
   it("INICIAL pode gravar modelo cheap → permite", async () => {
@@ -80,11 +80,11 @@ describe("assertModelAllowedForPlan", () => {
     await expect(assertModelAllowedForPlan("dono-1", "gpt-4o-mini")).resolves.toBeUndefined();
   });
 
-  it("PROFISSIONAL pode gravar modelo strong → permite", async () => {
+  it("plano pago (PROFISSIONAL/ESCALA) também rejeita strong na chave da plataforma → só BYOK", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "PROFISSIONAL" });
     const { assertModelAllowedForPlan } = await import("./numbers.service");
-    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).resolves.toBeUndefined();
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).rejects.toThrow(/própria chave.*BYOK/i);
   });
 
   it("null/limpar campo sempre permite", async () => {

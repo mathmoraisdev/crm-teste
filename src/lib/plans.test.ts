@@ -12,10 +12,10 @@ describe("PLAN_LIMITS", () => {
     expect(PLAN_LIMITS.PROFISSIONAL.aiMonthlyQuota).toBe(1500);
     expect(PLAN_LIMITS.ESCALA.aiMonthlyQuota).toBe(5000);
   });
-  it("só PROFISSIONAL e ESCALA liberam o modelo avançado", () => {
+  it("nenhum plano libera modelo avançado na chave da plataforma (strong só via BYOK)", () => {
     expect(PLAN_LIMITS.INICIAL.allowStrongModel).toBe(false);
-    expect(PLAN_LIMITS.PROFISSIONAL.allowStrongModel).toBe(true);
-    expect(PLAN_LIMITS.ESCALA.allowStrongModel).toBe(true);
+    expect(PLAN_LIMITS.PROFISSIONAL.allowStrongModel).toBe(false);
+    expect(PLAN_LIMITS.ESCALA.allowStrongModel).toBe(false);
   });
   it("planLabel devolve o rótulo PT-BR", () => {
     expect(planLabel("PROFISSIONAL")).toBe("Profissional");

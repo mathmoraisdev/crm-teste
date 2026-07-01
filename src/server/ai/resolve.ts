@@ -40,8 +40,15 @@ export async function resolveProviderForUser(userId: string): Promise<ResolvedPr
  * Atalho: AiClient pronto para o usuário (chave própria ou fallback). `model`
  * (opcional) fixa o modelo de todas as chamadas — usado p/ aplicar o modelo
  * configurado por número WhatsApp.
+ *
+ * Na chave da PLATAFORMA (source="platform"), força TUDO no modelo econômico
+ * (`AI_MODEL_CHEAP`) — inclui a qualificação, que internamente pede tier "strong".
+ * Assim o custo da nossa chave fica sempre no mini, em todos os planos. BYOK
+ * (source="user") mantém a liberdade total: usa o `model` pedido ou os tiers do
+ * provider dele.
  */
 export async function getAiClient(userId: string, model?: string): Promise<AiClient> {
-  const { provider, apiKey } = await resolveProviderForUser(userId);
-  return buildAiClient({ provider, apiKey, model });
+  const { provider, apiKey, source } = await resolveProviderForUser(userId);
+  const effective = source === "platform" ? model ?? env.AI_MODEL_CHEAP : model;
+  return buildAiClient({ provider, apiKey, model: effective });
 }

@@ -13,6 +13,10 @@ vi.mock("@/server/db/client", () => ({
   prisma: { user: { findUnique: vi.fn() } },
 }));
 
+vi.mock("./provider", () => ({
+  buildAiClient: vi.fn(() => ({ generateText: vi.fn(), forcedToolCall: vi.fn() })),
+}));
+
 describe("getAiClient", () => {
   it("usa a credencial do usuário quando existe", async () => {
     const { prisma } = await import("@/server/db/client");
@@ -39,5 +43,48 @@ describe("getAiClient", () => {
     expect(r.provider).toBe("OPENAI");
     expect(r.apiKey).toBe("sk-platform-test");
     expect(r.source).toBe("platform");
+  });
+
+  it("chave da plataforma → força o modelo econômico em todas as chamadas", async () => {
+    vi.clearAllMocks();
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ aiProvider: null, aiKeyEnc: null });
+    const { buildAiClient } = await import("./provider");
+    const { getAiClient } = await import("./resolve");
+
+    await getAiClient("user-2"); // sem modelo por número
+    expect(buildAiClient).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "OPENAI", model: "gpt-4o-mini" }),
+    );
+  });
+
+  it("chave da plataforma → respeita um modelo econômico escolhido por número", async () => {
+    vi.clearAllMocks();
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ aiProvider: null, aiKeyEnc: null });
+    const { buildAiClient } = await import("./provider");
+    const { getAiClient } = await import("./resolve");
+
+    await getAiClient("user-2", "gpt-4.1-nano");
+    expect(buildAiClient).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-4.1-nano" }),
+    );
+  });
+
+  it("BYOK → NÃO força modelo; mantém os tiers do provider do cliente", async () => {
+    vi.clearAllMocks();
+    const { prisma } = await import("@/server/db/client");
+    const { encryptSecret } = await import("@/server/crypto");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      aiProvider: "ANTHROPIC",
+      aiKeyEnc: encryptSecret("sk-ant-user"),
+    });
+    const { buildAiClient } = await import("./provider");
+    const { getAiClient } = await import("./resolve");
+
+    await getAiClient("user-1"); // sem modelo por número → tiers do provider (model undefined)
+    expect(buildAiClient).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "ANTHROPIC", model: undefined }),
+    );
   });
 });

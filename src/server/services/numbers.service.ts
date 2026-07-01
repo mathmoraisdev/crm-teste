@@ -43,8 +43,9 @@ export async function assertNumberQuota(userId: string, phone: string): Promise<
  *
  * - modelo null/cheap → sempre ok (sem consulta).
  * - `plan == null` (grandfather) ou admin da plataforma → sem clamp.
- * - modelo strong em plano sem `allowStrongModel` → rejeita (faça upgrade ou BYOK).
- *   O clamp de runtime no `respondToLead` ainda é a rede de segurança em downgrades.
+ * - modelo strong em plano sem `allowStrongModel` → rejeita (use a própria chave / BYOK).
+ *   Hoje nenhum plano comercial libera strong na chave da plataforma; grandfather/admin
+ *   seguem isentos. O clamp de runtime no `respondToLead` ainda é a rede de segurança.
  */
 export async function assertModelAllowedForPlan(
   userId: string,
@@ -59,7 +60,7 @@ export async function assertModelAllowedForPlan(
   if (!owner.plan || isAdminEmail(owner.email)) return; // grandfather / admin
   if (!PLAN_LIMITS[owner.plan].allowStrongModel) {
     throw new Error(
-      "O modelo avançado não está disponível no seu plano. Faça upgrade ou use sua própria chave (BYOK).",
+      "O modelo avançado só está disponível com a sua própria chave de IA (BYOK). Configure-a em Configurações para usá-lo.",
     );
   }
 }

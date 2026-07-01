@@ -210,11 +210,20 @@ describe("resolveAiModelForUser (clamp por plano)", () => {
     expect(await resolveAiModelForUser("dono-1", "gpt-4o")).toBeNull();
   });
 
-  it("plano com strong → mantém o modelo escolhido", async () => {
+  it("plano pago na chave da plataforma → strong vira null (strong só via BYOK)", async () => {
     const { resolveProviderForUser } = await import("@/server/ai/resolve");
     (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "ESCALA" });
+    const { resolveAiModelForUser } = await import("./entitlements");
+    expect(await resolveAiModelForUser("dono-1", "gpt-4o")).toBeNull();
+  });
+
+  it("grandfather (plan null) → mantém strong (exceção intencional do admin)", async () => {
+    const { resolveProviderForUser } = await import("@/server/ai/resolve");
+    (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: null });
     const { resolveAiModelForUser } = await import("./entitlements");
     expect(await resolveAiModelForUser("dono-1", "gpt-4o")).toBe("gpt-4o");
   });
