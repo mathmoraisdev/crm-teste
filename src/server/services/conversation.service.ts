@@ -181,9 +181,9 @@ export async function ingestInboundMedia(input: {
   whatsAppNumberId?: string;
   placeholder: string;
   providerMessageId: string | null;
-  // Anexo baixado (só imagem/PDF) — ausente p/ tipos que não baixamos.
+  // Anexo baixado (imagem/áudio/PDF) — ausente p/ tipos que não baixamos.
   buffer?: Buffer;
-  mediaType?: "image" | "document";
+  mediaType?: "image" | "audio" | "document";
   mime?: string;
   fileName?: string;
 }): Promise<void> {

@@ -44,9 +44,9 @@ export interface InboundMediaEvent {
   placeholder: string; // rótulo legível ("📷 Imagem")
   providerMessageId: string | null;
   whatsAppNumberId: string;
-  // Anexo baixado (só imagem/PDF):
+  // Anexo baixado (imagem/áudio/PDF):
   buffer?: Buffer;
-  mediaType?: "image" | "document";
+  mediaType?: "image" | "audio" | "document";
   mime?: string;
   fileName?: string;
 }

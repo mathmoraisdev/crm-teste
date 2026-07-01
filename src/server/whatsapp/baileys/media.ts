@@ -14,10 +14,13 @@ export const MEDIA_KEYS = [
   "locationMessage",
 ] as const;
 
-/** true se o conteúdo (já desaninhado) for uma mensagem de mídia conhecida. */
+/** true se o conteúdo (já desaninhado) for uma mensagem de mídia conhecida.
+ *  Testa o VALOR da chave (não `in`): objetos do Baileys podem trazer chaves de
+ *  oneof presentes com valor nulo, e `in` daria falso-positivo. */
 export function isMediaMessage(inner: unknown): boolean {
   if (!inner || typeof inner !== "object") return false;
-  return MEDIA_KEYS.some((k) => k in (inner as Record<string, unknown>));
+  const o = inner as Record<string, unknown>;
+  return MEDIA_KEYS.some((k) => !!o[k]);
 }
 
 /** Strings de placeholder — FONTE ÚNICA, referenciada pelos dois formatos de
@@ -61,8 +64,11 @@ const CLOUD_MEDIA_LABELS: Record<string, string> = {
  *  que algo chegou — não baixamos nem armazenamos o arquivo. */
 export function mediaPlaceholder(inner: unknown): string | null {
   if (!inner || typeof inner !== "object") return null;
+  const o = inner as Record<string, unknown>;
+  // Testa o VALOR (não `in`): a chave `imageMessage` pode existir com valor nulo
+  // e, sendo a 1ª da lista, roubaria o rótulo de um áudio/vídeo real.
   for (const k of MEDIA_KEYS) {
-    if (k in (inner as Record<string, unknown>)) return MEDIA_LABELS[k];
+    if (o[k]) return MEDIA_LABELS[k];
   }
   return null;
 }
@@ -78,13 +84,13 @@ export function cloudApiMediaPlaceholder(type: string): string | null {
 export const MEDIA_PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PH));
 
 // ─────────────────────────────────────────────────────────────
-// Mídia BAIXÁVEL (escopo atual: só imagem e documento/PDF).
-// Áudio/vídeo/figurinha/contato/localização seguem só como placeholder.
+// Mídia BAIXÁVEL (escopo atual: imagem, áudio e documento/PDF).
+// Vídeo/figurinha/contato/localização seguem só como placeholder.
 // ─────────────────────────────────────────────────────────────
 
 /** Metadados extraídos de uma mídia baixável do Baileys. */
 export interface DownloadableMedia {
-  mediaType: "image" | "document";
+  mediaType: "image" | "audio" | "document";
   mime: string;
   /** extensão derivada do mime/fileName (sem ponto), ex.: "pdf", "jpg". */
   ext: string;
@@ -101,6 +107,13 @@ function extFromMime(mime: string): string {
     "image/webp": "webp",
     "image/gif": "gif",
     "application/pdf": "pdf",
+    "audio/ogg": "ogg",
+    "audio/opus": "opus",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/amr": "amr",
+    "audio/wav": "wav",
   };
   if (map[mime]) return map[mime];
   // mime "application/vnd...." → pega o sufixo depois de "/" e limpa.
@@ -120,6 +133,12 @@ export function downloadableMedia(inner: unknown): DownloadableMedia | null {
     const mime = o.imageMessage.mimetype || "image/jpeg";
     const ext = extFromMime(mime);
     return { mediaType: "image", mime, ext, fileName: `imagem.${ext}` };
+  }
+  if (o.audioMessage) {
+    // Nota de voz do WhatsApp costuma ser "audio/ogg; codecs=opus".
+    const mime = o.audioMessage.mimetype || "audio/ogg";
+    const ext = extFromMime(mime);
+    return { mediaType: "audio", mime, ext, fileName: `audio.${ext}` };
   }
   if (o.documentMessage) {
     const mime = o.documentMessage.mimetype || "application/octet-stream";

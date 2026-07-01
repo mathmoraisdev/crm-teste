@@ -361,6 +361,23 @@ function MediaAttachment({
   message: Message;
   inbound: boolean;
 }) {
+  // Áudio (nota de voz): player inline em vez de chip de download. O <audio>
+  // segue o redirect 302 do endpoint p/ a URL assinada do storage.
+  if (message.mediaType === "audio") {
+    return (
+      <audio
+        controls
+        preload="none"
+        src={`/api/media/${message.id}`}
+        className="h-9 w-[220px] max-w-full sm:w-[240px]"
+      >
+        <a href={`/api/media/${message.id}`} target="_blank" rel="noopener noreferrer">
+          Baixar áudio
+        </a>
+      </audio>
+    );
+  }
+
   const isImage = message.mediaType === "image";
   const name = message.fileName || (isImage ? "Imagem" : "Documento");
   return (
