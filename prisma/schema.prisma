@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // url = conexão de runtime (na Vercel: pooler de transação 6543, com pgbouncer).
   url       = env("DATABASE_URL")
   // directUrl = conexão direta (5432) usada por `db push`/migrations/introspect,
@@ -19,10 +19,22 @@ enum AiProvider {
   ANTHROPIC
 }
 
+enum PaymentProvider {
+  MERCADO_PAGO
+  ASAAS
+}
+
+enum SaleStatus {
+  PENDING // cobrança criada, aguardando pagamento
+  PAID // confirmado via webhook + reconsulta na API
+  EXPIRED // Pix expirou sem pagamento
+  CANCELED // cancelado manualmente
+}
+
 enum BillingOverride {
-  AUTO       // segue o prazo (accessUntil)
-  ACTIVE     // forçado ativo pelo admin (ganha da data)
-  SUSPENDED  // forçado suspenso pelo admin (ganha da data)
+  AUTO // segue o prazo (accessUntil)
+  ACTIVE // forçado ativo pelo admin (ganha da data)
+  SUSPENDED // forçado suspenso pelo admin (ganha da data)
 }
 
 enum PaymentMethod {
@@ -39,24 +51,24 @@ enum Plan {
 }
 
 enum AccountRole {
-  ADMIN     // dono da conta — billing, equipe, números
-  OPERADOR  // atende/CRM; sem billing nem gestão de equipe
+  ADMIN // dono da conta — billing, equipe, números
+  OPERADOR // atende/CRM; sem billing nem gestão de equipe
 }
 
 // Escopo de leads visível a um operador (ignorado no dono/ADMIN).
 enum LeadsScope {
-  ALL       // vê todos os leads da conta
-  ASSIGNED  // vê só os leads atribuídos a ele
+  ALL // vê todos os leads da conta
+  ASSIGNED // vê só os leads atribuídos a ele
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique // login (normalizado lowercase)
-  whatsapp      String? // telefone informado no cadastro (opcional)
-  passwordHash  String // scrypt$salt$hash
-  emailVerified DateTime? // null = e-mail ainda não confirmado
-  sessionEpoch  Int       @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
+  id              String          @id @default(cuid())
+  name            String
+  email           String          @unique // login (normalizado lowercase)
+  whatsapp        String? // telefone informado no cadastro (opcional)
+  passwordHash    String // scrypt$salt$hash
+  emailVerified   DateTime? // null = e-mail ainda não confirmado
+  sessionEpoch    Int             @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
   // Prazo de acesso (trial ou pago): a conta funciona enquanto `accessUntil` está
   // no futuro. Expira em tempo real (sem cron) — os gates comparam na hora.
   // `billingOverride` permite forçar/liberar manualmente preservando a data.
@@ -70,22 +82,22 @@ model User {
   // O admin define no /financeiro. Só faz sentido no dono (ownerId = null).
   plan            Plan?
   // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
-  role            AccountRole @default(ADMIN)
+  role            AccountRole     @default(ADMIN)
   // Limitações configuráveis do OPERADOR (o admin define no /equipe). No dono/ADMIN
   // são ignoradas — ele sempre tem acesso total. Enforced no servidor (rotas de API).
-  canCampaigns    Boolean     @default(true)  // pode criar/disparar campanhas
-  canSettings     Boolean     @default(true)  // pode editar Configurações/IA da conta
-  leadsScope      LeadsScope  @default(ALL)   // ALL = todos os leads; ASSIGNED = só os atribuídos
+  canCampaigns    Boolean         @default(true) // pode criar/disparar campanhas
+  canSettings     Boolean         @default(true) // pode editar Configurações/IA da conta
+  leadsScope      LeadsScope      @default(ALL) // ALL = todos os leads; ASSIGNED = só os atribuídos
   // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
   // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
   pipelineLabels  Json?
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId         String?
-  owner           User?       @relation("AccountMembers", fields: [ownerId], references: [id], onDelete: Cascade)
-  members         User[]      @relation("AccountMembers")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  owner           User?           @relation("AccountMembers", fields: [ownerId], references: [id], onDelete: Cascade)
+  members         User[]          @relation("AccountMembers")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   // BYOK: credencial de IA do usuário (null = usa a chave da plataforma).
   aiProvider      AiProvider? // OPENAI | ANTHROPIC | null
@@ -98,34 +110,43 @@ model User {
   aiCreditMonth String? // "YYYY-MM" — mês de referência do contador
   aiCreditUsed  Int     @default(0) // atendimentos de IA consumidos no mês corrente
 
-  leads                     Lead[]
-  assignedLeads             Lead[]   @relation("AssignedLeads")
-  tags                      Tag[]
-  customFieldDefs           CustomFieldDef[]
-  campaigns                 Campaign[]
-  whatsAppNumbers           WhatsAppNumber[]
-  emailVerificationTokens   EmailVerificationToken[]
-  passwordResetTokens       PasswordResetToken[]
-  payments                  Payment[] @relation("AccountPayments")    // pagamentos DESTA conta (receita)
-  registeredPayments        Payment[] @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
+  // BYOK de pagamento: credencial do gateway do cliente (null = vendas desligadas).
+  paymentProvider      PaymentProvider? // MERCADO_PAGO | ASAAS | null
+  paymentKeyEnc        String? // token cifrado (AES-256-GCM): "iv:tag:ciphertext"
+  paymentKeyLast4      String? // 4 últimos p/ exibir na UI
+  paymentKeyVerifiedAt DateTime? // última validação bem-sucedida contra o gateway
+
+  offers Offer[]
+  sales  Sale[]
+
+  leads                   Lead[]
+  assignedLeads           Lead[]                   @relation("AssignedLeads")
+  tags                    Tag[]
+  customFieldDefs         CustomFieldDef[]
+  campaigns               Campaign[]
+  whatsAppNumbers         WhatsAppNumber[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  payments                Payment[]                @relation("AccountPayments") // pagamentos DESTA conta (receita)
+  registeredPayments      Payment[]                @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
 // Fonte de verdade da RECEITA (o acesso continua em User.accessUntil). Reembolso,
 // no futuro, é um lançamento à parte (amountCents negativo) — não editamos linha.
 model Payment {
-  id          String         @id @default(cuid())
-  accountId   String         // conta que pagou (User.id)
-  account     User           @relation("AccountPayments", fields: [accountId], references: [id], onDelete: Cascade)
-  amountCents Int            // valor em centavos (BRL). > 0 no lançamento normal.
-  method      PaymentMethod? // forma usada NESTE pagamento (snapshot; pode diferir do padrão da conta)
-  paidAt      DateTime       @default(now()) // quando entrou (data do lançamento) — base da "receita do mês"
-  coversUntil DateTime?      // até quando este pagamento estendeu o acesso (snapshot do accessUntil resultante)
-  note        String?        // observação livre do admin (opcional)
+  id             String         @id @default(cuid())
+  accountId      String // conta que pagou (User.id)
+  account        User           @relation("AccountPayments", fields: [accountId], references: [id], onDelete: Cascade)
+  amountCents    Int // valor em centavos (BRL). > 0 no lançamento normal.
+  method         PaymentMethod? // forma usada NESTE pagamento (snapshot; pode diferir do padrão da conta)
+  paidAt         DateTime       @default(now()) // quando entrou (data do lançamento) — base da "receita do mês"
+  coversUntil    DateTime? // até quando este pagamento estendeu o acesso (snapshot do accessUntil resultante)
+  note           String? // observação livre do admin (opcional)
   // Quem lançou (admin). Nullable: lançamentos antigos / scripts podem não ter autor.
   registeredById String?
-  registeredBy   User?       @relation("RegisteredPayments", fields: [registeredById], references: [id], onDelete: SetNull)
-  createdAt   DateTime       @default(now())
+  registeredBy   User?          @relation("RegisteredPayments", fields: [registeredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
 
   @@index([accountId])
   @@index([paidAt])
@@ -137,6 +158,8 @@ enum LeadStatus {
   EM_CONVERSA
   QUALIFICADO
   REUNIAO_AGENDADA
+  OFERTA_ENVIADA // oferta apresentada + Pix enviado, aguardando pagamento
+  PAGO // pagamento confirmado
   DESCARTADO
 }
 
@@ -155,25 +178,25 @@ enum MessageStatus {
 // Origem de uma mensagem OUTBOUND (null = INBOUND do lead ou linha legada).
 // Usado p/ separar métrica de tempo de resposta da IA vs. do atendente humano.
 enum MessageSource {
-  AI        // resposta conversacional gerada pela IA
-  OPERATOR  // resposta humana (inbox CRM ou digitada no próprio WhatsApp)
-  CAMPAIGN  // disparo de campanha (template/freeform)
-  SYSTEM    // automatismo sem ser resposta (lembrete de reunião, etc.)
+  AI // resposta conversacional gerada pela IA
+  OPERATOR // resposta humana (inbox CRM ou digitada no próprio WhatsApp)
+  CAMPAIGN // disparo de campanha (template/freeform)
+  SYSTEM // automatismo sem ser resposta (lembrete de reunião, etc.)
 }
 
 enum CampaignStatus {
   DRAFT
   RUNNING
-  PAUSED        // pausada pelo gate de qualidade
+  PAUSED // pausada pelo gate de qualidade
   COMPLETED
 }
 
 enum OutboundJobStatus {
-  PENDING       // aguardando o worker
-  SENDING       // travado por um worker (evita envio duplo)
-  SENT          // enviado com sucesso
-  FAILED        // falhou após retries
-  CANCELLED     // lead deu opt-out / campanha cancelada
+  PENDING // aguardando o worker
+  SENDING // travado por um worker (evita envio duplo)
+  SENT // enviado com sucesso
+  FAILED // falhou após retries
+  CANCELLED // lead deu opt-out / campanha cancelada
 }
 
 enum MeetingStatus {
@@ -184,61 +207,62 @@ enum MeetingStatus {
 
 // Camada de workflow humano sobre a conversa (derivada de aiPaused + atribuição).
 enum AttendanceStatus {
-  IA          // IA atende (fora do inbox humano)
-  FILA        // aguardando um atendente assumir
-  ATENDENDO   // operador atribuído, em atendimento
-  AGUARDANDO  // operador respondeu, aguardando o cliente
-  RESOLVIDA   // encerrada
+  IA // IA atende (fora do inbox humano)
+  FILA // aguardando um atendente assumir
+  ATENDENDO // operador atribuído, em atendimento
+  AGUARDANDO // operador respondeu, aguardando o cliente
+  RESOLVIDA // encerrada
 }
 
 enum WhatsAppNumberStatus {
-  CONNECTING    // pareando / subindo socket
-  CONNECTED     // saudável, pode enviar
-  WARMING       // conectado, mas em warm-up (cap reduzido)
-  PAUSED        // pausado manualmente
-  LOGGED_OUT    // aparelho deslogado (401) — precisa reescanear; configs preservadas
-  BANNED        // 403 detectado — ban efetivo, fora da rotação
-  DISABLED      // desativado pelo operador
+  CONNECTING // pareando / subindo socket
+  CONNECTED // saudável, pode enviar
+  WARMING // conectado, mas em warm-up (cap reduzido)
+  PAUSED // pausado manualmente
+  LOGGED_OUT // aparelho deslogado (401) — precisa reescanear; configs preservadas
+  BANNED // 403 detectado — ban efetivo, fora da rotação
+  DISABLED // desativado pelo operador
 }
 
 model Lead {
-  id            String         @id @default(cuid())
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String
-  name          String
-  phone         String // E.164 normalizado — único POR conta (ver @@unique abaixo)
-  email         String? // capturado pela IA na conversa (ou informado manualmente)
-  status        LeadStatus     @default(NOVO)
-  score         Int            @default(0)
-  campaign      Campaign?      @relation(fields: [campaignId], references: [id])
-  campaignId    String?
-  messages      Message[]
-  qualification Qualification?
-  meeting       Meeting?
-  optOut        Boolean        @default(false)
-  optOutAt      DateTime?
-  consentSource String? // origem do opt-in (LGPD)
-  tags          Tag[]          @relation("LeadTags")
-  customFields  Json?          // valores dos CustomFieldDef da conta (chaveado por `key`)
+  id                String           @id @default(cuid())
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  name              String
+  phone             String // E.164 normalizado — único POR conta (ver @@unique abaixo)
+  email             String? // capturado pela IA na conversa (ou informado manualmente)
+  status            LeadStatus       @default(NOVO)
+  score             Int              @default(0)
+  campaign          Campaign?        @relation(fields: [campaignId], references: [id])
+  campaignId        String?
+  messages          Message[]
+  qualification     Qualification?
+  meeting           Meeting?
+  sales             Sale[]
+  optOut            Boolean          @default(false)
+  optOutAt          DateTime?
+  consentSource     String? // origem do opt-in (LGPD)
+  tags              Tag[]            @relation("LeadTags")
+  customFields      Json? // valores dos CustomFieldDef da conta (chaveado por `key`)
   // IA pausada manualmente p/ este lead (handover humano)
-  aiPaused      Boolean        @default(false)
-  aiPausedAt    DateTime?
+  aiPaused          Boolean          @default(false)
+  aiPausedAt        DateTime?
   // Sinal p/ o worker: IA reativada (devolução/resolve) com inbound pendente →
   // responde a backlog sem esperar nova mensagem do lead. O worker consome e limpa.
   aiResumePendingAt DateTime?
   // ── Atendimento humano (inbox / multiatendimento) ──────────────────────
-  attendanceStatus AttendanceStatus @default(IA)
-  assignedTo       User?            @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId     String?
-  queuedAt        DateTime?  // entrou na FILA (base do SLA)
-  firstResponseAt DateTime?  // 1ª resposta humana após a fila (fecha o SLA)
-  lastReadAt      DateTime?  // leitura (inbox compartilhado)
-  outboundJobs  OutboundJob[]
+  attendanceStatus  AttendanceStatus @default(IA)
+  assignedTo        User?            @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId      String?
+  queuedAt          DateTime? // entrou na FILA (base do SLA)
+  firstResponseAt   DateTime? // 1ª resposta humana após a fila (fecha o SLA)
+  lastReadAt        DateTime? // leitura (inbox compartilhado)
+  outboundJobs      OutboundJob[]
   // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
-  whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
-  whatsAppNumberId String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])
+  whatsAppNumberId  String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   // Identidade da conversa é por EMPRESA (número), não por operador:
   // a mesma pessoa pode falar com 2 empresas suas = 2 conversas distintas.
@@ -312,10 +336,10 @@ model Message {
   // Mídia recebida do lead (imagem/PDF). O binário fica no Supabase Storage
   // (bucket privado); aqui guardamos só o caminho do objeto + metadados. Null
   // em mensagens de texto e nas anteriores a este campo.
-  mediaPath         String?          // caminho no bucket (NÃO é URL; assinamos sob demanda)
-  mediaType         String?          // "image" | "document"
-  mediaMime         String?          // ex.: "application/pdf", "image/jpeg"
-  fileName          String?          // nome original p/ exibir/baixar ("contrato.pdf")
+  mediaPath         String? // caminho no bucket (NÃO é URL; assinamos sob demanda)
+  mediaType         String? // "image" | "document"
+  mediaMime         String? // ex.: "application/pdf", "image/jpeg"
+  fileName          String? // nome original p/ exibir/baixar ("contrato.pdf")
   createdAt         DateTime         @default(now())
 
   @@index([leadId, createdAt])
@@ -357,44 +381,51 @@ model Qualification {
 
 model Meeting {
   // 1:1 com Lead
-  id              String        @id @default(cuid())
-  lead            Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  leadId          String        @unique
-  status          MeetingStatus @default(PROPOSED)
-  proposedSlots   Json // ISO datetimes propostos
-  scheduledAt     DateTime?
-  calendarEventId String?
-  meetingLink     String?
+  id                   String        @id @default(cuid())
+  lead                 Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId               String        @unique
+  status               MeetingStatus @default(PROPOSED)
+  proposedSlots        Json // ISO datetimes propostos
+  scheduledAt          DateTime?
+  calendarEventId      String?
+  meetingLink          String?
   // Lembretes já enviados ao lead (anti-duplicidade): véspera (~24h) e em cima da hora (~1h).
   remindedDayBeforeAt  DateTime?
   remindedHourBeforeAt DateTime?
-  createdAt       DateTime      @default(now())
+  createdAt            DateTime      @default(now())
 }
 
 model OutboundJob {
-  id           String            @id @default(cuid())
-  lead         Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  leadId       String
-  campaign     Campaign?         @relation(fields: [campaignId], references: [id])
-  campaignId   String?
-  kind         String // "template" | "freeform"
-  content      String // texto renderizado (auditoria / freeform)
-  templateName String? // nome do template aprovado (quando kind=template)
-  status       OutboundJobStatus @default(PENDING)
-  attempts     Int               @default(0)
-  deferCount   Int               @default(0) // deferimentos por falta de chip (anti-livelock)
-  claimedAt    DateTime?         // quando um worker travou em SENDING (p/ reaper de órfãos)
-  lastError    String?
-  scheduledFor DateTime          @default(now())
-  sentAt       DateTime?
+  id               String            @id @default(cuid())
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId           String
+  campaign         Campaign?         @relation(fields: [campaignId], references: [id])
+  campaignId       String?
+  kind             String // "template" | "freeform"
+  content          String // texto renderizado (auditoria / freeform)
+  templateName     String? // nome do template aprovado (quando kind=template)
+  status           OutboundJobStatus @default(PENDING)
+  attempts         Int               @default(0)
+  deferCount       Int               @default(0) // deferimentos por falta de chip (anti-livelock)
+  claimedAt        DateTime? // quando um worker travou em SENDING (p/ reaper de órfãos)
+  lastError        String?
+  scheduledFor     DateTime          @default(now())
+  sentAt           DateTime?
   // qual chip enviou (auditoria + cap por número + roteamento de resposta)
-  whatsAppNumber   WhatsAppNumber? @relation(fields: [whatsAppNumberId], references: [id])
+  whatsAppNumber   WhatsAppNumber?   @relation(fields: [whatsAppNumberId], references: [id])
   whatsAppNumberId String?
   // resposta manual citando uma Message (id interno). O worker resolve o
   // providerMessageId/conteúdo p/ montar o `quoted` do Baileys ao enviar.
   replyToMessageId String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  // Anexo de saída (operador enviou arquivo pela inbox): caminho no Supabase
+  // Storage + metadados. O web sobe o arquivo e enfileira; o worker baixa o
+  // buffer e envia pelo chip. Null em jobs de texto/campanha.
+  mediaPath        String?
+  mediaType        String? // "image" | "document" | "audio"
+  mediaMime        String?
+  fileName         String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([status, scheduledFor])
   @@index([status, claimedAt]) // reaper varre SENDING órfãos por idade do lease
@@ -404,26 +435,26 @@ model OutboundJob {
 }
 
 model WhatsAppNumber {
-  id           String               @id @default(cuid())
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId       String
-  label        String               // apelido operacional ("chip-01")
-  phone        String               // número do próprio chip, E.164 — único POR conta
-  sessionDir   String               @unique // subpasta em BAILEYS_AUTH_DIR (global, com prefixo do user)
-  status       WhatsAppNumberStatus @default(CONNECTING)
-  dailyCap     Int                  @default(30) // teto/dia deste chip (warm-up / disparo dormente)
+  id         String               @id @default(cuid())
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  label      String // apelido operacional ("chip-01")
+  phone      String // número do próprio chip, E.164 — único POR conta
+  sessionDir String               @unique // subpasta em BAILEYS_AUTH_DIR (global, com prefixo do user)
+  status     WhatsAppNumberStatus @default(CONNECTING)
+  dailyCap   Int                  @default(30) // teto/dia deste chip (warm-up / disparo dormente)
 
   // ── Config de ATENDIMENTO (número = empresa) ───────────────────────────
-  displayName       String?  // nome público da empresa (cai p/ `label` se null)
-  aiModel           String?  // modelo da IA que opera a resposta (ID do provider); null = padrão do tier
-  systemPromptOverride String?  // prompt mestre completo; quando setado, SUBSTITUI o ATTENDANCE_SYSTEM padrão
-  persona           String?  // tom/estilo do atendente ("formal", "descontraído", instruções)
-  knowledgeBase     String?  // FAQ / produtos / serviços (texto livre injetado no prompt)
-  businessHours     String?  // horário de atendimento em texto livre ("Seg–Sex 9h–18h")
-  customInstructions String? // instruções extras específicas da empresa
-  autoReplyEnabled  Boolean  @default(true)  // IA responde automaticamente o inbound
-  qualifyEnabled    Boolean  @default(false) // roda qualificação/score (funil de vendas)
-  scheduleEnabled   Boolean  @default(false) // permite propor/agendar reunião
+  displayName                String? // nome público da empresa (cai p/ `label` se null)
+  aiModel                    String? // modelo da IA que opera a resposta (ID do provider); null = padrão do tier
+  systemPromptOverride       String? // prompt mestre completo; quando setado, SUBSTITUI o ATTENDANCE_SYSTEM padrão
+  persona                    String? // tom/estilo do atendente ("formal", "descontraído", instruções)
+  knowledgeBase              String? // FAQ / produtos / serviços (texto livre injetado no prompt)
+  businessHours              String? // horário de atendimento em texto livre ("Seg–Sex 9h–18h")
+  customInstructions         String? // instruções extras específicas da empresa
+  autoReplyEnabled           Boolean @default(true) // IA responde automaticamente o inbound
+  qualifyEnabled             Boolean @default(false) // roda qualificação/score (funil de vendas)
+  scheduleEnabled            Boolean @default(false) // permite propor/agendar reunião
   // Texto dos lembretes de reunião ao lead (placeholders {{nome}} {{quando}} {{link}});
   // null/vazio = usa o texto padrão. Véspera (~24h) e em cima da hora (~1h).
   reminderDayBeforeTemplate  String?
@@ -433,19 +464,20 @@ model WhatsAppNumber {
   replyDelaySeconds       Int     @default(10) // janela de espera (debounce) antes de responder; junta msgs picadas
   firstReplyDelaySeconds  Int     @default(15) // espera específica da PRIMEIRA resposta da conversa
   autoPauseOnHumanReply   Boolean @default(true) // operador respondeu manual pelo zap → pausa a IA
-  inactivityResumeMinutes Int     @default(0)  // 0 = desligado; >0 = reativa a IA após N min sem interação
+  inactivityResumeMinutes Int     @default(0) // 0 = desligado; >0 = reativa a IA após N min sem interação
   contextResetMinutes     Int     @default(180) // silêncio > N min → IA zera o contexto (nova conversa); 0 = nunca zera
 
-  pairingQr    String?              // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
-  lastError    String?
-  connectedAt  DateTime?
-  bannedAt     DateTime?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  pairingQr   String? // QR atual p/ pareamento (gravado pelo worker, lido pela UI; null quando conectado)
+  lastError   String?
+  connectedAt DateTime?
+  bannedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   outboundJobs OutboundJob[]
   messages     Message[]
   leads        Lead[]
+  offers       Offer[]
   authState    WhatsAppAuthState[] // credenciais Baileys persistidas no banco
 
   @@unique([userId, phone])
@@ -507,6 +539,45 @@ model AppSetting {
 model WorkerHeartbeat {
   id     String   @id
   beatAt DateTime
+}
+
+// Oferta que a IA pode apresentar/cobrar. Ligada a um número; várias por número.
+model Offer {
+  id               String         @id @default(cuid())
+  userId           String // dono (tenant) — desnormalizado p/ query/isolamento
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsAppNumberId String
+  whatsAppNumber   WhatsAppNumber @relation(fields: [whatsAppNumberId], references: [id], onDelete: Cascade)
+  name             String // "Mentoria Fitness"
+  description      String? // "Plano de treino + acompanhamento semanal"
+  priceCents       Int // valor em centavos (BRL) — FONTE DE VERDADE do preço
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  sales            Sale[]
+
+  @@index([whatsAppNumberId, active])
+}
+
+// Uma cobrança gerada p/ um lead. Fonte de verdade do estado da venda.
+model Sale {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId           String
+  lead             Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  offerId          String
+  offer            Offer           @relation(fields: [offerId], references: [id])
+  provider         PaymentProvider
+  providerChargeId String // id da cobrança no gateway (chave de reconciliação)
+  amountCents      Int // snapshot do priceCents no momento da cobrança
+  status           SaleStatus      @default(PENDING)
+  pixCopiaECola    String? // payload Pix copia-e-cola
+  createdAt        DateTime        @default(now())
+  paidAt           DateTime?
+
+  @@unique([provider, providerChargeId]) // idempotência do webhook
+  @@index([leadId])
 }
 
 // Estado de autenticação do Baileys persistido no banco (chave/valor por número).
