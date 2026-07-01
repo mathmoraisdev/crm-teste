@@ -79,4 +79,17 @@ describe("decidePipeline", () => {
     expect(d.status).toBe("DESCARTADO");
     expect(d.shouldSchedule).toBe(false);
   });
+
+  it("send_offer → shouldOffer true, status OFERTA_ENVIADA (mesmo com score alto)", () => {
+    const d = decidePipeline({ current: "EM_CONVERSA", score: 80, nextAction: "send_offer" });
+    expect(d.shouldOffer).toBe(true);
+    expect(d.status).toBe("OFERTA_ENVIADA");
+    expect(d.shouldSchedule).toBe(false);
+    expect(d.shouldReply).toBe(false);
+  });
+
+  it("estados terminais (PAGO/DESCARTADO) não reagem a send_offer", () => {
+    expect(decidePipeline({ current: "PAGO", score: 90, nextAction: "send_offer" }).shouldOffer).toBe(false);
+    expect(decidePipeline({ current: "DESCARTADO", score: 90, nextAction: "send_offer" }).shouldOffer).toBe(false);
+  });
 });

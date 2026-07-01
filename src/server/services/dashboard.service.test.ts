@@ -35,7 +35,7 @@ describe("getDashboard", () => {
     expect(data.rates.meetingRate).toBe(0);
     expect(data.sla.avgFirstResponseSeconds).toBeNull();
     expect(data.aiSla.avgResponseSeconds).toBeNull(); // sem respostas da IA → null
-    expect(data.funnel).toHaveLength(6); // uma entrada por etapa do enum
+    expect(data.funnel).toHaveLength(8); // uma entrada por etapa do enum (inclui OFERTA_ENVIADA/PAGO)
   });
 
   it("pareia resposta da IA ao 1º inbound da rajada (SLA da IA)", async () => {

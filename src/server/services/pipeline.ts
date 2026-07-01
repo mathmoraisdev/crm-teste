@@ -20,9 +20,10 @@ export interface PipelineDecision {
   shouldSchedule: boolean;
   shouldReply: boolean;
   shouldDiscard: boolean;
+  shouldOffer: boolean;
 }
 
-const TERMINAL: LeadStatus[] = ["REUNIAO_AGENDADA", "DESCARTADO"];
+const TERMINAL: LeadStatus[] = ["REUNIAO_AGENDADA", "PAGO", "DESCARTADO"];
 
 export function decidePipeline(input: {
   current: LeadStatus;
@@ -38,6 +39,19 @@ export function decidePipeline(input: {
       shouldSchedule: false,
       shouldReply: false,
       shouldDiscard: false,
+      shouldOffer: false,
+    };
+  }
+
+  // Venda: a IA sinalizou intenção de compra clara. Precede a qualificação por
+  // score — vender é o desfecho mais avançado que agendar uma reunião.
+  if (nextAction === "send_offer") {
+    return {
+      status: "OFERTA_ENVIADA",
+      shouldSchedule: false,
+      shouldReply: false,
+      shouldDiscard: false,
+      shouldOffer: true,
     };
   }
 
@@ -47,6 +61,7 @@ export function decidePipeline(input: {
       shouldSchedule: true,
       shouldReply: false,
       shouldDiscard: false,
+      shouldOffer: false,
     };
   }
 
@@ -56,6 +71,7 @@ export function decidePipeline(input: {
       shouldSchedule: false,
       shouldReply: false,
       shouldDiscard: true,
+      shouldOffer: false,
     };
   }
 
@@ -64,5 +80,6 @@ export function decidePipeline(input: {
     shouldSchedule: false,
     shouldReply: true,
     shouldDiscard: false,
+    shouldOffer: false,
   };
 }
