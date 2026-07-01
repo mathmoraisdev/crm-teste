@@ -19,6 +19,8 @@ import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import { uploadInboundMedia } from "@/server/storage/media-storage";
+import { transcribeAudio } from "@/server/ai/transcribe";
+import { shouldTranscribe } from "@/server/ai/transcribe-policy";
 
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
@@ -186,20 +188,21 @@ export async function ingestInboundMedia(input: {
   mediaType?: "image" | "audio" | "document";
   mime?: string;
   fileName?: string;
-}): Promise<void> {
+  audioSeconds?: number | null; // duração da nota de voz (guardrail de áudio longo)
+}): Promise<{ respond: boolean; leadId: string | null; delayMs: number }> {
   if (input.providerMessageId) {
     const existing = await prisma.message.findUnique({
       where: { providerMessageId: input.providerMessageId },
-      select: { id: true },
+      select: { leadId: true },
     });
-    if (existing) return;
+    if (existing) return { respond: false, leadId: existing.leadId, delayMs: 0 };
   }
   const lead = await resolveOrCreateLead({
     phone: input.phone,
     whatsAppNumberId: input.whatsAppNumberId,
     text: input.placeholder,
   });
-  if (!lead) return;
+  if (!lead) return { respond: false, leadId: null, delayMs: 0 };
 
   // Se veio arquivo (imagem/PDF) e o storage está configurado, sobe pro bucket
   // privado e guarda só o caminho. Falha/sem storage → segue só com placeholder.
@@ -229,13 +232,28 @@ export async function ingestInboundMedia(input: {
     }
   }
 
+  // Áudio: se elegível, transcreve para texto e trata como inbound de texto.
+  // Mantém mediaPath (player do operador) E content=transcrição (contexto da IA).
+  let transcript: string | null = null;
+  if (
+    input.mediaType === "audio" &&
+    input.buffer &&
+    input.mime &&
+    shouldTranscribe(
+      { seconds: input.audioSeconds ?? null },
+      { enabled: env.TRANSCRIBE_ENABLED, maxSeconds: env.TRANSCRIBE_MAX_SECONDS },
+    )
+  ) {
+    transcript = await transcribeAudio(input.buffer, input.mime);
+  }
+
   await prisma.message.create({
     data: {
       leadId: lead.id,
       direction: "INBOUND",
-      content: input.placeholder,
+      content: transcript ?? input.placeholder, // transcrição quando houver; senão "🎤 Áudio"
       providerMessageId: input.providerMessageId ?? undefined,
-      ...(media ?? {}),
+      ...(media ?? {}), // mediaPath/mediaType/... — player do operador continua
     },
   });
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
@@ -243,6 +261,13 @@ export async function ingestInboundMedia(input: {
   await invalidateLeadCaches(lead.userId);
   // Lead resolvido que manda mídia também reabre no inbox p/ o operador ver.
   await reopenIfResolved(lead);
+
+  // Sem transcrição → comportamento antigo (não aciona IA).
+  if (!transcript) return { respond: false, leadId: lead.id, delayMs: 0 };
+
+  // Com transcrição → segue a MESMA lógica de timing do texto. É conteúdo do lead,
+  // então opt-out/billing não se aplicam aqui (a resposta reusa respondToLead).
+  return { respond: true, leadId: lead.id, delayMs: await suggestReplyDelay(lead) };
 }
 
 /**
@@ -270,6 +295,31 @@ async function reopenIfResolved(lead: {
   });
   // Mudou de aba (RESOLVIDA → IA/FILA) → atualiza contadores/facets do inbox.
   await invalidateLeadCaches(lead.userId);
+}
+
+/**
+ * Atraso (debounce) sugerido antes da IA responder, em ms. A 1ª resposta da
+ * conversa (sem nenhum OUTBOUND ainda) usa um tempo próprio; as demais usam o
+ * padrão do número. Fonte única p/ `ingestInbound` (texto) e `ingestInboundMedia`
+ * (áudio transcrito) — o timing precisa ser idêntico nos dois caminhos.
+ */
+async function suggestReplyDelay(lead: {
+  id: string;
+  whatsAppNumberId: string | null;
+}): Promise<number> {
+  const num = lead.whatsAppNumberId
+    ? await prisma.whatsAppNumber.findUnique({
+        where: { id: lead.whatsAppNumberId },
+        select: { replyDelaySeconds: true, firstReplyDelaySeconds: true },
+      })
+    : null;
+  // Existe pelo menos 1 OUTBOUND? findFirst para na 1ª linha (count varre tudo).
+  const firstOutbound = await prisma.message.findFirst({
+    where: { leadId: lead.id, direction: "OUTBOUND" },
+    select: { id: true },
+  });
+  const seconds = firstOutbound ? num?.replyDelaySeconds ?? 0 : num?.firstReplyDelaySeconds ?? 0;
+  return Math.max(0, seconds) * 1000;
 }
 
 export async function ingestInbound(input: InboundInput): Promise<IngestResult> {
@@ -348,24 +398,10 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     return { leadId: lead.id, respond: false, delayMs: 0 };
   }
 
-  // Timing: calcula o atraso (debounce) sugerido. A 1ª resposta da conversa usa
-  // um tempo próprio; as demais usam o padrão. O worker usa isso pra agrupar
+  // Timing: calcula o atraso (debounce) sugerido. O worker usa isso pra agrupar
   // mensagens picadas; chamadores síncronos (webhook/dev/smoke) ignoram e
   // respondem na hora via handleInbound.
-  const num = lead.whatsAppNumberId
-    ? await prisma.whatsAppNumber.findUnique({
-        where: { id: lead.whatsAppNumberId },
-        select: { replyDelaySeconds: true, firstReplyDelaySeconds: true },
-      })
-    : null;
-  // Existe pelo menos 1 OUTBOUND? findFirst para na 1ª linha (count varre tudo).
-  const firstOutbound = await prisma.message.findFirst({
-    where: { leadId: lead.id, direction: "OUTBOUND" },
-    select: { id: true },
-  });
-  const hasOutbound = !!firstOutbound;
-  const seconds = hasOutbound ? num?.replyDelaySeconds ?? 0 : num?.firstReplyDelaySeconds ?? 0;
-  return { leadId: lead.id, respond: true, delayMs: Math.max(0, seconds) * 1000 };
+  return { leadId: lead.id, respond: true, delayMs: await suggestReplyDelay(lead) };
 }
 
 /**
