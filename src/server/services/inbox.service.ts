@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { AttendanceStatus } from "@prisma/client";
+import type { AttendanceStatus, LeadStatus } from "@prisma/client";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
 
@@ -15,6 +15,8 @@ export interface InboxConversation {
   name: string;
   phone: string;
   attendanceStatus: AttendanceStatus;
+  // Estágio no funil de vendas — dá contexto de "onde está a venda" no inbox.
+  status: LeadStatus;
   assignedTo: { id: string; name: string } | null;
   lastMessage: string | null;
   lastMessageAt: Date | null;
@@ -125,6 +127,7 @@ export async function listConversations(
       name: l.name,
       phone: l.phone,
       attendanceStatus: l.attendanceStatus,
+      status: l.status,
       assignedTo: l.assignedTo ? { id: l.assignedTo.id, name: l.assignedTo.name } : null,
       lastMessage: l.messages[0]?.content ?? null,
       lastMessageAt: l.messages[0]?.createdAt ?? null,

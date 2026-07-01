@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { Lead, LeadStatus, Prisma } from "@prisma/client";
+import type { AttendanceStatus, Lead, LeadStatus, Prisma } from "@prisma/client";
 import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
@@ -23,6 +23,9 @@ export interface LeadListItem {
   campaignName: string | null;
   lastMessage: string | null;
   lastMessageAt: Date | null;
+  // Contexto de atendimento p/ o card do kanban sinalizar "precisa de humano".
+  attendanceStatus: AttendanceStatus;
+  queuedAt: Date | null;
   tags: LeadTag[];
   updatedAt: Date;
 }
@@ -106,6 +109,8 @@ export async function listLeads(
       campaignName: l.campaign?.name ?? null,
       lastMessage: l.messages[0]?.content ?? null,
       lastMessageAt: l.messages[0]?.createdAt ?? null,
+      attendanceStatus: l.attendanceStatus,
+      queuedAt: l.queuedAt,
       tags: l.tags,
       updatedAt: l.updatedAt,
     })),

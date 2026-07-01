@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ConversationView } from "@/components/ConversationView";
+import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { QualificationPanel } from "@/components/QualificationPanel";
 import { TagPicker } from "@/components/TagPicker";
 import { ConversationList } from "@/components/inbox/ConversationList";
@@ -97,6 +98,19 @@ export function InboxView() {
     if (selectedRef.current) loadDetail(selectedRef.current);
   });
 
+  // Deep-link vindo do CRM (/inbox?c=<leadId>): pré-seleciona a conversa e marca
+  // como lida. Abre em "Todas" p/ maximizar a chance de a conversa estar na
+  // lista; se estiver fora do filtro (ex.: resolvida), o painel central ainda
+  // renderiza a partir do `detail` carregado direto por id (guard abaixo).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("c");
+    if (!id) return;
+    setFilter("todas");
+    setSelectedId(id);
+    fetch(`/api/inbox/${id}/read`, { method: "POST" }).catch(() => {});
+    // roda só na montagem — leitura única do parâmetro
+  }, []);
+
   // useCallback: identidade estável p/ a ConversationList memoizada não
   // re-renderizar a cada poll (4s) por causa de um novo onSelect.
   const select = useCallback(
@@ -139,13 +153,21 @@ export function InboxView() {
   }
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
-  const isMine = !!selectedConv?.assignedTo && selectedConv.assignedTo.id === me;
+  // Deep-link do CRM pode abrir uma conversa fora do filtro atual: aí
+  // `selectedConv` é null e usamos o próprio `detail` como fonte do atendimento.
+  const attendanceStatus = selectedConv?.attendanceStatus ?? detail?.attendanceStatus ?? null;
+  const assignedToId = selectedConv?.assignedTo?.id ?? detail?.assignedToId ?? null;
+  const isMine = !!assignedToId && assignedToId === me;
   const assignedLabel = selectedConv?.assignedTo
     ? selectedConv.assignedTo.id === me
       ? "Você"
       : selectedConv.assignedTo.name
-    : null;
-  const meta = selectedConv ? ATTENDANCE_META[selectedConv.attendanceStatus] : null;
+    : assignedToId
+      ? assignedToId === me
+        ? "Você"
+        : null
+      : null;
+  const meta = attendanceStatus ? ATTENDANCE_META[attendanceStatus] : null;
 
   return (
     <div className="space-y-4">
@@ -177,7 +199,7 @@ export function InboxView() {
 
         {/* Centro: conversa */}
         <Card className="flex h-[75vh] flex-col overflow-hidden p-0">
-          {!detail || !selectedConv ? (
+          {!detail ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-400">
               Selecione uma conversa.
             </div>
@@ -189,11 +211,12 @@ export function InboxView() {
                     <div className="flex items-center gap-2">
                       <span className="truncate font-bold text-ink">{detail.name}</span>
                       {meta && <Badge tone={meta.tone}>{meta.label}</Badge>}
+                      <LeadStatusBadge status={detail.status} />
                       {detail.optOut && <Badge tone="red">Opt-out</Badge>}
                     </div>
                     <p className="text-xs text-slate-400">
                       {formatPhone(detail.phone)}
-                      {selectedConv.whatsAppNumber && <> · {selectedConv.whatsAppNumber}</>}
+                      {selectedConv?.whatsAppNumber && <> · {selectedConv.whatsAppNumber}</>}
                       {assignedLabel && <> · {assignedLabel}</>}
                     </p>
                   </div>
@@ -217,7 +240,7 @@ export function InboxView() {
                         <Bot size={14} /> Devolver à IA
                       </Button>
                     )}
-                    {selectedConv.attendanceStatus !== "RESOLVIDA" && (
+                    {attendanceStatus !== "RESOLVIDA" && (
                       <Button
                         size="sm"
                         variant="secondary"

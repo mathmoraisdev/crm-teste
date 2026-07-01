@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { Badge, type Tone } from "@/components/ui/Badge";
+import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { formatPhone } from "@/lib/phone";
 import { timeAgo, cn } from "@/lib/utils";
 import type { AttendanceStatus } from "@prisma/client";
@@ -62,6 +63,7 @@ export const ConversationListItem = memo(function ConversationListItem({
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <Badge tone={meta.tone}>{meta.label}</Badge>
+        <LeadStatusBadge status={conversation.status} />
         {conversation.optOut && <Badge tone="red">Opt-out</Badge>}
         {conversation.assignedTo && (
           <span className="text-[11px] text-slate-400">{conversation.assignedTo.name}</span>

@@ -3,7 +3,7 @@
 import { memo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { LeadStatus } from "@prisma/client";
+import type { AttendanceStatus, LeadStatus } from "@prisma/client";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { TagChip } from "@/components/TagChip";
 import { PIPELINE_ORDER, resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
@@ -13,6 +13,45 @@ import type { LeadListItem } from "@/server/services/lead.service";
 
 /** Coluna em verde-claro p/ os estágios "positivos" do funil. */
 const POSITIVE = new Set(["QUALIFICADO", "REUNIAO_AGENDADA"]);
+
+/**
+ * Minutos na fila a partir dos quais o card sinaliza SLA (lead esperando humano
+ * há tempo demais). Só destaque visual — não altera nada no servidor.
+ */
+const SLA_QUEUE_MINUTES = 10;
+
+/**
+ * Estados de atendimento que o card do kanban sinaliza (IA e RESOLVIDA são o
+ * "normal" e não poluem o card). Deixa o vendedor ver, sem sair do funil, que
+ * aquele lead precisa de humano.
+ */
+const ATTENDANCE_HINT: Partial<Record<AttendanceStatus, { label: string; cls: string }>> = {
+  FILA: { label: "Na fila", cls: "bg-[#FEF3E2] text-[#B97309]" },
+  ATENDENDO: { label: "Atendendo", cls: "bg-[#EFEAFE] text-[#6D43D6]" },
+  AGUARDANDO: { label: "Aguardando", cls: "bg-slate-100 text-slate-500" },
+};
+
+/** Pill de atendimento do card; vira vermelho quando a fila estoura o SLA. */
+function AttendancePill({ lead }: { lead: LeadListItem }) {
+  const hint = ATTENDANCE_HINT[lead.attendanceStatus];
+  if (!hint) return null;
+  const overdue =
+    lead.attendanceStatus === "FILA" &&
+    !!lead.queuedAt &&
+    Date.now() - new Date(lead.queuedAt).getTime() > SLA_QUEUE_MINUTES * 60_000;
+  return (
+    <span
+      className={cn(
+        "mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold",
+        overdue ? "bg-[#FDECEC] text-[#C0392B]" : hint.cls,
+      )}
+      title={overdue ? `Na fila há mais de ${SLA_QUEUE_MINUTES} min sem atendimento` : undefined}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {overdue ? "SLA — na fila" : hint.label}
+    </span>
+  );
+}
 
 /** Mover manual para estes estágios é só rótulo — não cria reunião nem aciona a IA. */
 const SIDE_EFFECT_FREE_HINT: Partial<Record<LeadStatus, string>> = {
@@ -65,6 +104,7 @@ const KanbanCard = memo(function KanbanCard({
       <span className="mt-1 block font-mono text-[11.5px] text-slate-400">
         {formatPhone(lead.phone)}
       </span>
+      <AttendancePill lead={lead} />
       {lead.lastMessage && (
         <p className="mt-2 line-clamp-2 text-xs text-slate-500">{lead.lastMessage}</p>
       )}

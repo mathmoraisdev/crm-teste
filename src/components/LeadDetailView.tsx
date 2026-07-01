@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Headset, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -100,6 +100,12 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             status={lead.status}
             label={resolveStatusMeta(pipelineLabels)[lead.status].label}
           />
+          <Link
+            href={`/inbox?c=${lead.id}`}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-brand-400 hover:bg-slate-50"
+          >
+            <Headset size={14} /> Atendimento
+          </Link>
           <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil size={14} /> Editar
           </Button>
