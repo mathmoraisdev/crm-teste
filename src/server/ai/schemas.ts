@@ -10,6 +10,7 @@ import { z } from "zod";
 export const NEXT_ACTIONS = [
   "ask_question",
   "schedule_meeting",
+  "send_offer",
   "discard",
 ] as const;
 export type NextAction = (typeof NEXT_ACTIONS)[number];
@@ -27,6 +28,9 @@ export const qualificationSchema = z.object({
   score: z.number().min(0).max(100),
   summary: z.string(),
   nextAction: z.enum(NEXT_ACTIONS),
+  // Oferta escolhida pela IA quando nextAction = "send_offer". Deve ser um id da
+  // lista de OFERTAS DISPONÍVEIS; null quando não se aplica. O servidor valida.
+  offerId: z.string().nullable().optional(),
 });
 export type QualificationResult = z.infer<typeof qualificationSchema>;
 
@@ -84,7 +88,12 @@ export const qualificationJsonSchema = {
       type: "string",
       enum: NEXT_ACTIONS,
       description:
-        "ask_question = continuar qualificando; schedule_meeting = pronto para agendar; discard = lead sem fit/desinteressado.",
+        "ask_question = continuar qualificando; schedule_meeting = pronto para agendar; send_offer = intenção de compra clara, apresentar oferta e cobrar; discard = lead sem fit/desinteressado.",
+    },
+    offerId: {
+      type: ["string", "null"],
+      description:
+        "Quando nextAction = send_offer, o id da oferta escolhida ENTRE as listadas em OFERTAS DISPONÍVEIS. Nunca invente um id nem informe preço. null nas demais ações.",
     },
   },
   required: [
@@ -99,6 +108,7 @@ export const qualificationJsonSchema = {
     "score",
     "summary",
     "nextAction",
+    "offerId",
   ],
 } as const;
 

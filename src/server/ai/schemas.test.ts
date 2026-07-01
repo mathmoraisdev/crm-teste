@@ -51,6 +51,16 @@ describe("qualificationSchema (validação de saída do modelo)", () => {
     expect(qualificationSchema.safeParse({ ...validQual, nextAction: "talvez" }).success).toBe(false);
   });
 
+  it("aceita send_offer com offerId string ou null", () => {
+    expect(NEXT_ACTIONS).toContain("send_offer");
+    expect(
+      qualificationSchema.safeParse({ ...validQual, nextAction: "send_offer", offerId: "off_abc" }).success,
+    ).toBe(true);
+    expect(qualificationSchema.safeParse({ ...validQual, offerId: null }).success).toBe(true);
+    // offerId é opcional: ausência não invalida.
+    expect(qualificationSchema.safeParse(validQual).success).toBe(true);
+  });
+
   it("rejeita interestLevel inválido e summary ausente", () => {
     expect(qualificationSchema.safeParse({ ...validQual, interestLevel: "altíssimo" }).success).toBe(false);
     const { summary, ...noSummary } = validQual;

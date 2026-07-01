@@ -1,3 +1,5 @@
+import { formatCentsBRL } from "@/lib/money";
+
 /**
  * Monta (PURA) o bloco de contexto da empresa para o prompt de atendimento.
  * Omite seções ausentes para não poluir o prompt com "null".
@@ -14,4 +16,27 @@ export function buildAttendanceContext(c: {
   if (c.businessHours) parts.push(`Horário de atendimento: ${c.businessHours}`);
   if (c.knowledgeBase) parts.push(`Base de conhecimento:\n${c.knowledgeBase}`);
   return parts.join("\n\n");
+}
+
+/** Oferta reduzida ao que a IA precisa ver no contexto. */
+export interface OfferForContext {
+  id: string;
+  name: string;
+  priceCents: number;
+  description?: string | null;
+}
+
+/**
+ * Renderiza (PURA) as ofertas ativas como bloco estruturado para o prompt.
+ * A IA escolhe o `id`; o preço é fixo (fonte de verdade no banco). String vazia
+ * quando não há ofertas — o chamador omite o bloco.
+ */
+export function renderActiveOffers(offers: OfferForContext[]): string {
+  if (!offers.length) return "";
+  const lines = offers.map((o) => {
+    const price = formatCentsBRL(o.priceCents);
+    const desc = o.description?.trim() ? ` | ${o.description.trim()}` : "";
+    return `- id=${o.id} | ${o.name} | ${price}${desc}`;
+  });
+  return `OFERTAS DISPONÍVEIS (use o id ao escolher; o preço é fixo, não altere):\n${lines.join("\n")}`;
 }

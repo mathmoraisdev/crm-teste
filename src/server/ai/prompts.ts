@@ -15,8 +15,11 @@ Critérios de score (0–100), pondere com bom senso:
 
 Diretrizes para nextAction:
 - "schedule_meeting": o lead demonstrou interesse claro e há fit suficiente para uma reunião (normalmente score >= 70).
+- "send_offer": o lead demonstrou INTENÇÃO CLARA DE COMPRA e há OFERTAS DISPONÍVEIS na lista do contexto. Escolha em "offerId" o id de uma oferta DA LISTA (nunca invente id nem informe preço). Se houver mais de uma oferta e o lead não deixou claro qual, prefira "ask_question" pedindo esclarecimento — não cobre às cegas. Se não houver lista de ofertas, nunca use send_offer.
 - "discard": o lead deixou claro que não tem interesse, não tem fit, ou pediu para não ser mais contatado (use junto de score baixo).
 - "ask_question": ainda falta informação para decidir — continue qualificando.
+
+Use "offerId" apenas com nextAction = "send_offer"; nas demais ações deixe "offerId" como null.
 
 Seja realista: no começo da conversa o score costuma ser baixo e nextAction = "ask_question". Não descarte um lead só por ainda não ter dado sinais — descarte exige desinteresse explícito.
 

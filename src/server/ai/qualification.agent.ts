@@ -19,12 +19,15 @@ export async function runQualification(opts: {
   ai: AiClient;
   leadName: string;
   conversation: ConversationTurn[];
+  /** Bloco de ofertas ativas (renderActiveOffers). Vazio = número sem vendas. */
+  offersBlock?: string;
 }): Promise<QualificationResult> {
+  const offers = opts.offersBlock?.trim() ? `\n\n${opts.offersBlock.trim()}` : "";
   const input = await opts.ai.forcedToolCall({
     tier: "strong",
     maxTokens: 1024,
     system: QUALIFICATION_SYSTEM,
-    user: `Lead: ${opts.leadName}\n\nConversa até agora:\n${formatTranscript(opts.conversation)}`,
+    user: `Lead: ${opts.leadName}\n\nConversa até agora:\n${formatTranscript(opts.conversation)}${offers}`,
     toolName: "registrar_qualificacao",
     toolDescription: "Registra a qualificação estruturada do lead.",
     jsonSchema: qualificationJsonSchema as unknown as Record<string, unknown>,

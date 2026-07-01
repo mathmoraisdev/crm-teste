@@ -14,11 +14,14 @@ export async function qualifyLead(opts: {
   leadId: string;
   leadName: string;
   conversation: ConversationTurn[];
+  /** Bloco de ofertas ativas (renderActiveOffers) — habilita a IA a acionar send_offer. */
+  offersBlock?: string;
 }): Promise<QualificationResult> {
   const result = await runQualification({
     ai: opts.ai,
     leadName: opts.leadName,
     conversation: opts.conversation,
+    offersBlock: opts.offersBlock,
   });
 
   const score = Math.round(result.score);
