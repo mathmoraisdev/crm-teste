@@ -73,12 +73,18 @@ async function bootBaileys(): Promise<Pool> {
         mediaType: e.mediaType,
         mime: e.mime,
         fileName: e.fileName,
-      }).catch((err) => {
-        logger.error(
-          { whatsAppNumberId: e.whatsAppNumberId, fromPhone: e.fromPhone, err },
-          "[worker] ingestInboundMedia falhou",
-        );
-      }),
+        audioSeconds: e.audioSeconds,
+      })
+        .then((r) => {
+          // Áudio transcrito → agenda a resposta da IA como se fosse texto.
+          if (r.respond && r.leadId) scheduleResponse(r.leadId, r.delayMs);
+        })
+        .catch((err) => {
+          logger.error(
+            { whatsAppNumberId: e.whatsAppNumberId, fromPhone: e.fromPhone, err },
+            "[worker] ingestInboundMedia falhou",
+          );
+        }),
     onAck: (id, status) => applyAck(id, status),
   });
   await p.ensureConnections();
