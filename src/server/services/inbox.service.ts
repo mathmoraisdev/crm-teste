@@ -135,10 +135,9 @@ export async function listConversations(
     };
   });
 
-  rows.sort((a, b) => {
-    if (a.unread !== b.unread) return a.unread ? -1 : 1;
-    return (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0);
-  });
+  // Ordem cronológica pura (última mensagem mais recente no topo), como no WhatsApp.
+  // "não-lida" é só destaque visual na lista, não altera a posição.
+  rows.sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
   return rows;
 }
 
