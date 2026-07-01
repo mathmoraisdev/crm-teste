@@ -27,16 +27,34 @@ type AiUsage =
   | { unlimited: true; reason: "byok" | "grandfather" | "admin" }
   | { unlimited: false; used: number; quota: number; month: string };
 
+type PaymentProvider = "MERCADO_PAGO" | "ASAAS";
+
+type PaymentKeyStatus = {
+  configured: boolean;
+  provider: PaymentProvider | null;
+  last4: string | null;
+  verifiedAt: string | null;
+};
+
+const PAYMENT_PROVIDER_LABEL: Record<PaymentProvider, string> = {
+  MERCADO_PAGO: "Mercado Pago",
+  ASAAS: "Asaas",
+};
+
 export function AccountSettings({
   account,
   aiKey,
   aiUsage,
+  paymentKey,
+  salesAllowed = false,
   canSettings = true,
   isOwner = true,
 }: {
   account: Account;
   aiKey: AiKeyStatus;
   aiUsage: AiUsage;
+  paymentKey?: PaymentKeyStatus;
+  salesAllowed?: boolean; // plano permite o funil de vendas (mostra o bloco de Pix)
   canSettings?: boolean;
   isOwner?: boolean; // dono/ADMIN — só ele exporta/exclui a conta
 }) {
@@ -88,6 +106,42 @@ export function AccountSettings({
   async function removeKey() {
     await fetch("/api/account/ai-key", { method: "DELETE" });
     setStatus({ configured: false, provider: null, last4: null, verifiedAt: null });
+  }
+
+  // BYOK de pagamento: gateway Pix do cliente (Mercado Pago / Asaas).
+  const [payStatus, setPayStatus] = useState<PaymentKeyStatus>(
+    paymentKey ?? { configured: false, provider: null, last4: null, verifiedAt: null },
+  );
+  const [payProvider, setPayProvider] = useState<PaymentProvider>(
+    paymentKey?.provider ?? "MERCADO_PAGO",
+  );
+  const [payKeyInput, setPayKeyInput] = useState("");
+  const [paySaving, setPaySaving] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  async function savePaymentKey() {
+    setPaySaving(true);
+    setPayError(null);
+    try {
+      const res = await fetch("/api/account/payment-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: payProvider, apiKey: payKeyInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao conectar.");
+      setPayStatus(data);
+      setPayKeyInput("");
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Erro ao conectar.");
+    } finally {
+      setPaySaving(false);
+    }
+  }
+
+  async function removePaymentKey() {
+    await fetch("/api/account/payment-key", { method: "DELETE" });
+    setPayStatus({ configured: false, provider: null, last4: null, verifiedAt: null });
   }
 
   async function changePwd() {
@@ -367,6 +421,64 @@ export function AccountSettings({
           )}
         </div>
       </Card>
+
+      {/* BYOK de pagamento — receber Pix na conta do gateway do cliente. Só
+          aparece se o plano permite o funil de vendas. */}
+      {salesAllowed && (
+        <Card>
+          <CardHeader
+            title="Receber pagamentos (Pix)"
+            subtitle="Conecte seu Mercado Pago ou Asaas. A cobrança cai direto na sua conta — a plataforma não intermedia o dinheiro."
+          />
+          <div className="space-y-3 px-5 py-4">
+            {!canSettings ? (
+              <p className="text-sm text-slate-600">
+                {payStatus.configured
+                  ? `${payStatus.provider ? PAYMENT_PROVIDER_LABEL[payStatus.provider] : ""} • conectado ••••${payStatus.last4}.`
+                  : "Nenhum gateway conectado."}{" "}
+                Apenas o administrador da conta pode conectar um gateway.
+              </p>
+            ) : payStatus.configured ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-600">
+                  {payStatus.provider ? PAYMENT_PROVIDER_LABEL[payStatus.provider] : ""} • conectado{" "}
+                  <strong>••••{payStatus.last4}</strong>
+                  {payStatus.verifiedAt ? " • validado" : ""}
+                </p>
+                <Button variant="secondary" onClick={removePaymentKey}>
+                  Remover
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    value={payProvider}
+                    onChange={(e) => setPayProvider(e.target.value as PaymentProvider)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
+                  >
+                    <option value="MERCADO_PAGO">Mercado Pago</option>
+                    <option value="ASAAS">Asaas</option>
+                  </select>
+                  <input
+                    type="password"
+                    value={payKeyInput}
+                    onChange={(e) => setPayKeyInput(e.target.value)}
+                    placeholder={payProvider === "MERCADO_PAGO" ? "Access Token (APP_USR-...)" : "API Key ($aact_...)"}
+                    className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                {payError && <p className="text-sm text-[#C0392B]">{payError}</p>}
+                <div className="flex justify-end">
+                  <Button onClick={savePaymentKey} loading={paySaving} disabled={payKeyInput.length < 12}>
+                    Conectar
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Zona de perigo — excluir a conta inteira: só o dono. */}
       {isOwner && (

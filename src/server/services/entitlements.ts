@@ -32,6 +32,20 @@ export async function assertFeature(userId: string, feature: PlanFeature): Promi
   }
 }
 
+/**
+ * Variante booleana de `assertFeature` (não lança) — para gating de UI. Mesma
+ * régua: grandfather (plan=null) e admin liberam tudo; senão segue PLAN_LIMITS.
+ */
+export async function canUseFeature(userId: string, feature: PlanFeature): Promise<boolean> {
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true },
+  });
+  if (!owner) return false;
+  if (!owner.plan || isAdminEmail(owner.email)) return true;
+  return PLAN_LIMITS[owner.plan][feature];
+}
+
 /** Chave de mês "YYYY-MM" em UTC — usada pra resetar a cota na virada. */
 export function monthKey(d: Date = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;

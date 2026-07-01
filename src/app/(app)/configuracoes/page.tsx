@@ -3,7 +3,8 @@ import { getCurrentUserId } from "@/lib/session";
 import { getTenantContext } from "@/lib/tenant";
 import { getUserById } from "@/server/services/user.service";
 import { getAiCredentialStatus } from "@/server/services/ai-credential.service";
-import { getAiUsageStatus } from "@/server/services/entitlements";
+import { getPaymentCredentialStatus } from "@/server/services/payment-credential.service";
+import { getAiUsageStatus, canUseFeature } from "@/server/services/entitlements";
 import { AccountSettings } from "@/components/app/AccountSettings";
 import { CustomFieldsManager } from "@/components/CustomFieldsManager";
 import { PipelineLabelsManager } from "@/components/PipelineLabelsManager";
@@ -27,7 +28,12 @@ export default async function ConfiguracoesPage() {
   const isOwner = ctx?.role === "ADMIN";
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
-  const aiUsage = await getAiUsageStatus(ctx?.tenantUserId ?? userId);
+  const ownerId = ctx?.tenantUserId ?? userId;
+  const [aiUsage, paymentKey, salesAllowed] = await Promise.all([
+    getAiUsageStatus(ownerId),
+    getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
+    canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
+  ]);
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -46,6 +52,8 @@ export default async function ConfiguracoesPage() {
         }}
         aiKey={aiKey}
         aiUsage={aiUsage}
+        paymentKey={paymentKey}
+        salesAllowed={salesAllowed}
         canSettings={canSettings}
         isOwner={isOwner}
       />
