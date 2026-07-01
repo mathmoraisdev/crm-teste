@@ -91,6 +91,13 @@ const schema = z.object({
   // trial automático); o admin libera o teste manualmente no /financeiro.
   TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),
 
+  // ── Funil de vendas / cobrança Pix (BYOK de pagamento) ──────────────────────
+  // Base URLs dos gateways (default sandbox no Asaas, prod no Mercado Pago).
+  ASAAS_BASE_URL: z.string().default("https://api-sandbox.asaas.com"),
+  MERCADOPAGO_BASE_URL: z.string().default("https://api.mercadopago.com"),
+  // Base pública do app p/ montar a notification_url dos webhooks de pagamento.
+  APP_PUBLIC_URL: z.string().default("http://localhost:3000"),
+
   // ── Transcrição de áudio (fala→texto) — chave SEMPRE de plataforma ──────────
   TRANSCRIBE_ENABLED: z.coerce.boolean().default(false),
   TRANSCRIBE_PROVIDER: z.enum(["groq", "openai"]).default("groq"),

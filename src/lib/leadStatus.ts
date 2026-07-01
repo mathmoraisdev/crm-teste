@@ -11,7 +11,9 @@ export const LEAD_STATUS_META: Record<
   EM_CONVERSA: { label: "Em conversa", tone: "violet", order: 2 },
   QUALIFICADO: { label: "Qualificado", tone: "green", order: 3 },
   REUNIAO_AGENDADA: { label: "Reunião agendada", tone: "emerald", order: 4 },
-  DESCARTADO: { label: "Descartado", tone: "red", order: 5 },
+  OFERTA_ENVIADA: { label: "Oferta enviada", tone: "amber", order: 5 },
+  PAGO: { label: "Pago", tone: "green", order: 6 },
+  DESCARTADO: { label: "Descartado", tone: "red", order: 7 },
 };
 
 export type PipelineLabels = Partial<Record<LeadStatus, string>>;
@@ -45,6 +47,8 @@ export const PIPELINE_ORDER: LeadStatus[] = [
   "EM_CONVERSA",
   "QUALIFICADO",
   "REUNIAO_AGENDADA",
+  "OFERTA_ENVIADA",
+  "PAGO",
   "DESCARTADO",
 ];
 
