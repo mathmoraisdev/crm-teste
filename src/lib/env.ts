@@ -90,6 +90,15 @@ const schema = z.object({
   // Dias de teste grátis para cadastros novos. Padrão 0 = nasce SUSPENSO (sem
   // trial automático); o admin libera o teste manualmente no /financeiro.
   TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),
+
+  // ── Transcrição de áudio (fala→texto) — chave SEMPRE de plataforma ──────────
+  TRANSCRIBE_ENABLED: z.coerce.boolean().default(false),
+  TRANSCRIBE_PROVIDER: z.enum(["groq", "openai"]).default("groq"),
+  GROQ_API_KEY: z.string().optional().default(""),
+  TRANSCRIBE_MODEL_GROQ: z.string().default("whisper-large-v3-turbo"),
+  TRANSCRIBE_MODEL_OPENAI: z.string().default("whisper-1"),
+  TRANSCRIBE_MAX_SECONDS: z.coerce.number().int().positive().default(300), // 5 min
+  TRANSCRIBE_MAX_CHARS: z.coerce.number().int().positive().default(1200), // truncagem p/ contexto da IA
 });
 
 /**
