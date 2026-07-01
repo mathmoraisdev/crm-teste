@@ -265,8 +265,14 @@ export async function ingestInboundMedia(input: {
   // Sem transcrição → comportamento antigo (não aciona IA).
   if (!transcript) return { respond: false, leadId: lead.id, delayMs: 0 };
 
-  // Com transcrição → segue a MESMA lógica de timing do texto. É conteúdo do lead,
-  // então opt-out/billing não se aplicam aqui (a resposta reusa respondToLead).
+  // Gate de billing: conta suspensa (inadimplência) → a IA silencia, igual ao
+  // caminho de texto (ver ingestInbound). `respondToLead` não revalida billing por
+  // conta própria, então o gate precisa ficar AQUI para o áudio não furar a regra.
+  if (!(await isAccountActiveByLead(lead.id))) {
+    return { respond: false, leadId: lead.id, delayMs: 0 };
+  }
+
+  // Com transcrição e conta ativa → segue a MESMA lógica de timing do texto.
   return { respond: true, leadId: lead.id, delayMs: await suggestReplyDelay(lead) };
 }
 

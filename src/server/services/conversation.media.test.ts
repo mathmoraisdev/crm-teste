@@ -36,6 +36,10 @@ vi.mock("@/server/storage/media-storage", () => ({
   uploadInboundMedia: vi.fn(async () => "leads/lead-1/audio.ogg"),
 }));
 
+vi.mock("@/server/services/account.service", () => ({
+  isAccountActiveByLead: vi.fn(async () => true), // conta ativa (gate de billing passa)
+}));
+
 vi.mock("@/server/cache/keys", () => ({
   cacheKeys: { conversation: (id: string) => `conv:${id}` },
   invalidateConversation: vi.fn(async () => {}),
@@ -70,6 +74,17 @@ describe("ingestInboundMedia — transcrição de áudio", () => {
     expect(createArg.data.content).toBe("quero agendar uma reunião"); // contexto da IA
     expect(createArg.data.mediaPath).toBe("leads/lead-1/audio.ogg"); // player do operador
     expect(createArg.data.direction).toBe("INBOUND");
+  });
+
+  it("conta suspensa: transcreve e grava, mas NÃO aciona a IA (gate de billing)", async () => {
+    const { isAccountActiveByLead } = await import("@/server/services/account.service");
+    (isAccountActiveByLead as any).mockResolvedValueOnce(false);
+    const { ingestInboundMedia } = await import("./conversation.service");
+
+    const res = await ingestInboundMedia({ ...audioInput, audioSeconds: 30 });
+
+    // Transcrição/mensagem acontecem (operador vê), mas a IA fica muda.
+    expect(res).toEqual({ respond: false, leadId: "lead-1", delayMs: 0 });
   });
 
   it("áudio longo (> teto): não transcreve, content=placeholder, não responde", async () => {
