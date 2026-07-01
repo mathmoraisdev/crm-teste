@@ -4,6 +4,7 @@ import { formatSlot } from "@/lib/utils";
 import { getCalendar } from "@/server/calendar";
 import { interpretSlotChoice } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
+import { resolveAiModelForUser } from "@/server/services/entitlements";
 import { sendWhatsAppMessage } from "./messaging";
 
 const TZ = env.SCHEDULING_TIMEZONE;
@@ -68,14 +69,19 @@ export async function interpretAndBook(
   const formatted = slots.map((iso) => formatSlot(iso, TZ));
 
   // BYOK: resolve o AiClient do dono do lead (chave própria ou fallback da plataforma).
-  // Aplica o modelo configurado no número (se houver) a todas as chamadas.
+  // Aplica o modelo configurado no número (se houver) a todas as chamadas, MAS
+  // clampado pelo plano — igual à via de conversa. Sem isso, um número com modelo
+  // strong salvo (ex.: legado de quando PRO/ESCALA liberavam) rodaria gpt-4o na
+  // chave da plataforma. Com o clamp: plano pago → cai no econômico; BYOK/grandfather
+  // → mantém o modelo. O getAiClient ainda força o econômico na chave da plataforma.
   const num = lead.whatsAppNumberId
     ? await prisma.whatsAppNumber.findUnique({
         where: { id: lead.whatsAppNumberId },
         select: { aiModel: true },
       })
     : null;
-  const ai = await getAiClient(lead.userId, num?.aiModel ?? undefined);
+  const effectiveModel = await resolveAiModelForUser(lead.userId, num?.aiModel ?? null);
+  const ai = await getAiClient(lead.userId, effectiveModel ?? undefined);
   const choice = await interpretSlotChoice({
     ai,
     formattedSlots: formatted,

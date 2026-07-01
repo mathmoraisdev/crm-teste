@@ -58,16 +58,18 @@ describe("getAiClient", () => {
     );
   });
 
-  it("chave da plataforma → respeita um modelo econômico escolhido por número", async () => {
+  it("chave da plataforma com modelo já resolvido (grandfather/admin) → usa esse modelo", async () => {
+    // No fluxo real, plano comercial já chega com model=null (clampado por
+    // resolveAiModelForUser); só grandfather/admin passam um modelo explícito aqui.
     vi.clearAllMocks();
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ aiProvider: null, aiKeyEnc: null });
     const { buildAiClient } = await import("./provider");
     const { getAiClient } = await import("./resolve");
 
-    await getAiClient("user-2", "gpt-4.1-nano");
+    await getAiClient("user-2", "gpt-4o");
     expect(buildAiClient).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "gpt-4.1-nano" }),
+      expect.objectContaining({ model: "gpt-4o" }),
     );
   });
 

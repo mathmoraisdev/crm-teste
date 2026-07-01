@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { isAdminEmail } from "@/lib/admin";
 import { PLAN_LIMITS } from "@/lib/plans";
-import { modelCreditWeight, modelTier } from "@/lib/ai-models";
+import { modelCreditWeight } from "@/lib/ai-models";
 import { resolveProviderForUser } from "@/server/ai/resolve";
 
 /** Features booleanas da régua de planos (ver PLAN_LIMITS). */
@@ -90,10 +90,13 @@ export async function consumeAiCredit(
 }
 
 /**
- * Modelo efetivo a usar para o tenant, respeitando o plano:
- *  - BYOK → o modelo pedido, sem clamp (cliente paga).
- *  - plano sem allowStrongModel + modelo strong → null (cai no padrão econômico do tier).
- *  - senão → o modelo pedido.
+ * Modelo efetivo a usar para o tenant, respeitando o plano/chave:
+ *  - BYOK → o modelo pedido, sem clamp (cliente paga a própria chave).
+ *  - grandfather (plan=null) / admin → o modelo pedido, sem clamp (ilimitado, qualquer modelo).
+ *  - plano comercial na chave da PLATAFORMA → null: ignora o override por número e
+ *    deixa o `getAiClient` forçar o econômico. Garante que a nossa chave SÓ roda o
+ *    modelo mais barato (não só bloqueia strong — bloqueia qualquer modelo mais caro
+ *    que o mini, incluindo variantes cheap-tier como gpt-4.1-mini).
  * `requested` = `aiModel` do número (null = padrão da conta).
  */
 export async function resolveAiModelForUser(
@@ -104,14 +107,13 @@ export async function resolveAiModelForUser(
   const { source } = await resolveProviderForUser(userId);
   if (source === "user") return req; // BYOK: sem clamp
 
-  if (modelTier(req) !== "strong") return req; // cheap/null sempre ok
   const owner = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, plan: true },
   });
   if (!owner) throw new Error("Conta não encontrada");
-  if (!owner.plan || isAdminEmail(owner.email)) return req; // grandfather/admin: sem clamp
-  return PLAN_LIMITS[owner.plan].allowStrongModel ? req : null;
+  if (!owner.plan || isAdminEmail(owner.email)) return req; // grandfather/admin: qualquer modelo
+  return null; // plano comercial na plataforma → sempre o econômico (getAiClient força)
 }
 
 export type AiUsageStatus =

@@ -235,13 +235,15 @@ describe("resolveAiModelForUser (clamp por plano)", () => {
     expect(await resolveAiModelForUser("dono-1", "claude-opus-4-8")).toBe("claude-opus-4-8");
   });
 
-  it("modelo cheap passa em qualquer plano", async () => {
+  it("plano comercial na plataforma → override por número é ignorado (sempre null = econômico)", async () => {
     const { resolveProviderForUser } = await import("@/server/ai/resolve");
     (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({ email: "cli@x.com", plan: "INICIAL" });
     const { resolveAiModelForUser } = await import("./entitlements");
-    expect(await resolveAiModelForUser("dono-1", "gpt-4o-mini")).toBe("gpt-4o-mini");
+    // Mesmo um modelo cheap-tier mais caro que o mini (gpt-4.1-mini) é descartado.
+    expect(await resolveAiModelForUser("dono-1", "gpt-4o-mini")).toBeNull();
+    expect(await resolveAiModelForUser("dono-1", "gpt-4.1-mini")).toBeNull();
   });
 });
 
