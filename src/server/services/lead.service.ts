@@ -235,6 +235,26 @@ export async function updateLead(
   return updated;
 }
 
+/**
+ * Reativa um lead que saiu do fluxo por opt-out/descarte. Faz os DOIS gates numa
+ * tacada, evitando o estado inconsistente de mexer só no status (kanban) e deixar
+ * o `optOut` ligado (IA volta, mas campanha segue bloqueada):
+ *  - `status` volta a EM_CONVERSA → destrava a resposta da IA (respondToLead);
+ *  - `optOut`/`optOutAt` limpos → destrava outbound/campanhas (dispatchOutboundJob).
+ * Ação deliberada do operador (LGPD): o contato pediu para não ser abordado, então
+ * a reversão é sempre manual — nunca automática.
+ */
+export async function reactivateLead(id: string, userId: string): Promise<Lead> {
+  const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!exists) throw new Error("Lead não encontrado");
+  const updated = await prisma.lead.update({
+    where: { id },
+    data: { status: "EM_CONVERSA", optOut: false, optOutAt: null },
+  });
+  await invalidateLeadCaches(userId); // status/opt-out mudaram → facets do CRM/inbox
+  return updated;
+}
+
 /** Apaga um lead e tudo associado (mensagens, qualificação, reunião, jobs — cascade). */
 export async function deleteLead(id: string, userId: string): Promise<void> {
   const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });

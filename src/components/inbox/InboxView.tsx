@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, ExternalLink, Hand } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Hand, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -221,6 +221,24 @@ export function InboxView() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {(detail.status === "DESCARTADO" || detail.optOut) && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Este contato foi descartado/opt-out (pediu para não ser abordado). Reativar libera a IA e as campanhas para ele novamente. Confirmar?",
+                            )
+                          ) {
+                            act(`/api/leads/${selectedId}/reactivate`);
+                          }
+                        }}
+                        loading={acting}
+                      >
+                        <RotateCcw size={14} /> Reativar
+                      </Button>
+                    )}
                     {!isMine && (
                       <Button
                         size="sm"

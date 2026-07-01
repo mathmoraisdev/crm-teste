@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Headset, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Headset, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +24,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reactivateOpen, setReactivateOpen] = useState(false);
   const [pipelineLabels, setPipelineLabels] = useState<PipelineLabels>({});
 
   useEffect(() => {
@@ -106,6 +107,11 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           >
             <Headset size={14} /> Atendimento
           </Link>
+          {(lead.status === "DESCARTADO" || lead.optOut) && (
+            <Button variant="secondary" size="sm" onClick={() => setReactivateOpen(true)}>
+              <RotateCcw size={14} /> Reativar
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil size={14} /> Editar
           </Button>
@@ -165,6 +171,29 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           }}
         />
       </Modal>
+
+      <ConfirmDialog
+        open={reactivateOpen}
+        title="Reativar lead"
+        confirmLabel="Reativar"
+        danger={false}
+        message={
+          <>
+            <strong>{lead.name}</strong> foi descartado/opt-out (pediu para não ser
+            abordado). Reativar volta o status para <strong>Em conversa</strong> e
+            remove o opt-out, liberando a IA e as campanhas para este contato.
+          </>
+        }
+        onConfirm={async () => {
+          const res = await fetch(`/api/leads/${lead.id}/reactivate`, { method: "POST" });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error ?? "Falha ao reativar lead");
+          }
+          load();
+        }}
+        onClose={() => setReactivateOpen(false)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}
