@@ -43,6 +43,16 @@ export async function GET() {
     !user?.plan || (user.email && isAdminEmail(user.email))
       ? true
       : PLAN_LIMITS[user.plan].sales;
+  // Qualificação/agendamento: mesma regra (grandfather/admin → sim; senão o plano).
+  // O client usa estas flags p/ clampar os toggles sugeridos por um modelo de negócio.
+  const qualifyAllowed =
+    !user?.plan || (user.email && isAdminEmail(user.email))
+      ? true
+      : PLAN_LIMITS[user.plan].qualify;
+  const scheduleAllowed =
+    !user?.plan || (user.email && isAdminEmail(user.email))
+      ? true
+      : PLAN_LIMITS[user.plan].schedule;
   const paymentConnected = !!user?.paymentProvider;
   return NextResponse.json({
     numbers: withQr,
@@ -50,6 +60,8 @@ export async function GET() {
     provider,
     allowStrongModel,
     salesAllowed,
+    qualifyAllowed,
+    scheduleAllowed,
     paymentConnected,
   });
 }
