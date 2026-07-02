@@ -1676,6 +1676,54 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
       "Confirme a data, o local, o número de convidados e o tipo de assessoria desejada antes de orçar; agende uma reunião para entender o evento. Verifique a disponibilidade da data. O valor é por escopo — não feche sem entender a necessidade.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
   },
+  {
+    id: "imobiliaria",
+    category: "imoveis-turismo",
+    label: "Imobiliária",
+    blurb: "Compra, venda, locação e administração de imóveis.",
+    persona:
+      "Atendente de imobiliária, cordial e consultivo. Entende o perfil do cliente e encaminha ao corretor certo.",
+    businessHours: "Seg–Sex 9h às 18h, Sáb 9h às 13h",
+    knowledgeBase: [
+      "SERVIÇOS",
+      "- Venda · Locação · Administração de imóveis · [Lançamentos?]",
+      "",
+      "COMO FUNCIONA",
+      "- Perfil de busca: tipo, região, faixa de valor, nº de quartos.",
+      "- Visitas agendadas · Locação exige documentação/garantia (fiador, seguro-fiança).",
+      "- Compra: financiamento via banco (análise de crédito).",
+      "",
+      "CARTEIRA / CONTATO",
+      "- Imóveis: [consultar disponibilidade] · [telefone/endereço]",
+    ].join("\n"),
+    customInstructions:
+      "Confirme o perfil de busca (compra ou locação, tipo, região, faixa de valor, nº de quartos) antes de indicar imóveis. Não afirme disponibilidade ou preço sem checar a carteira. Locação exige documentação/garantia; financiamento depende de análise de crédito — não prometa aprovação. Visitas são agendadas.",
+    suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+  },
+  {
+    id: "agencia-viagens",
+    category: "imoveis-turismo",
+    label: "Agência de viagens",
+    blurb: "Pacotes, passagens e roteiros de viagem.",
+    persona:
+      "Consultor(a) de viagens, entusiasmado e organizado. Monta o roteiro conforme o perfil e o orçamento do cliente.",
+    businessHours: "Seg–Sex 9h às 18h, Sáb 9h às 13h",
+    knowledgeBase: [
+      "SERVIÇOS",
+      "- Pacotes (nacionais/internacionais) · Passagens · Hospedagem",
+      "- Cruzeiros · Seguro viagem · Roteiros personalizados",
+      "",
+      "COMO FUNCIONA",
+      "- Orçamento por destino, datas e nº de pessoas · Sinal + parcelamento.",
+      "- Documentação: [passaporte, visto, vacinas] conforme o destino.",
+      "",
+      "PROMOÇÕES / CONTATO",
+      "- Ofertas do mês: [consultar] · [telefone]",
+    ].join("\n"),
+    customInstructions:
+      "Confirme destino, datas, nº de pessoas e orçamento antes de cotar — preços variam muito e mudam por disponibilidade. Não garanta preço ou disponibilidade sem consultar. Oriente sobre documentação (passaporte, visto, vacinas) sem substituir as fontes oficiais.",
+    suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
+  },
 ];
 
 export function getTemplate(id: string): BusinessTemplate | undefined {
