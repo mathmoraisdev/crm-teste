@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   applyTemplate,
   hasTextContent,
+  BUSINESS_TEMPLATES,
+  CATEGORY_LABEL,
+  type BusinessCategory,
   type BusinessTemplate,
   type TemplateApplyTarget,
 } from "./business-templates";
@@ -78,5 +81,23 @@ describe("hasTextContent", () => {
   });
   it("true quando algum campo de texto tem conteúdo", () => {
     expect(hasTextContent({ ...EMPTY, knowledgeBase: "x" })).toBe(true);
+  });
+});
+
+describe("catálogo BUSINESS_TEMPLATES", () => {
+  it("tem ids únicos e em kebab-case", () => {
+    const ids = BUSINESS_TEMPLATES.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+  });
+
+  it("todo modelo tem campos obrigatórios não-vazios e categoria válida", () => {
+    for (const t of BUSINESS_TEMPLATES) {
+      expect(t.label.trim()).not.toBe("");
+      expect(t.blurb.trim()).not.toBe("");
+      expect(t.persona.trim()).not.toBe("");
+      expect(t.knowledgeBase.trim()).not.toBe("");
+      expect(CATEGORY_LABEL[t.category as BusinessCategory]).toBeDefined();
+    }
   });
 });
