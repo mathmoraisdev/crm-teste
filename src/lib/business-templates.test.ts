@@ -101,3 +101,39 @@ describe("catálogo BUSINESS_TEMPLATES", () => {
     }
   });
 });
+
+describe("catálogo — invariantes de produção", () => {
+  it("customInstructions e businessHours são não-vazios em todo modelo", () => {
+    for (const t of BUSINESS_TEMPLATES) {
+      expect(t.customInstructions.trim(), `customInstructions vazio em ${t.id}`).not.toBe("");
+      expect(t.businessHours.trim(), `businessHours vazio em ${t.id}`).not.toBe("");
+    }
+  });
+
+  it("labels são únicos (evita ambiguidade no seletor)", () => {
+    const labels = BUSINESS_TEMPLATES.map((t) => t.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("suggested tem os 4 toggles como booleanos", () => {
+    for (const t of BUSINESS_TEMPLATES) {
+      for (const key of ["autoReply", "qualify", "schedule", "sales"] as const) {
+        expect(typeof t.suggested[key], `${key} não booleano em ${t.id}`).toBe("boolean");
+      }
+    }
+  });
+
+  it("knowledgeBase é estruturado (≥ 4 linhas com conteúdo)", () => {
+    for (const t of BUSINESS_TEMPLATES) {
+      const lines = t.knowledgeBase.split("\n").filter((l) => l.trim());
+      expect(lines.length, `knowledgeBase raso em ${t.id}`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("toda categoria do CATEGORY_LABEL tem ao menos um modelo", () => {
+    const used = new Set(BUSINESS_TEMPLATES.map((t) => t.category));
+    for (const cat of Object.keys(CATEGORY_LABEL) as BusinessCategory[]) {
+      expect(used.has(cat), `categoria sem modelo: ${cat}`).toBe(true);
+    }
+  });
+});
