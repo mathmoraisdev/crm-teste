@@ -5,6 +5,9 @@
 Description=CRM WhatsApp Worker (Baileys)
 After=network-online.target
 Wants=network-online.target
+# Não desistir por "muitos restarts": o worker deve sempre voltar (igual Railway).
+# (StartLimit* pertence à seção [Unit] — em [Service] é ignorado.)
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -21,8 +24,6 @@ ExecStart=/usr/bin/npm run start:worker
 
 Restart=on-failure
 RestartSec=5
-# Não desistir por "muitos restarts": o worker deve sempre voltar (igual Railway).
-StartLimitIntervalSec=0
 
 StandardOutput=journal
 StandardError=journal
