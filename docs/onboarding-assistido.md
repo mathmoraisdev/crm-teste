@@ -47,6 +47,7 @@
 - [ ] Disparar o teste e confirmar entrega
 
 ### 1.5 IA de qualificação
+- [ ] Escolher um **modelo de negócio** no topo do Atendimento (ex.: oficina, clínica, salão) para pré-preencher persona, base de conhecimento e horário — depois é só ajustar os trechos entre `[colchetes]`
 - [ ] Configurar contexto da IA (o que a empresa vende, tom de voz)
 - [ ] Definir regras de qualificação (o que é lead bom/ruim)
 - [ ] Lembrar a limitação: a IA lê só texto (mídia → responde "só leio texto")
