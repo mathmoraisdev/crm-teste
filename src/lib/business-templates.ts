@@ -1724,6 +1724,33 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
       "Confirme destino, datas, nº de pessoas e orçamento antes de cotar — preços variam muito e mudam por disponibilidade. Não garanta preço ou disponibilidade sem consultar. Oriente sobre documentação (passaporte, visto, vacinas) sem substituir as fontes oficiais.",
     suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
   },
+  {
+    id: "atendimento-generico",
+    category: "outro",
+    label: "Atendimento genérico",
+    blurb: "Modelo neutro para qualquer ramo — comece por aqui se não achou o seu.",
+    persona:
+      "Atendente virtual da empresa, cordial, prestativo e objetivo. Representa bem a marca e é honesto sobre o que ainda não sabe.",
+    businessHours: "Seg–Sex 9h às 18h",
+    knowledgeBase: [
+      "O QUE OFERECEMOS",
+      "- Produtos/serviços principais: [liste com preços, se houver]",
+      "",
+      "COMO FUNCIONA",
+      "- Prazo/entrega: [detalhe] · Como comprar/contratar: [passo a passo]",
+      "- Políticas: [troca, garantia, cancelamento]",
+      "",
+      "HORÁRIO E CONTATO",
+      "- Endereço: [rua, número, bairro, cidade] · Telefone: [número]",
+      "- Site/redes: [links]",
+      "",
+      "PAGAMENTO",
+      "- Formas: [Pix, cartão, dinheiro]",
+    ].join("\n"),
+    customInstructions:
+      "Responda apenas com base nas informações cadastradas. Se não souber algo, diga que vai verificar em vez de inventar dado, preço ou promessa. Seja cordial e objetivo, confirme o que a pessoa precisa e colete um contato antes de encaminhar.",
+    suggested: { autoReply: true, qualify: false, schedule: false, sales: false },
+  },
 ];
 
 export function getTemplate(id: string): BusinessTemplate | undefined {
