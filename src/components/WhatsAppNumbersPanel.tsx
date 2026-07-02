@@ -10,6 +10,8 @@ import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AI_MODELS_BY_PROVIDER, type AiProviderName } from "@/lib/ai-models";
 import { OffersManager } from "@/components/OffersManager";
+import { BusinessTemplatePicker } from "@/components/BusinessTemplatePicker";
+import { applyTemplate, hasTextContent, type BusinessTemplate } from "@/lib/business-templates";
 
 interface NumberItem {
   id: string;
@@ -99,6 +101,9 @@ export function WhatsAppNumbersPanel() {
   const [allowStrongModel, setAllowStrongModel] = useState(false);
   // Funil de vendas liberado no plano + se já há gateway de pagamento conectado.
   const [salesAllowed, setSalesAllowed] = useState(false);
+  // Qualificação/agendamento liberados no plano (p/ clampar os toggles do modelo).
+  const [qualifyAllowed, setQualifyAllowed] = useState(false);
+  const [scheduleAllowed, setScheduleAllowed] = useState(false);
   const [paymentConnected, setPaymentConnected] = useState(false);
 
   // estado do modal de pareamento
@@ -138,6 +143,8 @@ export function WhatsAppNumbersPanel() {
       }
       setAllowStrongModel(Boolean(data.allowStrongModel));
       setSalesAllowed(Boolean(data.salesAllowed));
+      setQualifyAllowed(Boolean(data.qualifyAllowed));
+      setScheduleAllowed(Boolean(data.scheduleAllowed));
       setPaymentConnected(Boolean(data.paymentConnected));
     } catch {
       /* mantém estado anterior */
@@ -331,6 +338,23 @@ export function WhatsAppNumbersPanel() {
     } finally {
       setServiceSubmitting(false);
     }
+  }
+
+  // Aplica um modelo de negócio no formulário (merge no client; NÃO salva no banco).
+  // Se já houver texto preenchido, pede confirmação antes de sobrescrever; caso
+  // contrário só preenche os campos vazios. Toggles são clampados pelo plano.
+  function handleApplyTemplate(tpl: BusinessTemplate) {
+    if (!service) return;
+    const overwriteText = hasTextContent(service)
+      ? window.confirm(
+          "Você já preencheu alguns campos. Substituir persona, base de conhecimento e horário pelo modelo? (Cancelar mantém o que você escreveu e só preenche os campos vazios.)",
+        )
+      : false;
+    const merged = applyTemplate(service, tpl, {
+      overwriteText,
+      allow: { qualify: qualifyAllowed, schedule: scheduleAllowed, sales: salesAllowed },
+    });
+    setService({ ...service, ...merged });
   }
 
   async function remove(id: string) {
@@ -671,6 +695,14 @@ export function WhatsAppNumbersPanel() {
       >
         {service && (
           <div className="space-y-3">
+            <BusinessTemplatePicker onApply={handleApplyTemplate} />
+            {service.systemPromptOverride.trim() && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Você tem um System prompt (avançado) preenchido — enquanto ele
+                existir, a IA ignora persona/base/horário. Limpe-o para o modelo
+                ter efeito.
+              </p>
+            )}
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">
                 Nome de exibição
