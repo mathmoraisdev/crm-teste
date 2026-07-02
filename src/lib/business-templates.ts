@@ -1150,7 +1150,7 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
       "- Sinal + parcelamento: [regras] · [telefone/endereço]",
     ].join("\n"),
     customInstructions:
-      "Confirme a data, o tipo de evento, o número de convidados e o local antes de orçar — o valor é por pessoa/cardápio. Verifique a disponibilidade da data e ofereça degustação/reunião. Não feche valor sem esses dados.",
+      "Não invente cardápios, itens ou preços que não foram informados. Confirme a data, o tipo de evento, o número de convidados e o local antes de orçar — o valor é por pessoa/cardápio. Verifique a disponibilidade da data e ofereça degustação/reunião. Não feche valor sem esses dados.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
   },
   {
