@@ -1,0 +1,5 @@
+# Scripts shell e o unit systemd DEVEM manter LF — vão rodar em Linux (VM Oracle).
+# CRLF quebra o shebang ("bad interpreter: /usr/bin/env bash^M").
+*.sh            text eol=lf
+*.service       text eol=lf
+deploy/**       text eol=lf

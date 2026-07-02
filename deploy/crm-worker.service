@@ -1,0 +1,35 @@
+[Unit]
+# Worker WhatsApp (Baileys) — disparo, IA, lembretes, drain de respostas manuais.
+# Roda na VM da Oracle Cloud (substitui o serviço worker do Railway).
+# Ver docs/plans/2026-07-01-migracao-worker-railway-para-oracle-cloud.md
+Description=CRM WhatsApp Worker (Baileys)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/crm
+
+# O env NÃO vem via EnvironmentFile: o `worker:prod` carrega /opt/crm/.env com o
+# parser do tsx (dotenv), que lida com aspas/multilinha (ex.: GOOGLE_PRIVATE_KEY)
+# melhor que o EnvironmentFile do systemd. Basta o .env estar no WorkingDirectory.
+#
+# Sincroniza o schema e sobe o worker — mesmo comando que rodava no Railway.
+# Para trocar por `migrate deploy`, ver Apêndice A do plano (fazer depois, à parte).
+ExecStart=/usr/bin/npm run start:worker
+
+Restart=on-failure
+RestartSec=5
+# Não desistir por "muitos restarts": o worker deve sempre voltar (igual Railway).
+StartLimitIntervalSec=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crm-worker
+
+# Endurecimento básico (worker não precisa escrever fora do próprio diretório).
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
