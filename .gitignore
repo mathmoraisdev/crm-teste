@@ -39,3 +39,5 @@ conexao-*.json
 .vscode/*
 !.vscode/extensions.json
 /coverage
+.vercel
+.env*
