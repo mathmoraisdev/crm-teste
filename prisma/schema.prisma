@@ -55,6 +55,12 @@ enum AccountRole {
   OPERADOR // atende/CRM; sem billing nem gestão de equipe
 }
 
+// Tipo de aviso que o admin da plataforma recebe no /financeiro.
+enum AccountNoticeKind {
+  CANCELAMENTO // o dono pediu p/ cancelar a assinatura (conta ainda existe)
+  EXCLUSAO // o dono excluiu a conta (dados já apagados; sobra só este aviso)
+}
+
 // Escopo de leads visível a um operador (ignorado no dono/ADMIN).
 enum LeadsScope {
   ALL // vê todos os leads da conta
@@ -78,6 +84,11 @@ model User {
   // cliente paga e quando vence a próxima mensalidade. Ambos opcionais.
   paymentMethod   PaymentMethod?
   paymentDueDate  DateTime?
+  // Cancelamento self-service pelo DONO: null = assinatura ativa; preenchido = o
+  // cliente pediu para não renovar. NÃO corta acesso nem apaga dados — o acesso
+  // segue até `accessUntil` e a conta expira sozinha na validade. Sinaliza ao
+  // admin no /financeiro. O dono pode reativar (volta a null) antes de expirar.
+  cancelRequestedAt DateTime?
   // Plano comercial do DONO (null = não definido → entitlements não aplicados).
   // O admin define no /financeiro. Só faz sentido no dono (ownerId = null).
   plan            Plan?
@@ -150,6 +161,22 @@ model Payment {
 
   @@index([accountId])
   @@index([paidAt])
+}
+
+// Aviso para o admin da plataforma: cancelamento/exclusão de conta. Append-only e
+// SEM FK para User de propósito — precisa sobreviver ao delete em cascade da conta
+// (senão a exclusão apagaria o próprio aviso). Guarda um snapshot de nome/e-mail.
+model AccountNotice {
+  id           String            @id @default(cuid())
+  kind         AccountNoticeKind
+  accountName  String // snapshot no momento do evento
+  accountEmail String // snapshot (conta pode já não existir)
+  plan         Plan? // plano no momento do evento (contexto p/ o admin)
+  createdAt    DateTime          @default(now())
+  seenAt       DateTime? // admin visualizou (null = não lido → conta no badge)
+
+  @@index([seenAt])
+  @@index([createdAt])
 }
 
 enum LeadStatus {

@@ -13,7 +13,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  badge?: boolean;
+  badge?: "inbox" | "financeiro"; // qual contador alimenta o badge deste item
   show?: boolean;
 };
 
@@ -29,6 +29,7 @@ export function Sidebar({
   const [loggingOut, setLoggingOut] = useState(false);
   const [open, setOpen] = useState(false);
   const [inboxBadge, setInboxBadge] = useState(0);
+  const [financeiroBadge, setFinanceiroBadge] = useState(0);
 
   // Badge de "Atendimento" = fila + não-lidas. Polling leve.
   useEffect(() => {
@@ -51,13 +52,34 @@ export function Sidebar({
       clearInterval(t);
     };
   }, []);
+
+  // Badge de "Financeiro" = avisos não lidos (cancelamentos/exclusões). Só admin.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    async function load() {
+      try {
+        const res = await fetch("/api/admin/notices/count", { cache: "no-store" });
+        const data = await res.json();
+        if (active && typeof data.count === "number") setFinanceiroBadge(data.count);
+      } catch {
+        // ignora
+      }
+    }
+    load();
+    const t = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [isAdmin, pathname]);
   // Equipe é do dono da conta; Financeiro é do admin da plataforma.
   const navGroups = ([
     {
       title: "Atendimento",
       items: [
         { href: "/painel", label: "Painel", icon: LayoutDashboard },
-        { href: "/inbox", label: "Atendimento", icon: Inbox, badge: true },
+        { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
         { href: "/leads", label: "Leads", icon: Users },
       ],
     },
@@ -73,7 +95,7 @@ export function Sidebar({
       items: [
         { href: "/empresas", label: "Empresas", icon: Building2 },
         { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
-        { href: "/financeiro", label: "Financeiro", icon: Wallet, show: isAdmin },
+        { href: "/financeiro", label: "Financeiro", icon: Wallet, badge: "financeiro", show: isAdmin },
         { href: "/configuracoes", label: "Configurações", icon: Settings },
       ],
     },
@@ -151,7 +173,9 @@ export function Sidebar({
               </p>
               {group.items.map(({ href, label, icon: Icon, badge }) => {
                 const active = pathname === href || pathname.startsWith(href + "/");
-                const showBadge = badge && inboxBadge > 0;
+                const badgeCount =
+                  badge === "inbox" ? inboxBadge : badge === "financeiro" ? financeiroBadge : 0;
+                const showBadge = !!badge && badgeCount > 0;
                 return (
                   <Link
                     key={href}
@@ -167,7 +191,7 @@ export function Sidebar({
                     <span className="flex-1">{label}</span>
                     {showBadge && (
                       <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">
-                        {inboxBadge}
+                        {badgeCount}
                       </span>
                     )}
                   </Link>

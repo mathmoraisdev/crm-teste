@@ -49,6 +49,8 @@ export default async function ConfiguracoesPage() {
           whatsapp: user.whatsapp,
           emailVerified: user.emailVerified ? user.emailVerified.toISOString() : null,
           createdAt: user.createdAt.toISOString(),
+          accessUntil: user.accessUntil ? user.accessUntil.toISOString() : null,
+          cancelRequestedAt: user.cancelRequestedAt ? user.cancelRequestedAt.toISOString() : null,
         }}
         aiKey={aiKey}
         aiUsage={aiUsage}

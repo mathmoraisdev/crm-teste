@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword } from "@/lib/password";
 import { normalizeEmail, sendEmail } from "@/lib/email";
 import { generateToken, hashToken } from "@/lib/tokens";
 import { env } from "@/lib/env";
+import { recordAccountNotice } from "@/server/services/notice.service";
 
 /** Base para os links nos e-mails (sem barra final). */
 function appUrl(): string {
@@ -78,7 +79,7 @@ export async function authenticateUser(
 export async function getUserById(id: string) {
   return prisma.user.findUnique({
     where: { id },
-    select: { id: true, name: true, email: true, whatsapp: true, emailVerified: true, createdAt: true },
+    select: { id: true, name: true, email: true, whatsapp: true, emailVerified: true, createdAt: true, accessUntil: true, cancelRequestedAt: true },
   });
 }
 
@@ -324,7 +325,24 @@ export async function* iterateUserLeads(userId: string) {
 /**
  * Apaga a conta do usuário. O cascade do schema (onDelete: Cascade) remove
  * leads, mensagens, campanhas, números e tokens associados.
+ *
+ * Antes de apagar, grava um aviso de EXCLUSAO (snapshot de nome/e-mail/plano)
+ * para o admin da plataforma — o AccountNotice não tem FK para User, então
+ * sobrevive ao cascade. Tudo numa transação: ou registra e apaga, ou nada.
  */
 export async function deleteAccount(userId: string): Promise<void> {
-  await prisma.user.delete({ where: { id: userId } });
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true, plan: true },
+    });
+    if (user) {
+      await recordAccountNotice(
+        "EXCLUSAO",
+        { accountName: user.name, accountEmail: user.email, plan: user.plan },
+        tx,
+      );
+    }
+    await tx.user.delete({ where: { id: userId } });
+  });
 }

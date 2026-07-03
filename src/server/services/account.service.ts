@@ -6,6 +6,7 @@ import type { AccountRole, LeadStatus, PaymentMethod, Plan } from "@prisma/clien
 import { PIPELINE_ORDER, type PipelineLabels } from "@/lib/leadStatus";
 import { getAiUsageStatus } from "@/server/services/entitlements";
 import { contactCapacity } from "@/server/services/lead.service";
+import { recordAccountNotice, clearUnseenCancelNotices } from "@/server/services/notice.service";
 
 /** Lê os rótulos renomeados das etapas do funil da conta (ou {} se não houver). */
 export async function getPipelineLabels(userId: string): Promise<PipelineLabels> {
@@ -88,6 +89,7 @@ export interface AdminAccountRow {
   paymentMethod: PaymentMethod | null;
   paymentDueDate: Date | null;
   plan: Plan | null;
+  cancelRequestedAt: Date | null; // dono pediu p/ não renovar (acesso segue até accessUntil)
   isAdmin: boolean;
   numbers: number;
   leads: number;
@@ -119,6 +121,7 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
       paymentMethod: true,
       paymentDueDate: true,
       plan: true,
+      cancelRequestedAt: true,
       createdAt: true,
       aiProvider: true,
       aiKeyEnc: true,
@@ -142,6 +145,7 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     paymentMethod: u.paymentMethod,
     paymentDueDate: u.paymentDueDate,
     plan: u.plan,
+    cancelRequestedAt: u.cancelRequestedAt,
     isAdmin: isAdminEmail(u.email),
     numbers: u._count.whatsAppNumbers,
     leads: u._count.leads,
@@ -341,4 +345,31 @@ export async function setAccountAccess(
 
   await prisma.user.update({ where: { id: userId }, data, select: { id: true } });
   return { id: userId };
+}
+
+/**
+ * Cancelamento de assinatura pelo DONO (self-service). NÃO corta acesso nem apaga
+ * dados: só registra a intenção em `cancelRequestedAt`. O acesso segue até
+ * `accessUntil` e a conta expira sozinha na validade se o admin não renovar — o
+ * pedido apenas sinaliza ao admin no /financeiro. `requested=false` reativa
+ * (volta a null). Idempotente. Chamar só para a conta dona (tenant).
+ *
+ * Cancelar também gera um aviso (badge do admin); reativar antes de o admin ver
+ * limpa o aviso não lido para não soar alarme falso.
+ */
+export async function setCancellation(userId: string, requested: boolean): Promise<void> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { cancelRequestedAt: requested ? new Date() : null },
+    select: { name: true, email: true, plan: true },
+  });
+  if (requested) {
+    await recordAccountNotice("CANCELAMENTO", {
+      accountName: user.name,
+      accountEmail: user.email,
+      plan: user.plan,
+    });
+  } else {
+    await clearUnseenCancelNotices(user.email);
+  }
 }

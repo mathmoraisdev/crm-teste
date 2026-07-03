@@ -14,6 +14,8 @@ type Account = {
   whatsapp: string | null;
   emailVerified: string | null; // ISO ou null
   createdAt: string; // ISO
+  accessUntil: string | null; // ISO — até quando o acesso vale (fim do período pago)
+  cancelRequestedAt: string | null; // ISO — dono pediu p/ não renovar; null = ativa
 };
 
 type AiKeyStatus = {
@@ -65,6 +67,12 @@ export function AccountSettings({
   const [resent, setResent] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Assinatura (cancelar/reativar). `canceledAt` = ISO se há cancelamento pedido.
+  const [canceledAt, setCanceledAt] = useState<string | null>(account.cancelRequestedAt);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
+  const [subError, setSubError] = useState<string | null>(null);
 
   // Troca de senha (self-service, exige a senha atual).
   const [curPwd, setCurPwd] = useState("");
@@ -219,6 +227,35 @@ export function AccountSettings({
     // Sessão já foi limpa pelo servidor — vai para a landing.
     router.replace("/");
     router.refresh();
+  }
+
+  // Cancelar/reativar assinatura. Não corta acesso nem apaga dados — só marca a
+  // intenção; o acesso segue até `accessUntil`. `setSubscription(true)` é usado
+  // pelo ConfirmDialog (ele trata loading/erro); a reativação tem estado próprio.
+  async function setSubscription(cancel: boolean) {
+    const res = await fetch("/api/account/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cancel }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || "Erro ao atualizar a assinatura.");
+    }
+    setCanceledAt(cancel ? new Date().toISOString() : null);
+    router.refresh();
+  }
+
+  async function reactivate() {
+    setReactivating(true);
+    setSubError(null);
+    try {
+      await setSubscription(false);
+    } catch (e) {
+      setSubError(e instanceof Error ? e.message : "Erro ao reativar.");
+    } finally {
+      setReactivating(false);
+    }
   }
 
   return (
@@ -480,6 +517,64 @@ export function AccountSettings({
         </Card>
       )}
 
+      {/* Assinatura — cancelar/reativar: só o dono. Não corta acesso nem apaga dados. */}
+      {isOwner && (
+        <Card className="mt-6">
+          <CardHeader
+            title="Assinatura"
+            subtitle="Cancele quando quiser, sem multa nem fidelidade."
+          />
+          <div className="px-5 py-4">
+            {canceledAt ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">Cancelamento solicitado</p>
+                  <p className="mt-0.5 text-sm text-slate-600">
+                    {account.accessUntil ? (
+                      <>
+                        Seu acesso continua até{" "}
+                        <strong>{formatDateTime(account.accessUntil)}</strong>. Depois
+                        disso a conta é desativada, mas seus dados não são apagados.
+                      </>
+                    ) : (
+                      <>
+                        Sua assinatura não será renovada. Seus dados continuam salvos
+                        e você pode reativar quando quiser.
+                      </>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={reactivate}
+                  loading={reactivating}
+                >
+                  Reativar assinatura
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-600">
+                  Você mantém o acesso até o fim do período já pago
+                  {account.accessUntil && (
+                    <> (<strong>{formatDateTime(account.accessUntil)}</strong>)</>
+                  )}
+                  . Nenhum dado é apagado — dá para reativar antes disso.
+                </p>
+                <Button variant="secondary" onClick={() => setConfirmCancel(true)}>
+                  Cancelar assinatura
+                </Button>
+              </div>
+            )}
+            {subError && (
+              <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {subError}
+              </p>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Zona de perigo — excluir a conta inteira: só o dono. */}
       {isOwner && (
         <Card className="border-red-200">
@@ -497,6 +592,31 @@ export function AccountSettings({
           </div>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar assinatura"
+        confirmLabel="Confirmar cancelamento"
+        danger={false}
+        message={
+          account.accessUntil ? (
+            <>
+              Você mantém o acesso até{" "}
+              <strong>{formatDateTime(account.accessUntil)}</strong>. Não há multa,
+              e seus dados <strong>não são apagados</strong> — dá para reativar antes
+              dessa data. Deseja continuar?
+            </>
+          ) : (
+            <>
+              Sua assinatura deixará de ser renovada. Seus dados{" "}
+              <strong>não são apagados</strong> e você pode reativar quando quiser.
+              Deseja continuar?
+            </>
+          )
+        }
+        onConfirm={() => setSubscription(true)}
+        onClose={() => setConfirmCancel(false)}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

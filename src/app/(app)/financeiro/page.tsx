@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
 import { isAdminEmail } from "@/lib/admin";
 import { listAccountsForAdmin } from "@/server/services/account.service";
+import { listRecentNotices, markNoticesSeen } from "@/server/services/notice.service";
 import { revenueCents, revenueTotalCents, listPayments } from "@/server/services/payment.service";
 import { monthKey } from "@/server/services/entitlements";
 import { PLAN_LIMITS } from "@/lib/plans";
@@ -22,6 +23,10 @@ export const dynamic = "force-dynamic";
 
 const METHOD_LABELS = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", TRANSFERENCIA: "Transferência" } as const;
 const PLAN_LABELS = { INICIAL: "Inicial", PROFISSIONAL: "Profissional", ESCALA: "Escala" } as const;
+const NOTICE_META = {
+  CANCELAMENTO: { label: "Cancelou a assinatura", tone: "amber" as const },
+  EXCLUSAO: { label: "Excluiu a conta", tone: "red" as const },
+};
 
 /** Rótulo do consumo de IA do mês p/ uma conta: admin / BYOK / ilimitado / "usado / cota". */
 function aiUsageLabel(
@@ -73,13 +78,17 @@ export default async function FinanceiroPage({
   const status = sp.status ?? "todos"; // todos | ativo | suspenso
   const { from, to } = monthRange(month);
 
-  const [accounts, revMonth, revTotal, payments, landingOn] = await Promise.all([
+  const [accounts, revMonth, revTotal, payments, landingOn, notices] = await Promise.all([
     listAccountsForAdmin(),
     revenueCents(from, to),
     revenueTotalCents(),
     listPayments(from, to),
     isLandingEnabled(),
+    listRecentNotices(30), // captura o estado "novo" (seenAt) ANTES de marcar como visto
   ]);
+  // O admin abriu o Financeiro: zera o badge do sidebar (o card abaixo já tem o snapshot).
+  await markNoticesSeen();
+  const newNoticesCount = notices.filter((n) => n.seenAt === null).length;
 
   const filteredAccounts = accounts.filter((a) =>
     status === "ativo" ? a.active : status === "suspenso" ? !a.active : true,
@@ -119,6 +128,40 @@ export default async function FinanceiroPage({
         </Card>
       </div>
 
+      {notices.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <p className="text-sm font-bold text-ink">Avisos</p>
+            {newNoticesCount > 0 && (
+              <Badge tone="amber">{newNoticesCount} novo{newNoticesCount > 1 ? "s" : ""}</Badge>
+            )}
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {notices.map((n) => {
+              const meta = NOTICE_META[n.kind];
+              return (
+                <li key={n.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+                  {n.seenAt === null && (
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" aria-label="novo" />
+                  )}
+                  <Badge tone={meta.tone}>{meta.label}</Badge>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold text-ink">{n.accountName}</span>
+                    <span className="ml-2 text-xs text-slate-400">{n.accountEmail}</span>
+                    {n.plan && (
+                      <span className="ml-2 text-xs text-slate-400">· {PLAN_LABELS[n.plan]}</span>
+                    )}
+                  </div>
+                  <span className="whitespace-nowrap text-xs text-slate-400">
+                    {formatDateTime(n.createdAt)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
       <Card className="p-4">
         <LandingToggle initialEnabled={landingOn} />
       </Card>
@@ -137,9 +180,14 @@ export default async function FinanceiroPage({
                 </div>
                 <div className="truncate text-xs text-slate-400">{a.email}</div>
               </div>
-              <Badge tone={a.active ? "green" : "slate"}>
-                {a.active ? "Ativo" : "Suspenso"}
-              </Badge>
+              <div className="flex flex-col items-end gap-1">
+                <Badge tone={a.active ? "green" : "slate"}>
+                  {a.active ? "Ativo" : "Suspenso"}
+                </Badge>
+                {a.cancelRequestedAt && (
+                  <Badge tone="amber">cancelamento solicitado</Badge>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
@@ -287,9 +335,14 @@ export default async function FinanceiroPage({
                   )}
                 </Td>
                 <Td>
-                  <Badge tone={a.active ? "green" : "slate"}>
-                    {a.active ? "Ativo" : "Suspenso"}
-                  </Badge>
+                  <div className="flex flex-col items-start gap-1">
+                    <Badge tone={a.active ? "green" : "slate"}>
+                      {a.active ? "Ativo" : "Suspenso"}
+                    </Badge>
+                    {a.cancelRequestedAt && (
+                      <Badge tone="amber">cancelamento solicitado</Badge>
+                    )}
+                  </div>
                 </Td>
                 <Td>
                   <AccountAccessModal
