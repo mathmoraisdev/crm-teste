@@ -18,13 +18,17 @@ echo ""
 echo "==> heartbeat (WorkerHeartbeat.beatAt deve ser de segundos atrás)"
 cd "$APP_DIR"
 # Usa o Prisma já instalado; lê DATABASE_URL do .env via tsx.
+# NB: envolto num async IIFE — o `tsx -e` compila como CJS e recusa top-level await
+# ("Top-level await is currently not supported with the cjs output format").
 npx tsx --env-file-if-exists=.env -e '
   import { PrismaClient } from "@prisma/client";
-  const p = new PrismaClient();
-  const hb = await p.workerHeartbeat.findUnique({ where: { id: "singleton" } });
-  if (!hb) { console.log("SEM heartbeat — worker nunca bateu?"); process.exit(1); }
-  const ageS = Math.round((Date.now() - hb.beatAt.getTime()) / 1000);
-  console.log(`beatAt=${hb.beatAt.toISOString()} (há ${ageS}s)`);
-  console.log(ageS < 30 ? "OK: worker vivo" : "ALERTA: heartbeat velho — worker parado?");
-  await p.$disconnect();
+  (async () => {
+    const p = new PrismaClient();
+    const hb = await p.workerHeartbeat.findUnique({ where: { id: "singleton" } });
+    if (!hb) { console.log("SEM heartbeat — worker nunca bateu?"); process.exit(1); }
+    const ageS = Math.round((Date.now() - hb.beatAt.getTime()) / 1000);
+    console.log(`beatAt=${hb.beatAt.toISOString()} (há ${ageS}s)`);
+    console.log(ageS < 30 ? "OK: worker vivo" : "ALERTA: heartbeat velho — worker parado?");
+    await p.$disconnect();
+  })();
 ' || echo "(falha ao consultar heartbeat — confira DATABASE_URL no .env)"
