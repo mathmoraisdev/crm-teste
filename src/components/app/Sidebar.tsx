@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox } from "lucide-react";
+import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
@@ -13,7 +13,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  badge?: "inbox" | "financeiro"; // qual contador alimenta o badge deste item
+  badge?: "inbox" | "financeiro" | "consultores"; // qual contador alimenta o badge deste item
   show?: boolean;
 };
 
@@ -30,6 +30,7 @@ export function Sidebar({
   const [open, setOpen] = useState(false);
   const [inboxBadge, setInboxBadge] = useState(0);
   const [financeiroBadge, setFinanceiroBadge] = useState(0);
+  const [consultoresBadge, setConsultoresBadge] = useState(0);
 
   // Badge de "Atendimento" = fila + não-lidas. Polling leve.
   useEffect(() => {
@@ -73,6 +74,27 @@ export function Sidebar({
       clearInterval(t);
     };
   }, [isAdmin, pathname]);
+
+  // Badge de "Consultores" = leads novos do funil de consultor. Só admin.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    async function load() {
+      try {
+        const res = await fetch("/api/consultant/leads/count", { cache: "no-store" });
+        const data = await res.json();
+        if (active && typeof data.count === "number") setConsultoresBadge(data.count);
+      } catch {
+        // ignora
+      }
+    }
+    load();
+    const t = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [isAdmin, pathname]);
   // Equipe é do dono da conta; Financeiro é do admin da plataforma.
   const navGroups = ([
     {
@@ -95,6 +117,7 @@ export function Sidebar({
       items: [
         { href: "/empresas", label: "Empresas", icon: Building2 },
         { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
+        { href: "/consultores", label: "Consultores", icon: Headset, badge: "consultores", show: isAdmin },
         { href: "/financeiro", label: "Financeiro", icon: Wallet, badge: "financeiro", show: isAdmin },
         { href: "/configuracoes", label: "Configurações", icon: Settings },
       ],
@@ -174,7 +197,13 @@ export function Sidebar({
               {group.items.map(({ href, label, icon: Icon, badge }) => {
                 const active = pathname === href || pathname.startsWith(href + "/");
                 const badgeCount =
-                  badge === "inbox" ? inboxBadge : badge === "financeiro" ? financeiroBadge : 0;
+                  badge === "inbox"
+                    ? inboxBadge
+                    : badge === "financeiro"
+                      ? financeiroBadge
+                      : badge === "consultores"
+                        ? consultoresBadge
+                        : 0;
                 const showBadge = !!badge && badgeCount > 0;
                 return (
                   <Link

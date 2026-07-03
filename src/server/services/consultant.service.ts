@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { ConsultantLead } from "@prisma/client";
-import { normalizeEmail } from "@/lib/email";
+import { normalizeEmail, sendEmail } from "@/lib/email";
+import { adminEmailSet } from "@/lib/admin";
 import { env } from "@/lib/env";
 
 // Número placeholder usado quando CONSULTANT_WHATSAPP não está configurado —
@@ -48,6 +49,68 @@ export async function createConsultantLead(
 /** Lista os leads do funil de consultor para o admin (mais recentes primeiro). */
 export async function listConsultantLeads(): Promise<ConsultantLead[]> {
   return prisma.consultantLead.findMany({ orderBy: { createdAt: "desc" } });
+}
+
+/** Quantos leads ainda não vistos pelo admin (alimenta o badge do sidebar). */
+export async function countNewConsultantLeads(): Promise<number> {
+  return prisma.consultantLead.count({ where: { status: "NOVO" } });
+}
+
+/** Marca todos os leads NOVO como VISTO (chamado quando o admin abre /consultores). */
+export async function markConsultantLeadsSeen(): Promise<void> {
+  await prisma.consultantLead.updateMany({
+    where: { status: "NOVO" },
+    data: { status: "VISTO" },
+  });
+}
+
+/**
+ * Avisa os admins da plataforma por e-mail que chegou um lead novo do funil de
+ * consultor. Fire-and-forget do ponto de vista do chamador: `sendEmail` nunca
+ * lança, então uma falha de e-mail nunca derruba a gravação do lead. No-op se
+ * não houver admins configurados (ADMIN_EMAILS vazio).
+ */
+export async function notifyAdminsOfLead(lead: ConsultantLead): Promise<void> {
+  const admins = [...adminEmailSet()];
+  if (admins.length === 0) return;
+
+  const linha = (rotulo: string, valor?: string | null) =>
+    valor ? `<p style="margin:4px 0"><strong>${rotulo}:</strong> ${valor}</p>` : "";
+
+  const url = `${env.APP_URL.replace(/\/$/, "")}/consultores`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;font-size:14px;color:#0f172a">
+      <h2 style="margin:0 0 12px">Novo contato no funil &ldquo;fale com nosso consultor&rdquo;</h2>
+      ${linha("Nome", lead.name)}
+      ${linha("WhatsApp", lead.whatsapp)}
+      ${linha("E-mail", lead.email)}
+      ${linha("Plano de interesse", lead.plan)}
+      ${linha("Mensagem", lead.message)}
+      ${linha("Origem", lead.source)}
+      <p style="margin:16px 0 0">
+        <a href="${url}" style="color:#059669">Ver em Consultores &rarr;</a>
+      </p>
+    </div>`;
+  const text = [
+    "Novo contato no funil 'fale com nosso consultor'",
+    `Nome: ${lead.name}`,
+    `WhatsApp: ${lead.whatsapp}`,
+    lead.email ? `E-mail: ${lead.email}` : null,
+    lead.plan ? `Plano: ${lead.plan}` : null,
+    lead.message ? `Mensagem: ${lead.message}` : null,
+    `Origem: ${lead.source}`,
+    "",
+    `Ver em: ${url}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await sendEmail({
+    to: admins.join(", "),
+    subject: `Novo lead consultor: ${lead.name}`,
+    html,
+    text,
+  });
 }
 
 /**

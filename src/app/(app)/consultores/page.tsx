@@ -2,7 +2,10 @@ import { Lock } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
 import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
-import { listConsultantLeads } from "@/server/services/consultant.service";
+import {
+  listConsultantLeads,
+  markConsultantLeadsSeen,
+} from "@/server/services/consultant.service";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td } from "@/components/ui/Table";
@@ -36,6 +39,9 @@ export default async function ConsultoresPage() {
   }
 
   const leads = await listConsultantLeads();
+  // O admin abriu Consultores: zera o badge do sidebar. Lê os leads ANTES de
+  // marcar visto, então esta visão ainda destaca os NOVO desta rodada.
+  await markConsultantLeadsSeen();
 
   return (
     <div className="space-y-5">

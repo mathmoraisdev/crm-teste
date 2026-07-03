@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   buildWhatsappUrl,
   createConsultantLead,
+  notifyAdminsOfLead,
 } from "@/server/services/consultant.service";
 
 export const runtime = "nodejs";
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const lead = await createConsultantLead(parsed.data);
+    // Avisa os admins por e-mail. `notifyAdminsOfLead` nunca lança (sendEmail é
+    // à prova de falha), então não protege a resposta do prospect.
+    await notifyAdminsOfLead(lead);
     return NextResponse.json(
       { ok: true, whatsappUrl: buildWhatsappUrl(lead) },
       { status: 201 },
