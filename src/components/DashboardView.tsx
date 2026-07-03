@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { StatCard } from "@/components/app/StatCard";
 import { TrendChart } from "@/components/app/TrendChart";
+import { LimitsCard } from "@/components/app/LimitsCard";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { LEAD_STATUS_META, type PipelineLabels, resolveStatusMeta } from "@/lib/leadStatus";
 import { cn, formatSlot } from "@/lib/utils";
@@ -214,6 +215,9 @@ export function DashboardView() {
               hint={`${rangeText}`}
             />
           </div>
+
+          {/* Limites da conta (uso vs. teto do plano) */}
+          <LimitsCard />
 
           {/* Tendência de atendimentos + próximos agendamentos */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

@@ -4,6 +4,8 @@ import { accountActive, daysRemaining, addDays, type BillingOverride } from "@/l
 import { PLAN_LIMITS } from "@/lib/plans";
 import type { AccountRole, LeadStatus, PaymentMethod, Plan } from "@prisma/client";
 import { PIPELINE_ORDER, type PipelineLabels } from "@/lib/leadStatus";
+import { getAiUsageStatus } from "@/server/services/entitlements";
+import { contactCapacity } from "@/server/services/lead.service";
 
 /** Lê os rótulos renomeados das etapas do funil da conta (ou {} se não houver). */
 export async function getPipelineLabels(userId: string): Promise<PipelineLabels> {
@@ -162,6 +164,53 @@ export async function listAccountsForAdmin(): Promise<AdminAccountRow[]> {
     aiCreditMonth: u.aiCreditMonth,
     aiCreditUsed: u.aiCreditUsed,
   }));
+}
+
+/** Uso vs. teto do plano de UMA conta (tenant) — alimenta o card do dashboard. */
+export interface AccountLimits {
+  plan: Plan | null;
+  byok: boolean;
+  ai: { unlimited: boolean; used: number; quota: number };
+  contacts: { unlimited: boolean; used: number; max: number };
+  numbers: { unlimited: boolean; used: number; max: number };
+  seats: { unlimited: boolean; used: number; max: number };
+}
+
+/**
+ * Uso vs. teto do plano p/ a conta. IA reusa a leitura do gate (BYOK/admin/
+ * grandfather = ilimitado). Contatos/números/seats: ilimitado p/ admin ou conta
+ * sem plano; senão o teto de PLAN_LIMITS. Serve admin e operador (é a conta).
+ */
+export async function getAccountLimits(userId: string): Promise<AccountLimits> {
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      email: true, plan: true, aiProvider: true, aiKeyEnc: true,
+      _count: { select: { whatsAppNumbers: true, leads: true, members: true } },
+    },
+  });
+  if (!owner) throw new Error("Conta não encontrada");
+  const noCap = isAdminEmail(owner.email) || !owner.plan; // admin/grandfather: sem teto
+  const lim = owner.plan ? PLAN_LIMITS[owner.plan] : null;
+
+  const [ai, contacts] = await Promise.all([getAiUsageStatus(userId), contactCapacity(userId)]);
+
+  return {
+    plan: owner.plan,
+    byok: !!(owner.aiProvider && owner.aiKeyEnc),
+    ai: ai.unlimited
+      ? { unlimited: true, used: 0, quota: 0 }
+      : { unlimited: false, used: ai.used, quota: ai.quota },
+    contacts: contacts.unlimited
+      ? { unlimited: true, used: owner._count.leads, max: 0 }
+      : { unlimited: false, used: contacts.used, max: contacts.max },
+    numbers: noCap
+      ? { unlimited: true, used: owner._count.whatsAppNumbers, max: 0 }
+      : { unlimited: false, used: owner._count.whatsAppNumbers, max: lim!.maxNumbers },
+    seats: noCap
+      ? { unlimited: true, used: 1 + owner._count.members, max: 0 }
+      : { unlimited: false, used: 1 + owner._count.members, max: lim!.maxSeats },
+  };
 }
 
 /** Ação do admin sobre o prazo/override de uma conta. */

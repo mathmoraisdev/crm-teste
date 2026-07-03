@@ -68,7 +68,7 @@ const PLANS = [
     features: [
       "1 número de WhatsApp",
       "2 usuários",
-      "1.200 mensagens de IA/mês (≈ 300 conversas)",
+      "4.000 mensagens de IA/mês (≈ 1.000 conversas)",
       "1.000 contatos",
       "Atendimento com IA",
       "CRM + Kanban",
@@ -85,7 +85,7 @@ const PLANS = [
     features: [
       "2 números de WhatsApp",
       "5 usuários",
-      "6.000 mensagens de IA/mês (≈ 1.500 conversas)",
+      "10.000 mensagens de IA/mês (≈ 2.500 conversas)",
       "5.000 contatos",
       "Qualificação por IA",
       "Agendamento e lembretes",

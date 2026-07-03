@@ -8,8 +8,8 @@ describe("PLAN_LIMITS", () => {
     expect(PLAN_LIMITS.ESCALA).toMatchObject({ maxNumbers: 4, maxSeats: 10, maxContacts: 25000, campaigns: true });
   });
   it("define a cota mensal de IA por plano", () => {
-    expect(PLAN_LIMITS.INICIAL.aiMonthlyQuota).toBe(1200);
-    expect(PLAN_LIMITS.PROFISSIONAL.aiMonthlyQuota).toBe(6000);
+    expect(PLAN_LIMITS.INICIAL.aiMonthlyQuota).toBe(4000);
+    expect(PLAN_LIMITS.PROFISSIONAL.aiMonthlyQuota).toBe(10000);
     expect(PLAN_LIMITS.ESCALA.aiMonthlyQuota).toBe(24000);
   });
   it("nenhum plano libera modelo avançado na chave da plataforma (strong só via BYOK)", () => {

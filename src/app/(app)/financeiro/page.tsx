@@ -37,6 +37,12 @@ function aiUsageLabel(
   return `${used} / ${PLAN_LIMITS[a.plan].aiMonthlyQuota}`;
 }
 
+/** "usado / limite" p/ chips/contatos; admin ou sem plano = só o número (ilimitado). */
+function usageLabel(used: number, max: number | null, isAdmin: boolean): string {
+  if (isAdmin || max == null) return String(used);
+  return `${used} / ${max}`;
+}
+
 export default async function FinanceiroPage({
   searchParams,
 }: { searchParams: Promise<{ month?: string; status?: string }> }) {
@@ -155,11 +161,15 @@ export default async function FinanceiroPage({
               </div>
               <div>
                 <p className="text-xs text-slate-400">Chips</p>
-                <p className="text-slate-600">{a.numbers}</p>
+                <p className="text-slate-600">
+                  {usageLabel(a.numbers, a.plan ? PLAN_LIMITS[a.plan].maxNumbers : null, a.isAdmin)}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Leads</p>
-                <p className="text-slate-600">{a.leads}</p>
+                <p className="text-xs text-slate-400">Contatos</p>
+                <p className="text-slate-600">
+                  {usageLabel(a.leads, a.plan ? PLAN_LIMITS[a.plan].maxContacts : null, a.isAdmin)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-slate-400">IA (créditos/mês)</p>
@@ -215,7 +225,7 @@ export default async function FinanceiroPage({
               <Th>Plano</Th>
               <Th>Usuários</Th>
               <Th>Chips</Th>
-              <Th>Leads</Th>
+              <Th>Contatos</Th>
               <Th>IA (créditos/mês)</Th>
               <Th>Criada</Th>
               <Th>Validade</Th>
@@ -252,8 +262,12 @@ export default async function FinanceiroPage({
                     seats={a.seats}
                   />
                 </Td>
-                <Td className="text-slate-600">{a.numbers}</Td>
-                <Td className="text-slate-600">{a.leads}</Td>
+                <Td className="whitespace-nowrap text-slate-600">
+                  {usageLabel(a.numbers, a.plan ? PLAN_LIMITS[a.plan].maxNumbers : null, a.isAdmin)}
+                </Td>
+                <Td className="whitespace-nowrap text-slate-600">
+                  {usageLabel(a.leads, a.plan ? PLAN_LIMITS[a.plan].maxContacts : null, a.isAdmin)}
+                </Td>
                 <Td className="whitespace-nowrap text-slate-600">{aiUsageLabel(a, aiMonth)}</Td>
                 <Td className="whitespace-nowrap text-slate-500">
                   {formatDateTime(a.createdAt)}

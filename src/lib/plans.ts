@@ -18,8 +18,8 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
-  INICIAL:      { priceCents: 9700,  maxNumbers: 1, maxSeats: 2,  maxContacts: 1000,  qualify: false, schedule: false, campaigns: false, sales: false, aiMonthlyQuota: 1200,  allowStrongModel: false },
-  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  maxContacts: 5000,  qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 6000,  allowStrongModel: false },
+  INICIAL:      { priceCents: 9700,  maxNumbers: 1, maxSeats: 2,  maxContacts: 1000,  qualify: false, schedule: false, campaigns: false, sales: false, aiMonthlyQuota: 4000,  allowStrongModel: false },
+  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  maxContacts: 5000,  qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 10000, allowStrongModel: false },
   ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, maxContacts: 25000, qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 24000, allowStrongModel: false },
 };
 
