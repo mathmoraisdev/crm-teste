@@ -12,19 +12,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Verde da marca (claro → escuro).
+        // Verde da marca — agora TEMÁVEL por conta via variáveis CSS.
+        // Os valores das vars vivem em src/lib/theme/palette.ts e são injetados
+        // por conta no layout do app (fallback = DEFAULT_PALETTE no globals.css).
         brand: {
-          50: "#E7F6EE",
-          100: "#C8EAD7",
-          200: "#A6DCC0",
-          300: "#5FE3A1", // acento brilhante sobre fundo escuro
-          400: "#10B981",
-          500: "#0EA46B", // primário
-          600: "#0B8C5A",
-          700: "#0B7D52",
-          800: "#067A52",
-          900: "#0A3D29",
-          950: "#0A1B14", // "forest" — sidebar / painéis escuros
+          50: "rgb(var(--brand-50) / <alpha-value>)",
+          100: "rgb(var(--brand-100) / <alpha-value>)",
+          200: "rgb(var(--brand-200) / <alpha-value>)",
+          300: "rgb(var(--brand-300) / <alpha-value>)",
+          400: "rgb(var(--brand-400) / <alpha-value>)",
+          500: "rgb(var(--brand-500) / <alpha-value>)",
+          600: "rgb(var(--brand-600) / <alpha-value>)",
+          700: "rgb(var(--brand-700) / <alpha-value>)",
+          800: "rgb(var(--brand-800) / <alpha-value>)",
+          900: "rgb(var(--brand-900) / <alpha-value>)",
+          950: "rgb(var(--brand-950) / <alpha-value>)",
         },
         // Neutros do design (verde-acinzentado) sobrepondo o slate padrão.
         slate: {
