@@ -7,15 +7,15 @@ import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
-const BASE_NAV = [
-  { href: "/painel", label: "Painel", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/inbox", label: "Atendimento", icon: Inbox, badge: true },
-  { href: "/campaigns", label: "Campanhas", icon: Send },
-  { href: "/agenda", label: "Agenda", icon: CalendarClock },
-  { href: "/empresas", label: "Empresas", icon: Building2 },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
-];
+// Menu dividido por categorias. `show` (opcional) esconde o item;
+// grupo sem itens visíveis não renderiza o cabeçalho.
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  badge?: boolean;
+  show?: boolean;
+};
 
 export function Sidebar({
   isAdmin = false,
@@ -52,11 +52,34 @@ export function Sidebar({
     };
   }, []);
   // Equipe é do dono da conta; Financeiro é do admin da plataforma.
-  const nav = [
-    ...BASE_NAV,
-    ...(isAccountAdmin ? [{ href: "/equipe", label: "Equipe", icon: UsersRound }] : []),
-    ...(isAdmin ? [{ href: "/financeiro", label: "Financeiro", icon: Wallet }] : []),
-  ];
+  const navGroups = ([
+    {
+      title: "Atendimento",
+      items: [
+        { href: "/painel", label: "Painel", icon: LayoutDashboard },
+        { href: "/inbox", label: "Atendimento", icon: Inbox, badge: true },
+        { href: "/leads", label: "Leads", icon: Users },
+      ],
+    },
+    {
+      title: "Crescimento",
+      items: [
+        { href: "/campaigns", label: "Campanhas", icon: Send },
+        { href: "/agenda", label: "Agenda", icon: CalendarClock },
+      ],
+    },
+    {
+      title: "Gestão",
+      items: [
+        { href: "/empresas", label: "Empresas", icon: Building2 },
+        { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
+        { href: "/financeiro", label: "Financeiro", icon: Wallet, show: isAdmin },
+        { href: "/configuracoes", label: "Configurações", icon: Settings },
+      ],
+    },
+  ] as { title: string; items: NavItem[] }[])
+    .map((g) => ({ ...g, items: g.items.filter((i) => i.show !== false) }))
+    .filter((g) => g.items.length > 0);
 
   // Fecha o drawer ao navegar (mobile).
   useEffect(() => {
@@ -120,31 +143,38 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1">
-          {nav.map(({ href, label, icon: Icon, badge }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            const showBadge = badge && inboxBadge > 0;
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                  active
-                    ? "bg-brand-300/12 text-white"
-                    : "text-[#8FB6A5] hover:bg-white/5 hover:text-white",
-                )}
-              >
-                <Icon size={17} className={active ? "text-mint" : ""} />
-                <span className="flex-1">{label}</span>
-                {showBadge && (
-                  <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">
-                    {inboxBadge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <nav className="flex flex-col gap-5">
+          {navGroups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-1">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6E9587]">
+                {group.title}
+              </p>
+              {group.items.map(({ href, label, icon: Icon, badge }) => {
+                const active = pathname === href || pathname.startsWith(href + "/");
+                const showBadge = badge && inboxBadge > 0;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                      active
+                        ? "bg-brand-300/12 text-white"
+                        : "text-[#8FB6A5] hover:bg-white/5 hover:text-white",
+                    )}
+                  >
+                    <Icon size={17} className={active ? "text-mint" : ""} />
+                    <span className="flex-1">{label}</span>
+                    {showBadge && (
+                      <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">
+                        {inboxBadge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="mt-auto flex flex-col gap-2.5">
