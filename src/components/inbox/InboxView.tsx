@@ -129,6 +129,33 @@ export function InboxView() {
     [filter, loadList],
   );
 
+  // Exclusão em lote: apaga cada lead (endpoint tenant-guarded que cascateia
+  // mensagens/qualificação/agenda). Se a conversa aberta foi apagada, limpa o
+  // detalhe. Recarrega a lista ao final e sinaliza falhas parciais.
+  const deleteConversations = useCallback(
+    async (ids: string[]) => {
+      // Lotes de 5 p/ não inundar o pooler do banco quando muitas são apagadas.
+      let failed = 0;
+      for (let i = 0; i < ids.length; i += 5) {
+        const chunk = ids.slice(i, i + 5);
+        const results = await Promise.allSettled(
+          chunk.map(async (id) => {
+            const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error();
+          }),
+        );
+        failed += results.filter((r) => r.status === "rejected").length;
+      }
+      if (selectedRef.current && ids.includes(selectedRef.current)) {
+        setSelectedId(null);
+        setDetail(null);
+      }
+      await loadList(filter);
+      if (failed > 0) throw new Error(`${failed} conversa(s) não puderam ser excluídas.`);
+    },
+    [filter, loadList],
+  );
+
   async function act(
     path: string,
     body?: Record<string, unknown>,
@@ -194,6 +221,7 @@ export function InboxView() {
             selectedId={selectedId}
             onSelect={select}
             loading={loadingList}
+            onDeleteConversations={deleteConversations}
           />
         </Card>
 

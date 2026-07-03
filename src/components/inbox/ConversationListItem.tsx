@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { Check } from "lucide-react";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { formatPhone } from "@/lib/phone";
@@ -23,20 +24,44 @@ export const ConversationListItem = memo(function ConversationListItem({
   conversation,
   active,
   onSelect,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   conversation: InboxConversation;
   active: boolean;
   onSelect: (id: string) => void;
+  /** Modo de seleção em lote: o clique marca/desmarca em vez de abrir. */
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const meta = ATTENDANCE_META[conversation.attendanceStatus];
   return (
     <button
-      onClick={() => onSelect(conversation.id)}
+      onClick={() =>
+        selectMode ? onToggleSelect?.(conversation.id) : onSelect(conversation.id)
+      }
       className={cn(
-        "w-full border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
-        active && "bg-brand-50/60",
+        "flex w-full items-start gap-2.5 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
+        active && !selectMode && "bg-brand-50/60",
+        selected && "bg-brand-50/60",
       )}
     >
+      {selectMode && (
+        <span
+          className={cn(
+            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+            selected
+              ? "border-brand-500 bg-brand-500 text-white"
+              : "border-slate-300 bg-white",
+          )}
+          aria-hidden
+        >
+          {selected && <Check size={12} strokeWidth={3} />}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {conversation.unread && (
@@ -71,6 +96,7 @@ export const ConversationListItem = memo(function ConversationListItem({
         {conversation.whatsAppNumber && (
           <span className="text-[11px] text-slate-400">· {conversation.whatsAppNumber}</span>
         )}
+      </div>
       </div>
     </button>
   );

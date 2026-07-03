@@ -8,7 +8,9 @@ import {
   CalendarClock,
   CalendarX,
   ExternalLink,
+  Search,
   Video,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -53,6 +55,7 @@ function relativeDayLabel(iso: string): "Hoje" | "Amanhã" | null {
 export function AgendaView() {
   const [meetings, setMeetings] = useState<AgendaItem[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -72,9 +75,18 @@ export function AgendaView() {
 
   const filtered = useMemo(() => {
     if (!meetings) return null;
-    if (statusFilter === "ALL") return meetings;
-    return meetings.filter((m) => m.status === statusFilter);
-  }, [meetings, statusFilter]);
+    const q = query.trim();
+    const lower = q.toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    return meetings.filter((m) => {
+      if (statusFilter !== "ALL" && m.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        m.lead.name.toLowerCase().includes(lower) ||
+        (digits.length > 0 && m.lead.phone.replace(/\D/g, "").includes(digits))
+      );
+    });
+  }, [meetings, statusFilter, query]);
 
   const confirmedCount = useMemo(
     () => meetings?.filter((m) => m.status === "CONFIRMED").length ?? 0,
@@ -100,8 +112,30 @@ export function AgendaView() {
         </div>
       </div>
 
-      {/* Filtro de status */}
+      {/* Busca + filtro de status */}
       <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1 sm:flex-none">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nome ou telefone…"
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 sm:w-[260px]"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}

@@ -22,7 +22,7 @@ export default async function AppLayout({
     <div className="min-h-screen bg-slate-50 lg:flex">
       <Sidebar isAdmin={isAdmin} isAccountAdmin={isAccountAdmin} />
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10 2xl:max-w-[1600px]">
           {children}
         </div>
       </main>
