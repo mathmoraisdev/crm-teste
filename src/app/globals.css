@@ -2,13 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Paleta de marca default (verde Disparador.ai). Espelha DEFAULT_PALETTE em
+   src/lib/theme/palette.ts. O layout do app SOBRESCREVE estas vars por conta. */
+:root {
+  --brand-50: 231 246 238;
+  --brand-100: 200 234 215;
+  --brand-200: 166 220 192;
+  --brand-300: 95 227 161;
+  --brand-400: 16 185 129;
+  --brand-500: 14 164 107;
+  --brand-600: 11 140 90;
+  --brand-700: 11 125 82;
+  --brand-800: 6 122 82;
+  --brand-900: 10 61 41;
+  --brand-950: 10 27 20;
+}
+
 html,
 body {
   @apply bg-slate-50 text-ink antialiased;
 }
 
 ::selection {
-  background: #0ea46b;
+  background: rgb(var(--brand-500));
   color: #fff;
 }
 
@@ -25,7 +41,7 @@ body {
    claro que dá para deslizar (o strip é baixo, então a barra padrão some). */
 .scroll-tabs {
   scrollbar-width: thin;
-  scrollbar-color: theme("colors.brand.500") theme("colors.slate.100");
+  scrollbar-color: rgb(var(--brand-500)) theme("colors.slate.100");
 }
 .scroll-tabs::-webkit-scrollbar {
   height: 6px;
