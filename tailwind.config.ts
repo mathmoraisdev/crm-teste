@@ -43,9 +43,9 @@ const config: Config = {
           950: "#050D09",
         },
         // Tokens semânticos auxiliares.
-        forest: "#0A1B14",
+        forest: "rgb(var(--brand-950))",
         ink: "#0A1410",
-        mint: "#5FE3A1",
+        mint: "rgb(var(--brand-300))",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],

@@ -182,7 +182,7 @@ export function Sidebar({
           <button
             onClick={() => setOpen(false)}
             aria-label="Fechar menu"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8FB6A5] transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
           >
             <X size={18} />
           </button>
@@ -191,7 +191,7 @@ export function Sidebar({
         <nav className="flex flex-col gap-5">
           {navGroups.map((group) => (
             <div key={group.title} className="flex flex-col gap-1">
-              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6E9587]">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
                 {group.title}
               </p>
               {group.items.map(({ href, label, icon: Icon, badge }) => {
@@ -213,7 +213,7 @@ export function Sidebar({
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                       active
                         ? "bg-brand-300/12 text-white"
-                        : "text-[#8FB6A5] hover:bg-white/5 hover:text-white",
+                        : "text-white/70 hover:bg-white/5 hover:text-white",
                     )}
                   >
                     <Icon size={17} className={active ? "text-mint" : ""} />
@@ -238,7 +238,7 @@ export function Sidebar({
             <span className="flex items-center gap-2 text-[12.5px] font-bold text-white">
               <Smartphone size={14} className="text-mint" /> Empresas &amp; atendimentos
             </span>
-            <span className="mt-1 block font-mono text-[11.5px] text-[#8FB6A5]">
+            <span className="mt-1 block font-mono text-[11.5px] text-white/70">
               Conectar &amp; gerenciar chips
             </span>
           </Link>
@@ -246,7 +246,7 @@ export function Sidebar({
           <button
             onClick={logout}
             disabled={loggingOut}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-[#8FB6A5] transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
           >
             <LogOut size={17} /> Sair
           </button>
