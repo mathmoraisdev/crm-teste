@@ -87,6 +87,15 @@ describe("assertModelAllowedForPlan", () => {
     await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).rejects.toThrow(/própria chave.*BYOK/i);
   });
 
+  it("BYOK (chave própria) libera strong mesmo em plano comercial", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      email: "cli@x.com", plan: "INICIAL", aiProvider: "OPENAI", aiKeyEnc: "enc",
+    });
+    const { assertModelAllowedForPlan } = await import("./numbers.service");
+    await expect(assertModelAllowedForPlan("dono-1", "gpt-4o")).resolves.toBeUndefined();
+  });
+
   it("null/limpar campo sempre permite", async () => {
     const { assertModelAllowedForPlan } = await import("./numbers.service");
     await expect(assertModelAllowedForPlan("dono-1", null)).resolves.toBeUndefined();

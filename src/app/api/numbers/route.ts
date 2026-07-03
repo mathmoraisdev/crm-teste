@@ -19,7 +19,7 @@ export async function GET() {
     listWhatsAppNumbers(userId),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { aiProvider: true, email: true, plan: true, paymentProvider: true },
+      select: { aiProvider: true, aiKeyEnc: true, email: true, plan: true, paymentProvider: true },
     }),
   ]);
   // converte o QR cru em data URL p/ a UI renderizar como <img>
@@ -31,10 +31,12 @@ export async function GET() {
   );
   // provider efetivo p/ a UI adaptar o catálogo de modelos (BYOK ou plataforma=OPENAI)
   const provider = user?.aiProvider ?? "OPENAI";
-  // Pode usar modelo avançado? grandfather/admin → sim; senão, conforme o plano.
+  // BYOK = chave própria (provider + chave cifrada) → paga a própria IA.
+  const byok = !!(user?.aiProvider && user?.aiKeyEnc);
+  // Pode usar modelo avançado? BYOK/grandfather/admin → sim; senão, conforme o plano.
   // (Espelha assertModelAllowedForPlan no PATCH — o runtime é a rede de segurança.)
   const allowStrongModel =
-    !user?.plan || (user.email && isAdminEmail(user.email))
+    byok || !user?.plan || (user.email && isAdminEmail(user.email))
       ? true
       : PLAN_LIMITS[user.plan].allowStrongModel;
   // Funil de vendas: grandfather/admin → sim; senão conforme o plano. Também

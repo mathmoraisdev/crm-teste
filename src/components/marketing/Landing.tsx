@@ -37,6 +37,10 @@ const FEATURES = [
     desc: "A IA responde cada lead, faz as perguntas certas, dá um score de 0 a 100 e propõe o horário da reunião com base nas respostas.",
   },
   {
+    title: "Vários números, um painel só",
+    desc: "Conecte até 4 números de WhatsApp e atenda todos numa caixa única — cada um com sua própria IA, persona e campanhas. A maioria das ferramentas trava você em 1 número.",
+  },
+  {
     title: "Disparo em massa",
     desc: "Envie para milhares de contatos com mensagens personalizadas por nome, intervalo inteligente e fila automática.",
   },
@@ -55,6 +59,10 @@ const FEATURES = [
   {
     title: "Relatórios em tempo real",
     desc: "Entregas, respostas, opt-outs e conversões. Saiba exatamente o que está dando retorno.",
+  },
+  {
+    title: "IA inclusa, sem custo escondido",
+    desc: "Todo plano já vem com IA que responde e qualifica seus leads. Quer os modelos mais avançados (GPT-4o, Claude) sem limite de uso? Conecte sua própria chave e a IA fica ilimitada — você paga direto no provedor.",
   },
 ];
 
@@ -208,6 +216,7 @@ export function Landing() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center justify-center gap-5 text-[13.5px] font-semibold text-slate-500">
+              <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Até 4 números de WhatsApp</span>
               <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Teste grátis</span>
               <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Sem cartão de crédito</span>
               <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Cancele quando quiser</span>

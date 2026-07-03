@@ -43,9 +43,10 @@ export async function assertNumberQuota(userId: string, phone: string): Promise<
  *
  * - modelo null/cheap → sempre ok (sem consulta).
  * - `plan == null` (grandfather) ou admin da plataforma → sem clamp.
- * - modelo strong em plano sem `allowStrongModel` → rejeita (use a própria chave / BYOK).
- *   Hoje nenhum plano comercial libera strong na chave da plataforma; grandfather/admin
- *   seguem isentos. O clamp de runtime no `respondToLead` ainda é a rede de segurança.
+ * - **BYOK (chave própria) → libera o modelo avançado** (o cliente paga a própria
+ *   chave; alinha com `resolveAiModelForUser`, que não faz clamp p/ BYOK).
+ * - modelo strong em plano comercial na chave da PLATAFORMA → rejeita.
+ *   O clamp de runtime no `respondToLead` ainda é a rede de segurança.
  */
 export async function assertModelAllowedForPlan(
   userId: string,
@@ -54,10 +55,11 @@ export async function assertModelAllowedForPlan(
   if (!aiModel || modelTier(aiModel) !== "strong") return; // cheap/null: livre
   const owner = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, plan: true },
+    select: { email: true, plan: true, aiProvider: true, aiKeyEnc: true },
   });
   if (!owner) throw new Error("Conta não encontrada");
   if (!owner.plan || isAdminEmail(owner.email)) return; // grandfather / admin
+  if (owner.aiProvider && owner.aiKeyEnc) return; // BYOK: chave própria libera o avançado
   if (!PLAN_LIMITS[owner.plan].allowStrongModel) {
     throw new Error(
       "O modelo avançado só está disponível com a sua própria chave de IA (BYOK). Configure-a em Configurações para usá-lo.",
