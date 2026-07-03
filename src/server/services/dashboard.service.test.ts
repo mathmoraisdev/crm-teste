@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/server/db/client", () => ({
   prisma: {
     lead: { groupBy: vi.fn(), findMany: vi.fn(), count: vi.fn() },
-    message: { groupBy: vi.fn(), findMany: vi.fn() },
+    message: { groupBy: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     whatsAppNumber: { findMany: vi.fn() },
     outboundJob: { groupBy: vi.fn() },
     campaign: { findMany: vi.fn() },
-    meeting: { count: vi.fn() },
+    meeting: { count: vi.fn(), findMany: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }));
@@ -25,6 +25,8 @@ describe("getDashboard", () => {
     (prisma.outboundJob.groupBy as any).mockResolvedValue([]);
     (prisma.campaign.findMany as any).mockResolvedValue([]);
     (prisma.meeting.count as any).mockResolvedValue(0);
+    (prisma.meeting.findMany as any).mockResolvedValue([]);
+    (prisma.message.count as any).mockResolvedValue(0);
     (prisma.user.findMany as any).mockResolvedValue([]);
 
     const { getDashboard } = await import("./dashboard.service");
@@ -56,6 +58,8 @@ describe("getDashboard", () => {
     (prisma.outboundJob.groupBy as any).mockResolvedValue([]);
     (prisma.campaign.findMany as any).mockResolvedValue([]);
     (prisma.meeting.count as any).mockResolvedValue(0);
+    (prisma.meeting.findMany as any).mockResolvedValue([]);
+    (prisma.message.count as any).mockResolvedValue(0);
     (prisma.user.findMany as any).mockResolvedValue([]);
 
     const { getDashboard } = await import("./dashboard.service");
@@ -75,6 +79,8 @@ describe("getDashboard", () => {
     (prisma.outboundJob.groupBy as any).mockResolvedValue([]);
     (prisma.campaign.findMany as any).mockResolvedValue([]);
     (prisma.meeting.count as any).mockResolvedValue(0);
+    (prisma.meeting.findMany as any).mockResolvedValue([]);
+    (prisma.message.count as any).mockResolvedValue(0);
     (prisma.user.findMany as any).mockResolvedValue([]);
 
     const from = new Date("2026-06-01T00:00:00.000Z");
@@ -111,6 +117,8 @@ describe("getDashboard", () => {
     (prisma.outboundJob.groupBy as any).mockResolvedValue([]);
     (prisma.campaign.findMany as any).mockResolvedValue([]);
     (prisma.meeting.count as any).mockResolvedValue(0);
+    (prisma.meeting.findMany as any).mockResolvedValue([]);
+    (prisma.message.count as any).mockResolvedValue(0);
     (prisma.user.findMany as any).mockResolvedValue([]);
 
     const { getDashboard } = await import("./dashboard.service");

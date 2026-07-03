@@ -25,6 +25,21 @@ export interface DailyPoint {
   count: number;
 }
 
+/** Ponto diário do gráfico de atividade: recebidas x respondidas pela IA. */
+export interface ActivityPoint {
+  day: string; // YYYY-MM-DD
+  received: number; // INBOUND do lead no dia
+  aiReplied: number; // OUTBOUND source=AI no dia
+}
+
+export interface UpcomingMeeting {
+  id: string;
+  leadId: string;
+  leadName: string;
+  scheduledAt: string; // ISO
+  status: string;
+}
+
 export interface DashboardData {
   days: number;
   rangeStart: string; // ISO — início do intervalo aplicado
@@ -43,6 +58,14 @@ export interface DashboardData {
   };
   funnel: FunnelStage[];
   newLeadsPerDay: DailyPoint[];
+  // Série diária p/ o gráfico de tendência (recebidas x respondidas pela IA).
+  activityPerDay: ActivityPoint[];
+  // Automação: quanto das mensagens recebidas a IA respondeu no período.
+  automation: { received: number; aiReplied: number; rate: number };
+  // Próximos compromissos (dashboard puxa da agenda p/ visão do dia).
+  upcomingMeetings: UpcomingMeeting[];
+  // Variação % vs o período imediatamente anterior (null quando não há base).
+  deltas: { leads: number | null; inbound: number | null; confirmedMeetings: number | null };
   byCompany: CompanyRow[];
   byCampaign: CampaignRow[];
   sla: {
@@ -65,6 +88,11 @@ export interface AgentRow {
 /** Divisão segura: nunca divide por zero. */
 function ratio(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
+}
+
+/** Variação percentual vs período anterior. null quando não há base (prev=0). */
+function deltaPct(cur: number, prev: number): number | null {
+  return prev > 0 ? (cur - prev) / prev : null;
 }
 
 function dayKey(d: Date): string {
@@ -155,6 +183,30 @@ export async function getDashboard(
     }),
   ]);
 
+  // Período ANTERIOR (mesma duração, imediatamente antes) p/ os deltas, e os
+  // próximos compromissos (independem da janela — são "de agora pra frente").
+  const now = new Date();
+  const prevWindow = { gte: new Date(since.getTime() - days * 86_400_000), lt: since };
+  const [prevLeads, prevInbound, prevConfirmedMeetings, upcoming] = await Promise.all([
+    prisma.lead.count({ where: { userId, createdAt: prevWindow } }),
+    prisma.message.count({
+      where: { lead: { userId }, direction: "INBOUND", createdAt: prevWindow },
+    }),
+    prisma.meeting.count({
+      where: { lead: { userId }, status: "CONFIRMED", scheduledAt: prevWindow },
+    }),
+    prisma.meeting.findMany({
+      where: {
+        lead: { userId },
+        status: { in: ["CONFIRMED", "PROPOSED"] },
+        scheduledAt: { gte: now },
+      },
+      select: { id: true, scheduledAt: true, status: true, lead: { select: { id: true, name: true } } },
+      orderBy: { scheduledAt: "asc" },
+      take: 5,
+    }),
+  ]);
+
   let slaSum = 0;
   for (const l of slaLeads) {
     if (l.queuedAt && l.firstResponseAt) {
@@ -235,6 +287,47 @@ export async function getDashboard(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, count]) => ({ day, count }));
 
+  // Série diária recebidas x respondidas pela IA (a partir das mensagens já
+  // buscadas p/ o SLA da IA — inbound do lead + outbound source=AI).
+  const actMap = new Map<string, { received: number; aiReplied: number }>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
+    actMap.set(dayKey(d), { received: 0, aiReplied: 0 });
+  }
+  for (const m of aiSlaMessages) {
+    const slot = actMap.get(dayKey(m.createdAt));
+    if (!slot) continue;
+    if (m.direction === "INBOUND") slot.received += 1;
+    else slot.aiReplied += 1; // OUTBOUND source=AI (filtro da query)
+  }
+  const activityPerDay: ActivityPoint[] = [...actMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, v]) => ({ day, received: v.received, aiReplied: v.aiReplied }));
+
+  const aiRepliedTotal = activityPerDay.reduce((s, p) => s + p.aiReplied, 0);
+  const receivedTotal = activityPerDay.reduce((s, p) => s + p.received, 0);
+  const automation = {
+    received: receivedTotal,
+    aiReplied: aiRepliedTotal,
+    rate: ratio(aiRepliedTotal, receivedTotal),
+  };
+
+  const deltas = {
+    leads: deltaPct(totalLeads, prevLeads),
+    inbound: deltaPct(inbound, prevInbound),
+    confirmedMeetings: deltaPct(confirmedMeetings, prevConfirmedMeetings),
+  };
+
+  const upcomingMeetings: UpcomingMeeting[] = upcoming
+    .filter((m) => m.scheduledAt)
+    .map((m) => ({
+      id: m.id,
+      leadId: m.lead.id,
+      leadName: m.lead.name,
+      scheduledAt: m.scheduledAt!.toISOString(),
+      status: m.status,
+    }));
+
   // Por empresa (número).
   const numberName = new Map(numbers.map((n) => [n.id, n.displayName?.trim() || n.label]));
   const byCompany: CompanyRow[] = companyGroups
@@ -282,6 +375,10 @@ export async function getDashboard(
     },
     funnel,
     newLeadsPerDay,
+    activityPerDay,
+    automation,
+    upcomingMeetings,
+    deltas,
     byCompany,
     byCampaign,
     sla,

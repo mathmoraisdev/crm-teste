@@ -4,6 +4,7 @@ export interface PlanLimits {
   priceCents: number;
   maxNumbers: number;
   maxSeats: number;   // inclui o admin da conta
+  maxContacts: number; // teto de contatos (leads) — gate de criação manual/CSV
   qualify: boolean;   // pode ligar qualifyEnabled por número
   schedule: boolean;  // pode ligar scheduleEnabled por número
   campaigns: boolean; // pode criar/rodar campanha
@@ -17,9 +18,9 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
-  INICIAL:      { priceCents: 12700, maxNumbers: 1, maxSeats: 2,  qualify: false, schedule: false, campaigns: false, sales: false, aiMonthlyQuota: 300,  allowStrongModel: false },
-  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 1500, allowStrongModel: false },
-  ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 5000, allowStrongModel: false },
+  INICIAL:      { priceCents: 9700,  maxNumbers: 1, maxSeats: 2,  maxContacts: 1000,  qualify: false, schedule: false, campaigns: false, sales: false, aiMonthlyQuota: 1200,  allowStrongModel: false },
+  PROFISSIONAL: { priceCents: 24700, maxNumbers: 2, maxSeats: 5,  maxContacts: 5000,  qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 6000,  allowStrongModel: false },
+  ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, maxContacts: 25000, qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 24000, allowStrongModel: false },
 };
 
 const LABELS: Record<Plan, string> = {

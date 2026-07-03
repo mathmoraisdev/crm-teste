@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { StatCard } from "@/components/app/StatCard";
+import { TrendChart } from "@/components/app/TrendChart";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { LEAD_STATUS_META, type PipelineLabels, resolveStatusMeta } from "@/lib/leadStatus";
-import { cn } from "@/lib/utils";
+import { cn, formatSlot } from "@/lib/utils";
 import type { DashboardData } from "@/server/services/dashboard.service";
 
 const PERIODS = [7, 30, 90];
@@ -171,7 +173,7 @@ export function DashboardView() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard label="Leads no funil" value={data.totals.leads} />
+            <StatCard label="Leads no funil" value={data.totals.leads} delta={data.deltas.leads} />
             <StatCard
               label="Qualificados"
               value={data.totals.qualified}
@@ -186,19 +188,74 @@ export function DashboardView() {
             <StatCard
               label="Reuniões confirmadas"
               value={data.totals.confirmedMeetings}
+              delta={data.deltas.confirmedMeetings}
               hint={`${rangeText}`}
               dark
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <StatCard label="Mensagens recebidas" value={data.totals.inbound} hint={`${rangeText}`} />
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard
+              label="Mensagens recebidas"
+              value={data.totals.inbound}
+              delta={data.deltas.inbound}
+              hint={`${rangeText}`}
+            />
+            <StatCard
+              label="IA no automático"
+              value={pct(data.automation.rate)}
+              hint={`${data.automation.aiReplied} de ${data.automation.received} recebidas`}
+              accent
+            />
             <StatCard label="Mensagens enviadas" value={data.totals.outbound} hint={`${rangeText}`} />
             <StatCard
               label="Novos leads"
               value={data.newLeadsPerDay.reduce((s, p) => s + p.count, 0)}
               hint={`${rangeText}`}
             />
+          </div>
+
+          {/* Tendência de atendimentos + próximos agendamentos */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card className="overflow-hidden lg:col-span-2">
+              <CardHeader
+                title="Atendimentos"
+                subtitle={`Recebidas vs respondidas pela IA · ${rangeText}`}
+              />
+              <TrendChart data={data.activityPerDay} />
+            </Card>
+            <Card className="overflow-hidden">
+              <CardHeader title="Próximos agendamentos" subtitle="Confirmados e propostos" />
+              {data.upcomingMeetings.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">Nada agendado à frente.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {data.upcomingMeetings.map((m) => (
+                    <li key={m.id} className="flex items-center justify-between gap-2 px-5 py-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/leads/${m.leadId}`}
+                          className="block truncate text-sm font-semibold text-ink hover:text-brand-600 hover:underline"
+                        >
+                          {m.leadName}
+                        </Link>
+                        <p className="text-xs text-slate-400">{formatSlot(m.scheduledAt)}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold",
+                          m.status === "CONFIRMED"
+                            ? "bg-brand-50 text-brand-700"
+                            : "bg-amber-50 text-amber-700",
+                        )}
+                      >
+                        {m.status === "CONFIRMED" ? "Confirmada" : "Proposta"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
           </div>
 
           {/* Tempo de resposta: IA (automática) x atendente humano (handoff). */}

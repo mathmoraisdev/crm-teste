@@ -87,7 +87,7 @@ describe("consumeAiCredit", () => {
     const { consumeAiCredit } = await import("./entitlements");
 
     const r = await consumeAiCredit("dono-1", null, NOW);
-    expect(r).toEqual({ allowed: true, source: "platform", used: 11, quota: 300 });
+    expect(r).toEqual({ allowed: true, source: "platform", used: 11, quota: 1200 });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "dono-1" },
       data: { aiCreditMonth: "2026-06", aiCreditUsed: 11 },
@@ -99,12 +99,12 @@ describe("consumeAiCredit", () => {
     (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({
-      email: "cli@x.com", plan: "INICIAL", aiCreditMonth: "2026-06", aiCreditUsed: 300,
+      email: "cli@x.com", plan: "INICIAL", aiCreditMonth: "2026-06", aiCreditUsed: 1200,
     });
     const { consumeAiCredit } = await import("./entitlements");
 
     const r = await consumeAiCredit("dono-1", null, NOW);
-    expect(r).toEqual({ allowed: false, used: 300, quota: 300 });
+    expect(r).toEqual({ allowed: false, used: 1200, quota: 1200 });
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
@@ -118,7 +118,7 @@ describe("consumeAiCredit", () => {
     const { consumeAiCredit } = await import("./entitlements");
 
     const r = await consumeAiCredit("dono-1", null, NOW);
-    expect(r).toEqual({ allowed: true, source: "platform", used: 1, quota: 300 });
+    expect(r).toEqual({ allowed: true, source: "platform", used: 1, quota: 1200 });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "dono-1" },
       data: { aiCreditMonth: "2026-06", aiCreditUsed: 1 },
@@ -164,7 +164,7 @@ describe("consumeAiCredit (peso por modelo)", () => {
     const { consumeAiCredit } = await import("./entitlements");
 
     const r = await consumeAiCredit("dono-1", "gpt-4o", NOW);
-    expect(r).toEqual({ allowed: true, source: "platform", used: 110, quota: 1500 });
+    expect(r).toEqual({ allowed: true, source: "platform", used: 110, quota: 6000 });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "dono-1" },
       data: { aiCreditMonth: "2026-06", aiCreditUsed: 110 },
@@ -188,12 +188,12 @@ describe("consumeAiCredit (peso por modelo)", () => {
     (resolveProviderForUser as any).mockResolvedValue({ source: "platform" });
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({
-      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-06", aiCreditUsed: 1495,
+      email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-06", aiCreditUsed: 5995,
     });
     const { consumeAiCredit } = await import("./entitlements");
 
-    const r = await consumeAiCredit("dono-1", "gpt-4o", NOW); // 1495 + 10 > 1500
-    expect(r).toEqual({ allowed: false, used: 1495, quota: 1500 });
+    const r = await consumeAiCredit("dono-1", "gpt-4o", NOW); // 5995 + 10 > 6000
+    expect(r).toEqual({ allowed: false, used: 5995, quota: 6000 });
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
@@ -267,7 +267,7 @@ describe("getAiUsageStatus", () => {
     });
     const { getAiUsageStatus } = await import("./entitlements");
     expect(await getAiUsageStatus("dono-1", NOW)).toEqual({
-      unlimited: false, used: 420, quota: 1500, month: "2026-06",
+      unlimited: false, used: 420, quota: 6000, month: "2026-06",
     });
   });
 
@@ -279,6 +279,6 @@ describe("getAiUsageStatus", () => {
       email: "cli@x.com", plan: "PROFISSIONAL", aiCreditMonth: "2026-05", aiCreditUsed: 1500,
     });
     const { getAiUsageStatus } = await import("./entitlements");
-    expect(await getAiUsageStatus("dono-1", NOW)).toMatchObject({ used: 0, quota: 1500 });
+    expect(await getAiUsageStatus("dono-1", NOW)).toMatchObject({ used: 0, quota: 6000 });
   });
 });

@@ -62,10 +62,18 @@ const PLANS = [
   {
     name: "Inicial",
     desc: "Para começar a vender no WhatsApp.",
-    priceMonthly: 127,
+    priceMonthly: 97,
     cta: "Começar grátis",
     selfServe: true,
-    features: ["1 número de WhatsApp", "2 usuários", "Atendimento com IA", "CRM + Kanban", "Importação por CSV"],
+    features: [
+      "1 número de WhatsApp",
+      "2 usuários",
+      "1.200 mensagens de IA/mês (≈ 300 conversas)",
+      "1.000 contatos",
+      "Atendimento com IA",
+      "CRM + Kanban",
+      "Importação por CSV",
+    ],
   },
   {
     name: "Profissional",
@@ -77,6 +85,8 @@ const PLANS = [
     features: [
       "2 números de WhatsApp",
       "5 usuários",
+      "6.000 mensagens de IA/mês (≈ 1.500 conversas)",
+      "5.000 contatos",
       "Qualificação por IA",
       "Agendamento e lembretes",
       "Campanhas",
@@ -88,7 +98,14 @@ const PLANS = [
     desc: "Para agências e times de vendas.",
     priceMonthly: 497,
     cta: "Falar com um consultor",
-    features: ["4 números de WhatsApp", "10 usuários", "Suporte prioritário", "Onboarding assistido"],
+    features: [
+      "4 números de WhatsApp",
+      "10 usuários",
+      "24.000 mensagens de IA/mês (≈ 6.000 conversas)",
+      "25.000 contatos",
+      "Suporte prioritário",
+      "Onboarding assistido",
+    ],
   },
 ];
 

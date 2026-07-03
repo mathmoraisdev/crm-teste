@@ -83,6 +83,12 @@ export function CsvUpload({ onImported }: { onImported: () => void }) {
               </>
             )}
           </p>
+          {result.skippedOverLimit > 0 && (
+            <p className="mt-1 text-xs font-semibold text-amber-700">
+              {result.skippedOverLimit} contato(s) não importados: limite de
+              contatos do plano atingido. Faça upgrade para importar o restante.
+            </p>
+          )}
           {result.invalid.length > 0 && (
             <ul className="mt-1 list-inside list-disc text-xs text-red-600">
               {result.invalid.slice(0, 5).map((i) => (

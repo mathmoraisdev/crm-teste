@@ -3,8 +3,41 @@ import type { AttendanceStatus, Lead, LeadStatus, Prisma } from "@prisma/client"
 import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
+import { isAdminEmail } from "@/lib/admin";
+import { PLAN_LIMITS } from "@/lib/plans";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { invalidateLeadCaches } from "@/server/cache/keys";
+
+/**
+ * Capacidade de contatos do plano. grandfather (plan=null)/admin = ilimitado.
+ * Gate de criação DELIBERADA (manual + import CSV). Inbound orgânico do WhatsApp
+ * NÃO passa por aqui — não faz sentido perder um lead real que chegou sozinho.
+ */
+export async function contactCapacity(
+  userId: string,
+): Promise<{ unlimited: boolean; max: number; used: number; remaining: number }> {
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, plan: true },
+  });
+  if (!owner) throw new Error("Conta não encontrada");
+  if (!owner.plan || isAdminEmail(owner.email)) {
+    return { unlimited: true, max: Infinity, used: 0, remaining: Infinity };
+  }
+  const max = PLAN_LIMITS[owner.plan].maxContacts;
+  const used = await prisma.lead.count({ where: { userId } });
+  return { unlimited: false, max, used, remaining: Math.max(0, max - used) };
+}
+
+/** Lança se o plano já atingiu o teto de contatos (criação deliberada). */
+export async function assertContactQuota(userId: string): Promise<void> {
+  const cap = await contactCapacity(userId);
+  if (!cap.unlimited && cap.remaining <= 0) {
+    throw new Error(
+      `Seu plano permite ${cap.max.toLocaleString("pt-BR")} contatos (limite atingido). Faça upgrade para adicionar mais.`,
+    );
+  }
+}
 
 export interface LeadTag {
   id: string;
@@ -172,6 +205,7 @@ export async function createLead(
       data: { name, ...(email ? { email } : {}) },
     });
   } else {
+    await assertContactQuota(userId); // teto de contatos do plano (só no novo)
     // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
     lead = await prisma.lead.create({
       data: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
@@ -272,6 +306,7 @@ export async function deleteLead(id: string, userId: string): Promise<void> {
 export interface ImportResult {
   created: number;
   skippedDuplicates: number;
+  skippedOverLimit: number; // não criados por estourar o teto de contatos do plano
   invalid: { line: number; reason: string }[];
 }
 
@@ -306,14 +341,25 @@ export async function importLeadsFromCsv(
     toCreate.push({ userId, name, phone, status: "NOVO", consentSource: "csv_import" });
   }
 
-  if (toCreate.length > 0) {
-    await prisma.lead.createMany({ data: toCreate });
+  // Teto de contatos do plano: importa até a capacidade restante e reporta o
+  // excedente (não trava o import inteiro por causa do limite).
+  const cap = await contactCapacity(userId);
+  let batch = toCreate;
+  let skippedOverLimit = 0;
+  if (!cap.unlimited && toCreate.length > cap.remaining) {
+    batch = toCreate.slice(0, cap.remaining);
+    skippedOverLimit = toCreate.length - batch.length;
+  }
+
+  if (batch.length > 0) {
+    await prisma.lead.createMany({ data: batch });
     await invalidateLeadCaches(userId);
   }
 
   return {
-    created: toCreate.length,
+    created: batch.length,
     skippedDuplicates: skipped,
+    skippedOverLimit,
     invalid: invalid.map((i) => ({ line: i.line, reason: i.reason })),
   };
 }
