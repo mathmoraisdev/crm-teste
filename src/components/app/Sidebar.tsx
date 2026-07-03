@@ -20,9 +20,11 @@ type NavItem = {
 export function Sidebar({
   isAdmin = false,
   isAccountAdmin = false,
+  branding,
 }: {
   isAdmin?: boolean; // admin DA PLATAFORMA (Financeiro)
   isAccountAdmin?: boolean; // dono/ADMIN DA CONTA (Equipe)
+  branding?: { logoUrl: string | null; appName: string }; // marca da conta (null = padrão)
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -147,7 +149,7 @@ export function Sidebar({
       {/* Barra superior — só no mobile */}
       <header className="sticky top-0 z-40 flex items-center justify-between bg-forest px-4 py-3 lg:hidden">
         <Link href="/leads" aria-label="Início">
-          <Logo dark />
+          <Logo dark logoUrl={branding?.logoUrl} appName={branding?.appName} />
         </Link>
         <button
           onClick={() => setOpen(true)}
@@ -177,7 +179,7 @@ export function Sidebar({
       >
         <div className="flex items-center justify-between px-2 pb-5 pt-1.5">
           <Link href="/leads">
-            <Logo dark />
+            <Logo dark logoUrl={branding?.logoUrl} appName={branding?.appName} />
           </Link>
           <button
             onClick={() => setOpen(false)}

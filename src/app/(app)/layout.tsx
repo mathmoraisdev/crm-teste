@@ -24,7 +24,11 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-slate-50 lg:flex">
       {branding && <BrandingStyle palette={branding.palette} />}
-      <Sidebar isAdmin={isAdmin} isAccountAdmin={isAccountAdmin} />
+      <Sidebar
+        isAdmin={isAdmin}
+        isAccountAdmin={isAccountAdmin}
+        branding={branding ? { logoUrl: branding.logoUrl, appName: branding.appName } : undefined}
+      />
       <main className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-10 2xl:max-w-[1600px]">
           {children}

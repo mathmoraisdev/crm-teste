@@ -32,23 +32,34 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-/** Logo completa: marca + wordmark. */
+/** Logo completa: marca + wordmark. Aceita branding por conta (logo/nome). */
 export function Logo({
   className,
   dark = false,
   size = "md",
+  logoUrl = null,
+  appName = null,
 }: {
   className?: string;
   /** Texto branco (sobre fundo escuro) quando true. */
   dark?: boolean;
   size?: "sm" | "md" | "lg";
+  /** Logo custom da conta (Storage). null = marca padrão (avião). */
+  logoUrl?: string | null;
+  /** Nome custom da conta. null = wordmark "Disparador.ai". */
+  appName?: string | null;
 }) {
   const mark = size === "lg" ? "h-[34px] w-[34px]" : size === "sm" ? "h-7 w-7" : "h-8 w-8";
   const text = size === "lg" ? "text-[21px]" : size === "sm" ? "text-base" : "text-lg";
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
-      <span className={cn("rounded-[11px] shadow-[0_6px_16px_-6px_rgba(14,164,107,.7)]", mark)}>
-        <LogoMark className="h-full w-full" />
+      <span className={cn("overflow-hidden rounded-[11px] shadow-[0_6px_16px_-6px_rgba(14,164,107,.7)]", mark)}>
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt={appName ?? "logo"} className="h-full w-full object-cover" />
+        ) : (
+          <LogoMark className="h-full w-full" />
+        )}
       </span>
       <span
         className={cn(
@@ -57,7 +68,11 @@ export function Logo({
           dark ? "text-white" : "text-ink",
         )}
       >
-        Disparador<span className={dark ? "text-mint" : "text-brand-500"}>.ai</span>
+        {appName ? (
+          appName
+        ) : (
+          <>Disparador<span className={dark ? "text-mint" : "text-brand-500"}>.ai</span></>
+        )}
       </span>
     </span>
   );
