@@ -140,6 +140,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   payments                Payment[]                @relation("AccountPayments") // pagamentos DESTA conta (receita)
   registeredPayments      Payment[]                @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
+  branding                AccountBranding?
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -177,6 +178,22 @@ model AccountNotice {
 
   @@index([seenAt])
   @@index([createdAt])
+}
+
+// Identidade visual da conta (branding multivertical). 1:1 com o DONO da conta.
+// Ausência = paleta default (verde). Só o accent `brand` é temável nesta versão.
+model AccountBranding {
+  id        String   @id @default(cuid())
+  accountId String   @unique // User.id do dono (tenantUserId)
+  account   User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  presetId    String? // id do preset aplicado (ex.: "beleza-rose"); null = default/custom
+  brandScale  Json?   // BrandPalette { "50": "R G B", ... }; null = usa DEFAULT_PALETTE
+  logoUrl     String? // URL pública do logo no Storage; null = logo padrão
+  appName     String? // nome exibido no lugar de "Disparador.ai"; null = padrão
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum LeadStatus {
