@@ -87,6 +87,7 @@ const schema = z.object({
   SUPABASE_URL: z.string().optional().default(""),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(""), // chave de serviço (server-only)
   SUPABASE_MEDIA_BUCKET: z.string().default("whatsapp-media"),
+  SUPABASE_BRANDING_BUCKET: z.string().default("branding"),
   // Retenção de mídia: apaga o BINÁRIO do Storage após N dias. A Message e a
   // transcrição de áudio (em `content`) PERMANECEM — o inbox só cai no placeholder
   // ("🎤 Áudio"), caminho que o sistema já trata por degradação segura. 0 =
