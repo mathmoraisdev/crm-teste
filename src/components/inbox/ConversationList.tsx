@@ -207,7 +207,7 @@ export const ConversationList = memo(function ConversationList({
 
       {/* Barra de seleção em lote. */}
       {onDeleteConversations && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-2 py-1.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-b border-slate-100 px-2 py-1.5">
           {selectMode ? (
             <>
               <div className="flex items-center gap-2">
