@@ -5,6 +5,7 @@ import { processNextJob, processManualReplies } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
+import { purgeExpiredMedia } from "@/server/services/media-retention";
 import { reconcileAiResume } from "@/server/services/conversation.service";
 import { scheduleResponse } from "./respond-queue";
 import { sleep } from "@/lib/humanize";
@@ -142,6 +143,7 @@ async function main() {
   let lastChipAlert = 0;
   let lastReminder = 0;
   let lastAiResume = 0;
+  let lastRetention = 0;
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
@@ -183,6 +185,23 @@ async function main() {
         logger.error({ err }, "[worker] dispatchDueReminders falhou");
       }
       lastReminder = Date.now();
+    }
+
+    // Retenção de mídia: apaga binários antigos do Storage (Message e transcrição
+    // de áudio permanecem; o inbox cai no placeholder). Desligado por padrão
+    // (MEDIA_RETENTION_DAYS=0) → o bloco nem roda. Throttle próprio (default 6h):
+    // a granularidade da retenção é dia, não precisa rodar a cada poll.
+    if (
+      env.MEDIA_RETENTION_DAYS > 0 &&
+      Date.now() - lastRetention >= env.MEDIA_RETENTION_EVERY_MS
+    ) {
+      try {
+        const n = await purgeExpiredMedia(new Date());
+        if (n > 0) logger.info({ purged: n }, "[worker] mídia antiga apagada");
+      } catch (err) {
+        logger.error({ err }, "[worker] purgeExpiredMedia falhou");
+      }
+      lastRetention = Date.now();
     }
 
     // Devolve a IA à conversa quando o operador retoma (handback/resolve) ou o

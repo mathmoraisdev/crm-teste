@@ -87,6 +87,14 @@ const schema = z.object({
   SUPABASE_URL: z.string().optional().default(""),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(""), // chave de serviço (server-only)
   SUPABASE_MEDIA_BUCKET: z.string().default("whatsapp-media"),
+  // Retenção de mídia: apaga o BINÁRIO do Storage após N dias. A Message e a
+  // transcrição de áudio (em `content`) PERMANECEM — o inbox só cai no placeholder
+  // ("🎤 Áudio"), caminho que o sistema já trata por degradação segura. 0 =
+  // desligado (nunca apaga): default seguro p/ subir inerte e ligar por env em
+  // prod. Recomendado quando ligar: 180 (imagem/PDF) + 30 no áudio (já virou texto).
+  MEDIA_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0),
+  MEDIA_AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0), // 0 = usa MEDIA_RETENTION_DAYS
+  MEDIA_RETENTION_EVERY_MS: z.coerce.number().int().positive().default(21_600_000), // 6h: granularidade é dia
   // Dias de teste grátis para cadastros novos. Padrão 0 = nasce SUSPENSO (sem
   // trial automático); o admin libera o teste manualmente no /financeiro.
   TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),

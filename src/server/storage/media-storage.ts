@@ -90,6 +90,26 @@ export async function downloadMediaBuffer(path: string): Promise<Buffer | null> 
 }
 
 /**
+ * Remove objetos do bucket privado (usado pela retenção de mídia). Retorna true
+ * se a remoção rodou (ou não havia paths), false só em falha REAL de Storage —
+ * nesse caso o chamador NÃO deve zerar o `mediaPath`, senão o binário vira órfão
+ * ocupando disco pra sempre. Objeto inexistente NÃO é erro no Supabase (o remove
+ * é idempotente). Sem storage configurado retorna false (não há o que apagar com
+ * segurança; na prática não existem mediaPaths nesse cenário).
+ */
+export async function removeMediaObjects(paths: string[]): Promise<boolean> {
+  if (paths.length === 0) return true;
+  const sb = getClient();
+  if (!sb) return false;
+  const { error } = await sb.storage.from(env.SUPABASE_MEDIA_BUCKET).remove(paths);
+  if (error) {
+    console.warn(`[media-storage] remove (${paths.length} objetos) falhou: ${error.message}`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Gera uma URL assinada (temporária) para baixar o objeto. Retorna null se o
  * storage não está configurado ou a assinatura falhou.
  */
