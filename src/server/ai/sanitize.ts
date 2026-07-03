@@ -9,6 +9,19 @@
 
 const MARKDOWN_LINK = /\[([^\]\n]*)\]\((https?:\/\/[^\s)]+)\)/g;
 
+/**
+ * O transcript é montado com rótulos de locutor ("Vendedor:", "Lead:") — ver
+ * formatTranscript. Modelos do tier barato às vezes imitam esse formato e começam
+ * a resposta com "Vendedor: ..." mesmo o prompt pedindo só o texto da mensagem.
+ * Aqui removemos esse prefixo de locutor caso escape, para não vazar ao cliente.
+ */
+const SPEAKER_LABEL = /^\s*(?:vendedor|lead|atendente|sdr|assistente)\s*:\s*/i;
+
+/** Remove um rótulo de locutor no início da mensagem, se o modelo o vazou. */
+export function stripSpeakerLabel(text: string): string {
+  return text.replace(SPEAKER_LABEL, "");
+}
+
 /** Normaliza p/ comparar texto vs destino (ignora barra final). */
 function sameTarget(a: string, b: string): boolean {
   const norm = (s: string) => s.trim().replace(/\/+$/, "");
