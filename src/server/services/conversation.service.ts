@@ -615,6 +615,66 @@ export async function respondToLead(leadId: string): Promise<void> {
 }
 
 /**
+ * Gera um RASCUNHO de resposta para o operador (botão "Sugerir resposta"),
+ * reusando o MESMO motor da resposta automática (mesma persona/base/contexto).
+ * NÃO envia nem persiste nada — só devolve o texto para a caixa de resposta
+ * manual, que o operador edita e envia (ou descarta).
+ *
+ * Custo: consome 1 crédito de IA como uma resposta normal — BYOK não conta
+ * (chave do cliente); na chave da plataforma debita da cota mensal e respeita o
+ * teto (lança se estourou). Escopado por conta (`userId` = dono).
+ */
+export async function suggestAttendanceReply(
+  leadId: string,
+  userId: string,
+): Promise<string> {
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, userId },
+    select: { id: true, userId: true, whatsAppNumberId: true },
+  });
+  if (!lead) throw new Error("Conversa não encontrada.");
+
+  // Mesma config do número usada pela resposta automática.
+  const company = lead.whatsAppNumberId
+    ? await prisma.whatsAppNumber.findUnique({
+        where: { id: lead.whatsAppNumberId },
+        select: {
+          displayName: true, label: true, aiModel: true, systemPromptOverride: true,
+          persona: true, knowledgeBase: true, businessHours: true,
+          customInstructions: true, contextResetMinutes: true,
+        },
+      })
+    : null;
+
+  // Modelo efetivo (plataforma → econômico) + débito de crédito ANTES de gerar.
+  // Teto estourado: lança sem enviar nada (a rota traduz em erro amigável).
+  const effectiveModel = await resolveAiModelForUser(lead.userId, company?.aiModel ?? null);
+  const credit = await consumeAiCredit(lead.userId, effectiveModel);
+  if (!credit.allowed) {
+    throw new Error("Cota de IA do mês esgotada — não é possível sugerir agora.");
+  }
+
+  const ai = await getAiClient(lead.userId, effectiveModel ?? undefined);
+  const conversation = await computeConversation(
+    lead.id,
+    company?.contextResetMinutes ?? DEFAULT_CONTEXT_RESET_MINUTES,
+  );
+
+  return generateAttendanceReply({
+    ai,
+    company: {
+      displayName: company?.displayName ?? company?.label ?? null,
+      systemPromptOverride: company?.systemPromptOverride ?? null,
+      persona: company?.persona ?? null,
+      knowledgeBase: company?.knowledgeBase ?? null,
+      businessHours: company?.businessHours ?? null,
+      customInstructions: company?.customInstructions ?? null,
+    },
+    conversation,
+  });
+}
+
+/**
  * Garante 1 crédito de IA antes de gerar resposta na chave da plataforma.
  * BYOK/grandfather/admin sempre passam. Se a cota estourou: manda a mensagem
  * fixa, joga o lead pra fila humana (aiPaused) e devolve false — o chamador

@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText } from "lucide-react";
+import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 type Message = LeadDetail["messages"][number];
+
+// Sugestão de resposta da IA (rascunho editável) no handoff humano. Limites p/
+// não desperdiçar cota na chave da plataforma: no máx. 3 por turno de resposta
+// (o contador zera ao enviar ou trocar de conversa) + cooldown entre cliques.
+const MAX_SUGGESTIONS = 3;
+const SUGGEST_COOLDOWN_MS = 4000;
 
 /**
  * Visão da conversa (bolhas) + caixa "responder como lead".
@@ -52,11 +58,23 @@ export function ConversationView({
   // Toggle "assumir conversa" — pausa/retoma a IA.
   const [togglingHandoff, setTogglingHandoff] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
+  // Sugestão de resposta da IA (rascunho): estado + limite por turno + cooldown.
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [suggestCount, setSuggestCount] = useState(0);
+  const [suggestCoolingDown, setSuggestCoolingDown] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
+
+  // Trocar de conversa zera o limite de sugestões (novo turno, novo lead).
+  useEffect(() => {
+    setSuggestCount(0);
+    setSuggestError(null);
+    setSuggestCoolingDown(false);
+  }, [leadId]);
 
   async function send() {
     const content = text.trim();
@@ -129,6 +147,7 @@ export function ConversationView({
       if (!res.ok) throw new Error(data.error ?? "Falha ao enviar resposta");
       setReply("");
       setQuoting(null);
+      setSuggestCount(0); // enviou → novo turno, libera as sugestões de novo
       onReplied();
     } catch (e) {
       setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
@@ -153,12 +172,37 @@ export function ConversationView({
       setReply("");
       setFile(null);
       setQuoting(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setSuggestCount(0); // enviou → novo turno, libera as sugestões de novo
       onReplied();
     } catch (e) {
       setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
     } finally {
       setReplying(false);
+    }
+  }
+
+  // Sugestão de resposta da IA: pede um rascunho ao backend (reusa o motor de
+  // atendimento) e joga na caixa p/ o operador editar. NÃO envia. Respeita o
+  // limite por turno e o cooldown; cada chamada debita cota de IA no servidor.
+  const suggestReached = suggestCount >= MAX_SUGGESTIONS;
+  async function suggest() {
+    if (suggesting || suggestCoolingDown || suggestReached) return;
+    setSuggesting(true);
+    setSuggestError(null);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/suggest-reply`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Falha ao sugerir resposta");
+      setReply(data.suggestion ?? "");
+      setQuoting(null);
+      setSuggestCount((n) => n + 1);
+      setSuggestCoolingDown(true);
+      setTimeout(() => setSuggestCoolingDown(false), SUGGEST_COOLDOWN_MS);
+      replyInputRef.current?.focus();
+    } catch (e) {
+      setSuggestError(e instanceof Error ? e.message : "Erro ao sugerir");
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -260,6 +304,33 @@ export function ConversationView({
                     </button>
                   </div>
                 )}
+                {/* Sugerir resposta (IA): gera um rascunho editável na caixa. */}
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={suggest}
+                    loading={suggesting}
+                    disabled={suggestCoolingDown || suggestReached}
+                    title={
+                      suggestReached
+                        ? "Limite de sugestões deste turno — envie a resposta para liberar"
+                        : "Gerar um rascunho com a IA (você edita antes de enviar)"
+                    }
+                  >
+                    <Sparkles size={14} />
+                    {suggestCount === 0 ? "Sugerir resposta" : "Regenerar"}
+                  </Button>
+                  {suggestCount > 0 && (
+                    <span className="text-[11px] text-slate-400">
+                      {suggestCount}/{MAX_SUGGESTIONS}
+                      {suggestReached && " · envie para liberar"}
+                    </span>
+                  )}
+                  {suggestError && (
+                    <span className="text-[11px] text-red-600">{suggestError}</span>
+                  )}
+                </div>
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   {/* Input de arquivo oculto + botão de anexo (clip). */}
                   <input
@@ -324,7 +395,7 @@ export function ConversationView({
                       }
                     }}
                     rows={1}
-                    placeholder="Responder como o lead… (demo local)"
+                    placeholder="Responder"
                     className="w-full flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />
                   <Button
@@ -337,9 +408,6 @@ export function ConversationView({
                   </Button>
                 </div>
                 {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-                <p className="mt-1 text-xs text-slate-400">
-                  Simula a resposta do lead e dispara a qualificação por IA.
-                </p>
               </>
             )}
           </>
