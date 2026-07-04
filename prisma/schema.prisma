@@ -63,6 +63,20 @@ enum OrderPayment {
   OUTRO
 }
 
+enum ExpenseCategory {
+  ALUGUEL // aluguel/ocupação
+  FORNECEDOR // mercadoria/insumo
+  PESSOAL // salário/pró-labore/comissão
+  CONTAS // luz/água/internet/telefone
+  IMPOSTOS // impostos/taxas
+  OUTRO
+}
+
+enum ExpenseStatus {
+  PENDENTE
+  PAGA
+}
+
 enum Plan {
   INICIAL
   PROFISSIONAL
@@ -167,6 +181,10 @@ model User {
   catalogItems            CatalogItem[]
   orders                  Order[]                  @relation("OrderAccount")
   ordersOpened            Order[]                  @relation("OrderOpenedBy")
+  expenses                 Expense[]          @relation("ExpenseAccount")
+  expensesCreated          Expense[]          @relation("ExpenseCreatedBy")
+  recurringExpenses        RecurringExpense[] @relation("RecurringExpenseAccount")
+  recurringExpensesCreated RecurringExpense[] @relation("RecurringExpenseCreatedBy")
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -277,6 +295,57 @@ model OrderItem {
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
+}
+
+// Despesa / conta a pagar da conta. Pode ser AVULSA ou uma materialização de uma
+// despesa recorrente (recurringId). Regime de CAIXA: entra no "saldo" quando PAGA
+// (paidAt no período), não quando vence. Snapshot imutável: editar o RecurringExpense
+// NÃO altera instâncias já geradas (igual OrderItem x CatalogItem).
+model Expense {
+  id          String          @id @default(cuid())
+  accountId   String // User.id do dono (tenant)
+  account     User            @relation("ExpenseAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  description String
+  amountCents Int // valor em centavos (BRL), >= 0
+  category    ExpenseCategory @default(OUTRO)
+  status      ExpenseStatus   @default(PENDENTE)
+  dueDate     DateTime // vencimento (data da conta); base do "a vencer/vencidas"
+  paidAt      DateTime? // quando foi paga; base do saldo (regime de caixa)
+  note        String?
+  createdById String // quem lançou (operador/dono)
+  createdBy   User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  // Origem recorrente (null = avulsa). competenceMonth "YYYY-MM" garante 1 por mês.
+  recurringId     String?
+  recurring       RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  competenceMonth String? // "YYYY-MM" quando veio de recorrência; null quando avulsa
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Idempotência da geração mensal. Avulsas têm (null, null) → Postgres trata NULLs
+  // como distintos, então várias avulsas coexistem sem colidir.
+  @@unique([recurringId, competenceMonth])
+  @@index([accountId, status, dueDate])
+  @@index([accountId, paidAt])
+}
+
+// Modelo de despesa fixa mensal (aluguel, salário, internet). Gera UMA Expense
+// PENDENTE por mês, de forma idempotente. Desativar para parar de gerar.
+model RecurringExpense {
+  id          String          @id @default(cuid())
+  accountId   String
+  account     User            @relation("RecurringExpenseAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  description String
+  amountCents Int
+  category    ExpenseCategory @default(OUTRO)
+  dayOfMonth  Int // dia do vencimento (1..31; clampa ao último dia em meses curtos)
+  active      Boolean         @default(true)
+  createdById String
+  createdBy   User            @relation("RecurringExpenseCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  expenses    Expense[]
+
+  @@index([accountId, active])
 }
 
 enum LeadStatus {
