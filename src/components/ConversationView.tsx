@@ -235,7 +235,7 @@ export function ConversationView({
               <span
                 className={cn(
                   "inline-flex items-center gap-1.5 text-xs font-medium",
-                  aiPaused ? "text-amber-600" : "text-slate-500",
+                  aiPaused ? "text-warning" : "text-slate-500",
                 )}
               >
                 {aiPaused ? <Hand size={14} /> : <Bot size={14} />}

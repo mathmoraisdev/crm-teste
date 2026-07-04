@@ -121,7 +121,7 @@ export function AccountAccessModal({
               <select
                 value={planValue}
                 onChange={(e) => setPlanValue(e.target.value as Plan | "")}
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="flex-1 rounded-lg border border-line-default bg-inset px-3 py-2 text-sm text-ink"
               >
                 <option value="">— não definido —</option>
                 {(Object.keys(PLAN_LABELS) as Plan[]).map((p) => (
@@ -149,11 +149,11 @@ export function AccountAccessModal({
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button disabled={busy} onClick={() => send({ kind: "trial", days: 3 })}
-                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success-surface disabled:opacity-40">
+                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success/15 disabled:opacity-40">
                 Trial 3 dias
               </button>
               <button disabled={busy} onClick={() => send({ kind: "trial", days: 7 })}
-                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success-surface disabled:opacity-40">
+                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success/15 disabled:opacity-40">
                 Trial 7 dias
               </button>
             </div>
@@ -169,12 +169,12 @@ export function AccountAccessModal({
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button disabled={busy} onClick={() => send({ kind: "forceActive" })}
-                className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40">
+                className="rounded-lg bg-info-surface px-3 py-2 text-xs font-bold text-info hover:bg-info/15 disabled:opacity-40">
                 Forçar ativo
               </button>
               <button disabled={busy || isAdmin} onClick={() => send({ kind: "forceSuspend" })}
                 title={isAdmin ? "Conta admin não pode ser suspensa" : undefined}
-                className="rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger-surface disabled:opacity-40">
+                className="rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger/15 disabled:opacity-40">
                 Suspender
               </button>
               <button disabled={busy} onClick={() => send({ kind: "auto" })}
@@ -198,7 +198,7 @@ export function AccountAccessModal({
               <input
                 type="text" inputMode="decimal" placeholder="Ex.: 129,90"
                 value={amount} onChange={(e) => setAmount(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm text-ink"
               />
               <span className="mt-1 block text-[11px] text-slate-400">
                 Em branco = não registra receita (cortesia/ajuste). Com valor = entra no extrato.
@@ -209,7 +209,7 @@ export function AccountAccessModal({
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value as PaymentMethod | "")}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm text-ink"
               >
                 <option value="">— não informado —</option>
                 {(Object.keys(METHOD_LABELS) as PaymentMethod[]).map((m) => (
@@ -223,7 +223,7 @@ export function AccountAccessModal({
                 type="date"
                 value={due}
                 onChange={(e) => setDue(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm text-ink"
               />
             </label>
             <button disabled={busy} onClick={saveInfo}
@@ -232,7 +232,7 @@ export function AccountAccessModal({
             </button>
             {(paymentMethod || paymentDueDate) && (
               <button disabled={busy} onClick={() => send({ kind: "clearPayment" })}
-                className="w-full rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger-surface disabled:opacity-40">
+                className="w-full rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger/15 disabled:opacity-40">
                 Remover pagamento
               </button>
             )}

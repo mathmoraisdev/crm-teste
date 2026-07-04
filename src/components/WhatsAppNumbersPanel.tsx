@@ -759,7 +759,7 @@ export function WhatsAppNumbersPanel() {
                 &quot;Padrão da conta&quot; usa o modelo configurado globalmente.
               </p>
               {!allowStrongModel && (
-                <p className="mt-1 text-xs text-amber-600">
+                <p className="mt-1 text-xs text-warning">
                   Modelos avançados disponíveis apenas com sua própria chave de IA (BYOK).
                 </p>
               )}
@@ -989,7 +989,7 @@ export function WhatsAppNumbersPanel() {
             {salesAllowed && service.salesEnabled && serviceFor && (
               <div className="space-y-3">
                 {!paymentConnected && (
-                  <p className="rounded-lg border border-amber-200 bg-warning-surface px-3 py-2 text-xs text-warning">
+                  <p className="rounded-lg border border-warning/40 bg-warning-surface px-3 py-2 text-xs text-warning">
                     Nenhum gateway conectado. Conecte um Mercado Pago ou Asaas em{" "}
                     <strong>Configurações → Receber pagamentos (Pix)</strong> para a IA gerar cobranças.
                   </p>

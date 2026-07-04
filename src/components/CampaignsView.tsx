@@ -222,7 +222,7 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
 
                     {c.jobs.total > 0 && (
                       <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
-                        <span className="text-green-700">{c.jobs.sent} enviados</span>
+                        <span className="text-success">{c.jobs.sent} enviados</span>
                         {c.jobs.pending > 0 && (
                           <span className="text-warning">
                             {c.jobs.pending} na fila
@@ -308,7 +308,7 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
                         <span className="text-slate-300">—</span>
                       ) : (
                         <span className="inline-flex items-center gap-2 text-xs tabular-nums">
-                          <span className="text-green-700">
+                          <span className="text-success">
                             {c.jobs.sent} enviados
                           </span>
                           {c.jobs.pending > 0 && (

@@ -150,7 +150,7 @@ export function AgendaView() {
         </select>
         {confirmedCount > 0 && (
           <span className="text-sm text-slate-500">
-            <strong className="text-emerald-600">{confirmedCount}</strong>{" "}
+            <strong className="text-success">{confirmedCount}</strong>{" "}
             confirmada{confirmedCount > 1 ? "s" : ""}
           </span>
         )}

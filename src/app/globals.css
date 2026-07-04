@@ -5,6 +5,7 @@
 /* Paleta de marca default (verde Disparador.ai). Espelha DEFAULT_PALETTE em
    src/lib/theme/palette.ts. O layout do app SOBRESCREVE estas vars por conta. */
 :root {
+  color-scheme: light; /* controles nativos (date/scrollbar/inputs sem bg) seguem o tema */
   --brand-50: 231 246 238;
   --brand-100: 200 234 215;
   --brand-200: 166 220 192;
@@ -46,6 +47,7 @@
    escurecem e text-slate-600/700/900 clareiam sem editar componente.
    NÃO sobrescreva --brand-* aqui (o BrandingStyle injeta por conta depois). */
 [data-theme="dark"] {
+  color-scheme: dark;
   --slate-50: 16 26 21;     --slate-100: 20 32 26;    --slate-200: 26 42 35;
   --slate-300: 40 56 48;    --slate-400: 110 126 118; --slate-500: 150 165 157;
   --slate-600: 180 194 186; --slate-700: 205 217 210; --slate-800: 225 234 229;

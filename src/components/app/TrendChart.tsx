@@ -77,7 +77,7 @@ export function TrendChart({ data }: { data: ActivityPoint[] }) {
               x2={W - padX}
               y1={padTop + innerH * t}
               y2={padTop + innerH * t}
-              stroke="#EEF1F0"
+              className="stroke-line"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />
