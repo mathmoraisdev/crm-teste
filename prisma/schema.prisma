@@ -44,6 +44,25 @@ enum PaymentMethod {
   TRANSFERENCIA
 }
 
+enum CatalogItemKind {
+  SERVICO
+  PRODUTO
+}
+
+enum OrderStatus {
+  ABERTA
+  FECHADA
+}
+
+// Forma de pagamento da COMANDA. Enum próprio (o PaymentMethod existente é do
+// billing e não tem DINHEIRO, que o balcão precisa).
+enum OrderPayment {
+  DINHEIRO
+  PIX
+  CARTAO
+  OUTRO
+}
+
 enum Plan {
   INICIAL
   PROFISSIONAL
@@ -141,6 +160,9 @@ model User {
   payments                Payment[]                @relation("AccountPayments") // pagamentos DESTA conta (receita)
   registeredPayments      Payment[]                @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
   branding                AccountBranding?
+  catalogItems            CatalogItem[]
+  orders                  Order[]                  @relation("OrderAccount")
+  ordersOpened            Order[]                  @relation("OrderOpenedBy")
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -194,6 +216,63 @@ model AccountBranding {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Item vendável do catálogo da conta (serviço ou produto). Fonte de verdade do
+// preço. Por DONO (tenant), não por número de WhatsApp (diferente de Offer, que
+// é do funil de Pix). Ausência de catálogo = conta ainda não cadastrou nada.
+model CatalogItem {
+  id         String          @id @default(cuid())
+  accountId  String // User.id do dono (tenantUserId)
+  account    User            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind       CatalogItemKind @default(SERVICO)
+  name       String
+  priceCents Int // preço em centavos (BRL)
+  active     Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  orderItems OrderItem[]
+
+  @@index([accountId, active])
+}
+
+// Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa
+// (customerName). O total é DERIVADO dos itens (não desnormalizado).
+model Order {
+  id           String        @id @default(cuid())
+  accountId    String // User.id do dono (tenant)
+  account      User          @relation("OrderAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  leadId       String? // opcional: comanda ligada a um lead
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerName String? // nome avulso quando não há lead
+  status       OrderStatus   @default(ABERTA)
+  openedById   String // User.id de quem abriu (operador) — atribuição p/ relatório futuro
+  openedBy     User          @relation("OrderOpenedBy", fields: [openedById], references: [id])
+  payment      OrderPayment? // definido no fechamento
+  note         String?
+  createdAt    DateTime      @default(now())
+  closedAt     DateTime? // quando foi fechada (FECHADA)
+  items        OrderItem[]
+
+  @@index([accountId, status])
+  @@index([accountId, closedAt])
+}
+
+// Linha de uma comanda. Guarda SNAPSHOT de nome/preço: reajustar o catálogo
+// depois não altera comandas antigas. catalogItemId é opcional (permite linha
+// avulsa e sobrevive à exclusão do item do catálogo).
+model OrderItem {
+  id             String       @id @default(cuid())
+  orderId        String
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  catalogItemId  String?
+  catalogItem    CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  nameSnapshot   String
+  unitPriceCents Int
+  quantity       Int          @default(1)
+  createdAt      DateTime     @default(now())
+
+  @@index([orderId])
 }
 
 enum LeadStatus {
@@ -283,6 +362,7 @@ model Lead {
   qualification     Qualification?
   meeting           Meeting?
   sales             Sale[]
+  orders            Order[]
   optOut            Boolean          @default(false)
   optOutAt          DateTime?
   consentSource     String? // origem do opt-in (LGPD)
