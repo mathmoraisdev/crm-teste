@@ -93,10 +93,14 @@ export async function closeOrder(
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
   const closerId = data.closedById ?? order.openedById;
   await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
+    // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
+    // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
+    // e aborta ANTES da baixa, evitando decremento/​SAIDA em dobro.
+    const res = await tx.order.updateMany({
+      where: { id: orderId, status: "ABERTA" },
       data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() },
     });
+    if (res.count === 0) throw new Error("Comanda já fechada.");
     await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
   });
   return toDTO(await loadOwned(accountId, orderId));

@@ -32,10 +32,14 @@ const KIND_LABEL: Record<Movement["kind"], string> = {
   AJUSTE: "Ajuste",
 };
 
+// Client component: renderiza no fuso local do usuário (o ISO vem em UTC).
 function formatDateTime(iso: string): string {
-  const [date, time] = iso.split("T");
-  const [, m, d] = date.split("-");
-  return `${d}/${m} ${time?.slice(0, 5) ?? ""}`.trim();
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /**

@@ -89,4 +89,16 @@ describe("closeOrder — baixa de estoque", () => {
     await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
     expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(-4);
   });
+
+  it("refechar não dá baixa em dobro (guarda idempotente)", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Gel", priceCents: 1500, kind: "PRODUTO", trackStock: true });
+    await recordEntry(acc, prod.id, { qty: 10, createdById: acc });
+    const o = await openOrder(acc, { openedById: acc, customerName: "W" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 4 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc })).rejects.toThrow();
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(6); // 10 − 4, uma vez só
+    expect(await listMovements(acc, prod.id)).toHaveLength(2); // ENTRADA + 1 SAIDA (não 2)
+  });
 });
