@@ -54,6 +54,8 @@ DO $$ BEGIN ALTER TABLE "Order" ADD CONSTRAINT "Order_openedById_fkey" FOREIGN K
 DO $$ BEGIN ALTER TABLE "OrderItem" ADD CONSTRAINT "OrderItem_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "OrderItem" ADD CONSTRAINT "OrderItem_catalogItemId_fkey" FOREIGN KEY ("catalogItemId") REFERENCES "CatalogItem"("id") ON DELETE SET NULL ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- Após criar via SQL Editor (role postgres), conceder acesso ao role da app (`crm`):
---   GRANT SELECT, INSERT, UPDATE, DELETE ON "CatalogItem", "Order", "OrderItem" TO crm;
+-- NÃO precisa GRANT em PROD: o app conecta como `postgres` (não existe role `crm`
+-- em prod — isso é só do dev local), e as tabelas criadas aqui já nascem com
+-- owner = postgres, então o app já tem acesso total. Omitir o GRANT também evita
+-- expor as tabelas via Data API (anon/authenticated).
 -- Validar: select to_regclass('public."Order"'), to_regclass('public."CatalogItem"'), to_regclass('public."OrderItem"');
