@@ -8,6 +8,7 @@ import {
   type BusinessCategory,
   type BusinessTemplate,
 } from "@/lib/business-templates";
+import { presetForCategory } from "@/lib/theme/presets";
 
 /** Categorias que realmente têm modelos, na ordem do CATEGORY_LABEL. */
 function usedCategories(): BusinessCategory[] {
@@ -23,12 +24,39 @@ export function BusinessTemplatePicker({
   const categories = useMemo(usedCategories, []);
   const [cat, setCat] = useState<BusinessCategory | "">("");
   const [tplId, setTplId] = useState("");
+  const [applyTheme, setApplyTheme] = useState(true);
+  const [applying, setApplying] = useState(false);
 
   const options = useMemo(
     () => (cat ? BUSINESS_TEMPLATES.filter((t) => t.category === cat) : []),
     [cat],
   );
   const selected = options.find((t) => t.id === tplId) ?? null;
+  // Preset dedicado da categoria (não o fallback verde), p/ oferecer as cores do ramo.
+  const themePreset = useMemo(() => {
+    if (!cat) return null;
+    const p = presetForCategory(cat);
+    return p.category === cat ? p : null;
+  }, [cat]);
+
+  async function apply() {
+    if (!selected) return;
+    onApply(selected);
+    // Sugestão desacoplada: aplica também as cores do ramo. Best-effort — a API
+    // gateia no dono (operador recebe 403, ignorado). Não bloqueia o template.
+    if (applyTheme && themePreset) {
+      setApplying(true);
+      try {
+        const form = new FormData();
+        form.set("presetId", themePreset.id);
+        await fetch("/api/branding", { method: "POST", body: form });
+      } catch {
+        // silencioso — o tema é opcional; a fonte de verdade é a aba Identidade
+      } finally {
+        setApplying(false);
+      }
+    }
+  }
 
   return (
     <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-3">
@@ -70,12 +98,25 @@ export function BusinessTemplatePicker({
         </select>
       </div>
       {selected && <p className="text-xs text-slate-500">{selected.blurb}</p>}
+      {themePreset && (
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={applyTheme}
+            onChange={(e) => setApplyTheme(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/30"
+          />
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="h-3 w-3 rounded-full border border-black/5"
+              style={{ background: `rgb(${themePreset.palette["500"].replaceAll(" ", ",")})` }}
+            />
+            Aplicar também as cores deste ramo
+          </span>
+        </label>
+      )}
       <div className="flex justify-end">
-        <Button
-          size="sm"
-          disabled={!selected}
-          onClick={() => selected && onApply(selected)}
-        >
+        <Button size="sm" disabled={!selected} loading={applying} onClick={apply}>
           Aplicar modelo
         </Button>
       </div>
