@@ -123,7 +123,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div data-theme="light" className="grid min-h-screen bg-slate-50 text-ink lg:grid-cols-2">
       {/* brand panel */}
       <div className="relative hidden flex-col justify-between overflow-hidden bg-forest p-12 lg:flex">
         <div className="pointer-events-none absolute -right-32 -top-32 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(95,227,161,.2),transparent_65%)]" />

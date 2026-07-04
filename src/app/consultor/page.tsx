@@ -56,7 +56,7 @@ export default function ConsultorPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div data-theme="light" className="flex min-h-screen flex-col bg-slate-50 text-ink">
       <header className="border-b border-slate-200 bg-white px-6 py-4">
         <Link href="/" className="inline-block">
           <Logo />

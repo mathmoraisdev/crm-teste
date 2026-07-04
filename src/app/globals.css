@@ -70,6 +70,34 @@
   --accent: 182 156 240;   --accent-surface: 40 32 66;
 }
 
+/* Escopo que FORÇA tema claro mesmo dentro de html[data-theme="dark"].
+   Usado por páginas sempre-claras (landing/marketing/login/legal) que foram
+   desenhadas p/ o claro e não devem herdar a inversão do dark. Espelha os
+   neutros/superfícies/status do :root — NÃO mexe em --brand-* (o BrandingStyle
+   continua vencendo por ordem de DOM). */
+[data-theme="light"] {
+  color-scheme: light;
+  --slate-50: 244 247 245;   --slate-100: 237 242 239; --slate-200: 226 234 230;
+  --slate-300: 213 223 218;  --slate-400: 148 163 155; --slate-500: 107 122 115;
+  --slate-600: 70 84 77;     --slate-700: 52 67 59;    --slate-800: 26 42 35;
+  --slate-900: 10 27 20;     --slate-950: 5 13 9;
+  --ink: 10 20 16;
+
+  --surface-app: 244 247 245;
+  --surface-card: 255 255 255;
+  --surface-raised: 255 255 255;
+  --surface-inset: 244 247 245;
+  --border-subtle: 237 242 239;
+  --border-default: 226 234 230;
+  --border-strong: 213 223 218;
+
+  --danger: 192 57 43;          --danger-surface: 253 236 236;
+  --warning: 185 115 9;         --warning-surface: 254 243 226;
+  --info: 44 91 214;            --info-surface: 234 240 254;
+  --success: 11 125 82;         --success-surface: 231 246 238;
+  --accent: 109 67 214;         --accent-surface: 239 234 254;
+}
+
 html,
 body {
   @apply bg-surface text-ink antialiased;

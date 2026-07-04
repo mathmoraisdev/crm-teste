@@ -62,7 +62,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div data-theme="light" className="grid min-h-screen bg-slate-50 text-ink lg:grid-cols-2">
       {/* form */}
       <div className="flex items-center justify-center px-6 py-12 lg:px-12">
         <form onSubmit={onSubmit} className="w-full max-w-[400px]">

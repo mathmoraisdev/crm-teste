@@ -13,7 +13,7 @@ export default function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-slate-50 text-ink">
+    <div data-theme="light" className="min-h-screen bg-slate-50 text-ink">
       {/* NAV */}
       <header className="sticky top-0 z-50 border-b border-[rgba(10,27,20,.06)] bg-slate-50/80 backdrop-blur-md backdrop-saturate-150">
         <div className="mx-auto flex max-w-[820px] items-center justify-between px-6 py-4 md:px-8">

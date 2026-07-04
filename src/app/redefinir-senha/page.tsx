@@ -130,7 +130,7 @@ function RedefinirSenhaForm() {
 
 export default function RedefinirSenhaPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-12">
+    <div data-theme="light" className="flex min-h-screen items-center justify-center bg-slate-50 text-ink px-6 py-12">
       <Suspense fallback={null}>
         <RedefinirSenhaForm />
       </Suspense>
