@@ -73,7 +73,7 @@ const FEATURES = [
 const PLANS = [
   {
     name: "Inicial",
-    desc: "Para começar a atender e vender no WhatsApp.",
+    desc: "Para atender e gerenciar o negócio no WhatsApp.",
     priceMonthly: 97,
     cta: "Começar grátis",
     selfServe: true,
@@ -84,12 +84,12 @@ const PLANS = [
       "1.000 contatos",
       "Atendimento com IA",
       "CRM + Kanban + Agenda",
-      "Caixa e catálogo",
+      "Caixa completo: PDV, estoque e despesas",
     ],
   },
   {
     name: "Profissional",
-    desc: "Para escalar o atendimento e a gestão.",
+    desc: "Para automatizar o atendimento e escalar.",
     priceMonthly: 247,
     cta: "Começar grátis",
     selfServe: true,
@@ -100,9 +100,9 @@ const PLANS = [
       "10.000 mensagens de IA/mês (≈ 2.500 conversas)",
       "5.000 contatos",
       "Tudo do Inicial, mais:",
-      "Estoque e controle financeiro",
+      "Qualificação por IA + agendamento automático",
       "Campanhas e disparos",
-      "Cadência humana e aquecimento",
+      "Cobrança por Pix",
     ],
   },
   {
@@ -115,6 +115,7 @@ const PLANS = [
       "10 usuários",
       "24.000 mensagens de IA/mês (≈ 6.000 conversas)",
       "25.000 contatos",
+      "Tudo do Profissional, mais:",
       "Suporte prioritário",
       "Onboarding assistido",
     ],
