@@ -7,6 +7,7 @@ import { PIPELINE_ORDER, type PipelineLabels } from "@/lib/leadStatus";
 import { getAiUsageStatus } from "@/server/services/entitlements";
 import { contactCapacity } from "@/server/services/lead.service";
 import { recordAccountNotice, clearUnseenCancelNotices } from "@/server/services/notice.service";
+import { getTemplate } from "@/lib/business-templates";
 
 /** Lê os rótulos renomeados das etapas do funil da conta (ou {} se não houver). */
 export async function getPipelineLabels(userId: string): Promise<PipelineLabels> {
@@ -372,4 +373,16 @@ export async function setCancellation(userId: string, requested: boolean): Promi
   } else {
     await clearUnseenCancelNotices(user.email);
   }
+}
+
+/** Ramo do negócio da conta (id de BUSINESS_TEMPLATES) ou null. Escopo: dono. */
+export async function getBusinessTemplateId(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { businessTemplateId: true } });
+  return u?.businessTemplateId ?? null;
+}
+
+/** Define/limpa o ramo. Valida contra BUSINESS_TEMPLATES (null = limpar). */
+export async function setBusinessTemplateId(userId: string, templateId: string | null): Promise<void> {
+  if (templateId !== null && !getTemplate(templateId)) throw new Error("Ramo inválido.");
+  await prisma.user.update({ where: { id: userId }, data: { businessTemplateId: templateId } });
 }
