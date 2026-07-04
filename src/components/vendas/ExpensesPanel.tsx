@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Trash2, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -47,18 +47,54 @@ function todayLocalYMD(): string {
 export function ExpensesPanel() {
   const [payable, setPayable] = useState<Expense[] | null>(null);
   const [paid, setPaid] = useState<Expense[]>([]);
+  const [paidTotal, setPaidTotal] = useState(0);
   const [recurring, setRecurring] = useState<Recurring[]>([]);
 
   const [showPaid, setShowPaid] = useState(false);
 
-  const load = useCallback(async () => {
+  // Filtro: intervalo de datas + busca por descrição (dirige A pagar e Pagas).
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [q, setQ] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
+  const reqRef = useRef(0);
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const buildQuery = useCallback(
+    (paidSkip: number) => {
+      const sp = new URLSearchParams();
+      if (from) sp.set("from", new Date(`${from}T00:00:00-03:00`).toISOString());
+      if (to) sp.set("to", new Date(`${to}T23:59:59-03:00`).toISOString());
+      if (qDebounced.trim()) sp.set("q", qDebounced.trim());
+      sp.set("paidSkip", String(paidSkip));
+      sp.set("paidTake", "50");
+      return sp.toString();
+    },
+    [from, to, qDebounced],
+  );
+
+  const load = useCallback(
+    async (paidSkip = 0, appendPaid = false) => {
+      const reqId = ++reqRef.current;
+      try {
+        const exp = await fetch(`/api/vendas/expenses?${buildQuery(paidSkip)}`, { cache: "no-store" }).then((r) => r.json());
+        if (reqId !== reqRef.current) return; // resposta obsoleta
+        setPayable((exp.payable as Expense[]) ?? []);
+        setPaid((prev) => (appendPaid ? [...prev, ...((exp.paid?.items as Expense[]) ?? [])] : ((exp.paid?.items as Expense[]) ?? [])));
+        setPaidTotal(exp.paid?.total ?? 0);
+      } catch {
+        /* mantém estado anterior */
+      }
+    },
+    [buildQuery],
+  );
+
+  const loadRecurring = useCallback(async () => {
     try {
-      const [exp, rec] = await Promise.all([
-        fetch("/api/vendas/expenses", { cache: "no-store" }).then((r) => r.json()),
-        fetch("/api/vendas/expenses/recurring", { cache: "no-store" }).then((r) => r.json()),
-      ]);
-      setPayable((exp.payable as Expense[]) ?? []);
-      setPaid((exp.paid as Expense[]) ?? []);
+      const rec = await fetch("/api/vendas/expenses/recurring", { cache: "no-store" }).then((r) => r.json());
       setRecurring((rec.recurring as Recurring[]) ?? []);
     } catch {
       /* mantém estado anterior */
@@ -66,14 +102,56 @@ export function ExpensesPanel() {
   }, []);
 
   useEffect(() => {
-    load();
+    load(0, false);
   }, [load]);
+  useEffect(() => {
+    loadRecurring();
+  }, [loadRecurring]);
 
   const today = todayLocalYMD();
   const payableTotal = (payable ?? []).reduce((s, e) => s + e.amountCents, 0);
 
   return (
     <div className="space-y-4">
+      {/* ── Filtro: intervalo de datas + busca por descrição ──────── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
+          <span className="text-sm text-slate-400">até</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
+        </div>
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar despesa…"
+          className="min-w-[180px] flex-1 rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        />
+        {(from || to || q) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFrom("");
+              setTo("");
+              setQ("");
+            }}
+            className="text-sm text-slate-500 hover:text-ink"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+
       {/* ── A pagar ──────────────────────────────────────────────── */}
       <Card>
         <CardHeader title="A pagar" subtitle="Contas pendentes, ordenadas por vencimento." />
@@ -108,8 +186,8 @@ export function ExpensesPanel() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <PayButton id={e.id} onDone={load} />
-                        <DeleteButton onDelete={() => fetch(`/api/vendas/expenses/${e.id}`, { method: "DELETE" }).then(load)} label="Excluir conta" />
+                        <PayButton id={e.id} onDone={() => load()} />
+                        <DeleteButton onDelete={() => fetch(`/api/vendas/expenses/${e.id}`, { method: "DELETE" }).then(() => load())} label="Excluir conta" />
                       </div>
                     </li>
                   );
@@ -124,7 +202,7 @@ export function ExpensesPanel() {
       </Card>
 
       {/* ── Nova despesa ─────────────────────────────────────────── */}
-      <NewExpenseForm onCreated={load} />
+      <NewExpenseForm onCreated={() => load()} />
 
       {/* ── Pagas (recolhível) ───────────────────────────────────── */}
       <Card>
@@ -134,31 +212,50 @@ export function ExpensesPanel() {
           className="flex w-full items-center gap-1.5 px-5 py-3 text-left text-sm font-semibold text-ink hover:bg-inset"
         >
           {showPaid ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          Pagas ({paid.length})
+          Pagas ({paidTotal})
         </button>
         {showPaid && (
           <div className="px-5 pb-4">
             {paid.length === 0 ? (
-              <p className="text-sm text-slate-400">Nenhuma despesa paga ainda.</p>
+              <p className="text-sm text-slate-400">Nenhuma despesa paga no período.</p>
             ) : (
-              <ul className="space-y-1.5">
-                {paid.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0 truncate text-ink">
-                      {e.description}
-                      <span className="text-slate-400"> · {CATEGORY_LABEL[e.category]}</span>
-                    </span>
-                    <span className="whitespace-nowrap text-slate-600">{formatCentsBRL(e.amountCents)}</span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="space-y-1.5">
+                  {paid.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="min-w-0 truncate text-ink">
+                        {e.description}
+                        <span className="text-slate-400"> · {CATEGORY_LABEL[e.category]}</span>
+                      </span>
+                      <span className="whitespace-nowrap text-slate-600">{formatCentsBRL(e.amountCents)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {paid.length < paidTotal && (
+                  <div className="pt-3">
+                    <button
+                      type="button"
+                      onClick={() => load(paid.length, true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-line-default bg-card px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                    >
+                      Carregar mais
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
       </Card>
 
       {/* ── Despesas fixas ───────────────────────────────────────── */}
-      <RecurringManager recurring={recurring} onChange={load} />
+      <RecurringManager
+        recurring={recurring}
+        onChange={() => {
+          load();
+          loadRecurring();
+        }}
+      />
     </div>
   );
 }
