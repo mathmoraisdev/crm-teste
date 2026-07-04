@@ -63,6 +63,12 @@ enum OrderPayment {
   OUTRO
 }
 
+enum StockMovementKind {
+  ENTRADA // compra/reposição (+)
+  SAIDA   // venda: baixa por comanda fechada (−)
+  AJUSTE  // inventário/correção/perda (+/−)
+}
+
 enum ExpenseCategory {
   ALUGUEL // aluguel/ocupação
   FORNECEDOR // mercadoria/insumo
@@ -185,6 +191,8 @@ model User {
   expensesCreated          Expense[]          @relation("ExpenseCreatedBy")
   recurringExpenses        RecurringExpense[] @relation("RecurringExpenseAccount")
   recurringExpensesCreated RecurringExpense[] @relation("RecurringExpenseCreatedBy")
+  stockMovements        StockMovement[] @relation("StockMovementAccount")
+  stockMovementsCreated StockMovement[] @relation("StockMovementCreatedBy")
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -255,7 +263,16 @@ model CatalogItem {
   updatedAt  DateTime        @updatedAt
   orderItems OrderItem[]
 
+  // --- Controle de estoque (opt-in; só faz sentido em kind = PRODUTO) ---
+  trackStock Boolean @default(false) // liga o controle p/ este item
+  sku        String? // código interno opcional
+  stockQty   Int     @default(0) // saldo atual (desnormalizado; = Σ dos movimentos)
+  minStock   Int     @default(0) // alerta quando stockQty <= minStock
+  costCents  Int? // custo unitário em centavos (opcional; p/ valor em estoque)
+  stockMovements StockMovement[]
+
   @@index([accountId, active])
+  @@index([accountId, trackStock])
 }
 
 // Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa
@@ -275,6 +292,7 @@ model Order {
   createdAt    DateTime      @default(now())
   closedAt     DateTime? // quando foi fechada (FECHADA)
   items        OrderItem[]
+  stockMovements StockMovement[]
 
   @@index([accountId, status])
   @@index([accountId, closedAt])
@@ -294,6 +312,31 @@ model OrderItem {
   quantity       Int          @default(1)
   createdAt      DateTime     @default(now())
 
+  @@index([orderId])
+}
+
+// Livro-razão imutável de estoque: cada variação de saldo é uma linha (append-only).
+// delta = variação aplicada (+entrada, −saída); balanceAfter = saldo resultante
+// (snapshot p/ auditoria e reconciliação com CatalogItem.stockQty). orderId liga a
+// baixa à comanda que a gerou (SAIDA).
+model StockMovement {
+  id            String            @id @default(cuid())
+  accountId     String
+  account       User              @relation("StockMovementAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  catalogItem   CatalogItem       @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  kind          StockMovementKind
+  delta         Int // +entrada / −saída / ± ajuste
+  balanceAfter  Int // saldo do item após aplicar o delta
+  reason        String? // nota livre (fornecedor, "inventário", "perda")
+  orderId       String? // comanda de origem (quando SAIDA)
+  order         Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  unitCostCents Int? // custo unitário no caso de ENTRADA (snapshot)
+  createdById   String
+  createdBy     User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+
+  @@index([accountId, catalogItemId, createdAt])
   @@index([orderId])
 }
 
