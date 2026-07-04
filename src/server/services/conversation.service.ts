@@ -11,7 +11,8 @@ import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { listActiveOffers } from "./offer.service";
 import { sendOffer } from "./sales.service";
-import { renderActiveOffers } from "@/server/ai/attendance-context";
+import { renderActiveOffers, renderCatalogForAI } from "@/server/ai/attendance-context";
+import { listCatalogItems } from "./catalog.service";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import {
   sendWhatsAppMessage,
@@ -593,6 +594,7 @@ export async function respondToLead(leadId: string): Promise<void> {
 
   // 4d. Atendimento: responde a dúvida no contexto da empresa (sempre que autoReply).
   if (mode.reply) {
+    const catalogBlock = await loadCatalogBlock(lead.userId);
     const reply = await generateAttendanceReply({
       ai,
       company: {
@@ -603,6 +605,7 @@ export async function respondToLead(leadId: string): Promise<void> {
         businessHours: company?.businessHours ?? null,
         customInstructions: company?.customInstructions ?? null,
       },
+      catalogBlock,
       conversation,
     });
     // Recheck pós-geração: a chamada da IA leva segundos; nesse meio o operador
@@ -612,6 +615,13 @@ export async function respondToLead(leadId: string): Promise<void> {
     await sendWhatsAppMessage(lead, reply);
   }
   // !mode.reply → handoff total: só persiste o inbound (humano responde via /reply).
+}
+
+/** Bloco de catálogo ativo da conta p/ o contexto da IA (vazio se não há itens). */
+async function loadCatalogBlock(accountId: string): Promise<string | undefined> {
+  const items = await listCatalogItems(accountId, { activeOnly: true });
+  const block = renderCatalogForAI(items.map((i) => ({ name: i.name, priceCents: i.priceCents, kind: i.kind })));
+  return block || undefined;
 }
 
 /**
@@ -660,6 +670,8 @@ export async function suggestAttendanceReply(
     company?.contextResetMinutes ?? DEFAULT_CONTEXT_RESET_MINUTES,
   );
 
+  const catalogBlock = await loadCatalogBlock(lead.userId);
+
   return generateAttendanceReply({
     ai,
     company: {
@@ -670,6 +682,7 @@ export async function suggestAttendanceReply(
       businessHours: company?.businessHours ?? null,
       customInstructions: company?.customInstructions ?? null,
     },
+    catalogBlock,
     conversation,
   });
 }
