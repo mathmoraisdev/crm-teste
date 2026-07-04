@@ -44,9 +44,18 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
+      suppressHydrationWarning
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
     >
-      <body className="min-h-screen font-sans">
+      <head>
+        {/* No-flash: aplica o tema salvo (ou a preferência do SO) antes do paint. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(!t){t=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className="min-h-screen bg-surface font-sans text-ink">
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>

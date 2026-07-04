@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 
 // Menu dividido por categorias. `show` (opcional) esconde o item;
 // grupo sem itens visíveis não renderiza o cabeçalho.
@@ -245,6 +246,8 @@ export function Sidebar({
               Conectar &amp; gerenciar chips
             </span>
           </Link>
+
+          <ThemeToggle />
 
           <button
             onClick={logout}
