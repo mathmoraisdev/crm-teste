@@ -64,21 +64,50 @@ export async function createExpense(
   return toDTO(e);
 }
 
-export async function listPayable(accountId: string): Promise<ExpenseDTO[]> {
+export async function listPayable(
+  accountId: string,
+  opts: { from?: Date; to?: Date; query?: string } = {},
+): Promise<ExpenseDTO[]> {
+  const q = opts.query?.trim();
   const rows = await prisma.expense.findMany({
-    where: { accountId, status: "PENDENTE" },
+    where: {
+      accountId,
+      status: "PENDENTE",
+      ...(opts.from || opts.to
+        ? { dueDate: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+        : {}),
+      ...(q ? { description: { contains: q, mode: "insensitive" as const } } : {}),
+    },
     orderBy: { dueDate: "asc" },
   });
   return rows.map(toDTO);
 }
 
-export async function listPaid(accountId: string, limit = 100): Promise<ExpenseDTO[]> {
-  const rows = await prisma.expense.findMany({
-    where: { accountId, status: "PAGA" },
-    orderBy: { paidAt: "desc" },
-    take: limit,
-  });
-  return rows.map(toDTO);
+export interface ExpensePage { items: ExpenseDTO[]; total: number; }
+
+export async function listPaid(
+  accountId: string,
+  opts: { from?: Date; to?: Date; query?: string; skip?: number; take?: number } = {},
+): Promise<ExpensePage> {
+  const q = opts.query?.trim();
+  const where = {
+    accountId,
+    status: "PAGA" as const,
+    ...(opts.from || opts.to
+      ? { paidAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+      : {}),
+    ...(q ? { description: { contains: q, mode: "insensitive" as const } } : {}),
+  };
+  const [rows, total] = await Promise.all([
+    prisma.expense.findMany({
+      where,
+      orderBy: { paidAt: "desc" },
+      skip: opts.skip ?? 0,
+      take: Math.min(opts.take ?? 50, 100),
+    }),
+    prisma.expense.count({ where }),
+  ]);
+  return { items: rows.map(toDTO), total };
 }
 
 async function loadOwned(accountId: string, id: string) {

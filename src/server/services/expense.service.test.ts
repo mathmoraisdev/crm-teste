@@ -36,7 +36,7 @@ describe("expense.service", () => {
     expect(e.status).toBe("PAGA");
     expect(e.paidAt).toBeTruthy();
     expect(await listPayable(a)).toHaveLength(0);
-    expect((await listPaid(a)).map((x) => x.id)).toContain(e.id);
+    expect((await listPaid(a)).items.map((x) => x.id)).toContain(e.id);
   });
 
   it("payExpense marca paga e sai da lista de a pagar", async () => {
@@ -91,5 +91,61 @@ describe("expense.service — recorrência", () => {
     await expect(deleteRecurring(b, r.id)).rejects.toThrow();
     expect(await listRecurring(a)).toHaveLength(1);
     expect(await listRecurring(b)).toHaveLength(0);
+  });
+});
+
+describe("expense.service — filtro de A pagar", () => {
+  it("filtra pendentes por intervalo de vencimento e por descrição", async () => {
+    const a = await makeOwner();
+    await createExpense(a, { description: "Aluguel sala", amountCents: 1000, dueDate: "2026-07-05", createdById: a });
+    await createExpense(a, { description: "Luz", amountCents: 2000, dueDate: "2026-07-20", createdById: a });
+    await createExpense(a, { description: "Internet", amountCents: 3000, dueDate: "2026-08-10", createdById: a });
+
+    // por data (só julho)
+    const jul = await listPayable(a, {
+      from: new Date("2026-07-01T00:00:00-03:00"),
+      to: new Date("2026-07-31T23:59:59-03:00"),
+    });
+    expect(jul.map((e) => e.description).sort()).toEqual(["Aluguel sala", "Luz"]);
+
+    // por texto (case-insensitive)
+    const alug = await listPayable(a, { query: "aluguel" });
+    expect(alug).toHaveLength(1);
+    expect(alug[0].description).toBe("Aluguel sala");
+
+    // sem filtro = tudo
+    expect(await listPayable(a)).toHaveLength(3);
+  });
+});
+
+describe("expense.service — extrato de Pagas", () => {
+  it("filtra pagas por período (paidAt) e descrição, com total e paginação", async () => {
+    const a = await makeOwner();
+    // 3 pagas + 1 pendente
+    for (const [desc, val] of [["Fornecedor A", 1000], ["Fornecedor B", 2000], ["Aluguel", 3000]] as const) {
+      const e = await createExpense(a, { description: desc, amountCents: val, dueDate: "2026-07-05", createdById: a });
+      await payExpense(a, e.id);
+    }
+    await createExpense(a, { description: "Pendente", amountCents: 9, dueDate: "2026-07-05", createdById: a });
+
+    const all = await listPaid(a);
+    expect(all.total).toBe(3);
+    expect(all.items).toHaveLength(3);
+
+    // busca por texto
+    const forn = await listPaid(a, { query: "fornecedor" });
+    expect(forn.total).toBe(2);
+
+    // paginação: take=2 → 2 itens mas total=3
+    const page1 = await listPaid(a, { take: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.total).toBe(3);
+
+    // período que não pega nada (mês passado)
+    const empty = await listPaid(a, {
+      from: new Date("2026-06-01T00:00:00-03:00"),
+      to: new Date("2026-06-30T23:59:59-03:00"),
+    });
+    expect(empty.total).toBe(0);
   });
 });
