@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import type { OrderPayment, OrderStatus } from "@prisma/client";
+import { applyOrderStockExit } from "./stock.service";
 
 export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; }
 export interface OrderDTO {
@@ -83,10 +84,21 @@ export async function removeItem(accountId: string, orderId: string, itemId: str
   return toDTO(await loadOwned(accountId, orderId));
 }
 
-export async function closeOrder(accountId: string, orderId: string, data: { payment: OrderPayment; note?: string }): Promise<OrderDTO> {
-  const order = await loadOwned(accountId, orderId);
+export async function closeOrder(
+  accountId: string,
+  orderId: string,
+  data: { payment: OrderPayment; note?: string; closedById?: string },
+): Promise<OrderDTO> {
+  const order = await loadOwned(accountId, orderId); // já inclui items
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
-  await prisma.order.update({ where: { id: orderId }, data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() } });
+  const closerId = data.closedById ?? order.openedById;
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { id: orderId },
+      data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() },
+    });
+    await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
+  });
   return toDTO(await loadOwned(accountId, orderId));
 }
 
