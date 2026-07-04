@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
 import { resolvePeriod, type ReportPeriod } from "@/server/services/date-range";
 import { salesSummary, revenueByPayment, revenueByOperator, topItems } from "@/server/services/sales-report.service";
+import { expensesTotal, expensesByCategory } from "@/server/services/expense-report.service";
 
 export const dynamic = "force-dynamic";
 
@@ -19,5 +20,19 @@ export async function GET(req: NextRequest) {
     revenueByOperator(ctx.tenantUserId, from, to),
     topItems(ctx.tenantUserId, from, to, 10),
   ]);
-  return NextResponse.json({ period, summary, byPayment, byOperator, topItems: top });
+
+  const base = { period, summary, byPayment, byOperator, topItems: top };
+  // Despesas/saldo são de DONO. Operador recebe só as vendas (sem os campos de despesa).
+  if (!ctx.perms.canSettings) return NextResponse.json(base);
+
+  const [expTotal, expByCat] = await Promise.all([
+    expensesTotal(ctx.tenantUserId, from, to),
+    expensesByCategory(ctx.tenantUserId, from, to),
+  ]);
+  return NextResponse.json({
+    ...base,
+    expensesTotalCents: expTotal,
+    expensesByCategory: expByCat,
+    balanceCents: summary.totalCents - expTotal,
+  });
 }
