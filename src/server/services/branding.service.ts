@@ -38,6 +38,16 @@ export function resolveBranding(row: AccountBranding | null): ResolvedBranding {
 
 /** Lê o branding do dono da conta e resolve (com fallback). Barato: 1 query. */
 export async function getBranding(tenantUserId: string): Promise<ResolvedBranding> {
-  const row = await prisma.accountBranding.findUnique({ where: { accountId: tenantUserId } });
-  return resolveBranding(row);
+  try {
+    const row = await prisma.accountBranding.findUnique({ where: { accountId: tenantUserId } });
+    return resolveBranding(row);
+  } catch (e) {
+    // Branding é cosmético e vive no layout RAIZ do app — uma falha de leitura
+    // (tabela ainda não migrada em prod, hiccup de conexão, etc.) NUNCA deve
+    // derrubar todas as telas. Degrada para o tema default.
+    console.warn(
+      `[branding] getBranding falhou, usando tema default: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return resolveBranding(null);
+  }
 }
