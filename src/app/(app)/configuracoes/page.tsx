@@ -10,6 +10,8 @@ import { CustomFieldsManager } from "@/components/CustomFieldsManager";
 import { PipelineLabelsManager } from "@/components/PipelineLabelsManager";
 import { BrandingSettings } from "@/components/app/BrandingSettings";
 import { getBranding } from "@/server/services/branding.service";
+import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
+import { getBusinessTemplateId } from "@/server/services/account.service";
 
 export const dynamic = "force-dynamic";
 
@@ -31,11 +33,12 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding] = await Promise.all([
+  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
     getBranding(ownerId), // identidade visual da conta (só o dono edita)
+    getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
   ]);
 
   return (
@@ -62,6 +65,12 @@ export default async function ConfiguracoesPage() {
         canSettings={canSettings}
         isOwner={isOwner}
       />
+
+      {isOwner && (
+        <div className="mt-6">
+          <BusinessCategorySettings canEdit={canSettings} initial={businessTemplateId} />
+        </div>
+      )}
 
       {isOwner && (
         <div className="mt-6">
