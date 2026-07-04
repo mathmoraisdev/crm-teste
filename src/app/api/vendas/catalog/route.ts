@@ -16,6 +16,10 @@ const createSchema = z.object({
   name: z.string(),
   priceCents: z.number().int(),
   kind: z.enum(["SERVICO", "PRODUTO"]).optional(),
+  trackStock: z.boolean().optional(),
+  sku: z.string().nullish(),
+  minStock: z.number().int().optional(),
+  costCents: z.number().int().nullish(),
 });
 
 export async function POST(req: NextRequest) {

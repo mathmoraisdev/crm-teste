@@ -10,6 +10,10 @@ const patchSchema = z.object({
   priceCents: z.number().int().optional(),
   kind: z.enum(["SERVICO", "PRODUTO"]).optional(),
   active: z.boolean().optional(),
+  trackStock: z.boolean().optional(),
+  sku: z.string().nullish(),
+  minStock: z.number().int().optional(),
+  costCents: z.number().int().nullish(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
