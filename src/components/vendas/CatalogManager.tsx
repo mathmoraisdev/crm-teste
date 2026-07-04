@@ -13,6 +13,11 @@ interface Item {
   name: string;
   priceCents: number;
   active: boolean;
+  trackStock: boolean;
+  sku: string | null;
+  stockQty: number;
+  minStock: number;
+  costCents: number | null;
 }
 
 // Modelos que geram itens (ordenados por categoria) — pré-computado, é estático.
@@ -43,6 +48,11 @@ export function CatalogManager({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [kind, setKind] = useState<"SERVICO" | "PRODUTO">("SERVICO");
+  const [trackStock, setTrackStock] = useState(false);
+  const [sku, setSku] = useState("");
+  const [initialQty, setInitialQty] = useState("");
+  const [minStock, setMinStock] = useState("");
+  const [costStr, setCostStr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +65,10 @@ export function CatalogManager({
   const [editName, setEditName] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editKind, setEditKind] = useState<"SERVICO" | "PRODUTO">("SERVICO");
+  const [editTrackStock, setEditTrackStock] = useState(false);
+  const [editSku, setEditSku] = useState("");
+  const [editMinStock, setEditMinStock] = useState("");
+  const [editCost, setEditCost] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -72,23 +86,49 @@ export function CatalogManager({
     load();
   }, [load]);
 
+  function resetAddForm() {
+    setName("");
+    setPrice("");
+    setKind("SERVICO");
+    setTrackStock(false);
+    setSku("");
+    setInitialQty("");
+    setMinStock("");
+    setCostStr("");
+  }
+
   async function addItem() {
     setError(null);
     const priceCents = parseBRLToCents(price);
     if (!name.trim()) return setError("Informe o nome.");
     if (priceCents == null) return setError("Preço inválido.");
+    const useStock = kind === "PRODUTO" && trackStock;
+    const initial = useStock ? Math.max(0, Math.floor(Number(initialQty) || 0)) : 0;
     setSaving(true);
     try {
+      const body: Record<string, unknown> = { name: name.trim(), priceCents, kind };
+      if (useStock) {
+        body.trackStock = true;
+        body.sku = sku.trim() || null;
+        body.minStock = Math.max(0, Math.floor(Number(minStock) || 0));
+        body.costCents = parseBRLToCents(costStr) ?? null;
+      }
       const res = await fetch("/api/vendas/catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), priceCents, kind }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Erro ao salvar.");
-      setName("");
-      setPrice("");
-      setKind("SERVICO");
+      // Estoque inicial entra como um movimento de ENTRADA (nunca setamos stockQty direto).
+      if (useStock && initial > 0 && data?.item?.id) {
+        await fetch(`/api/vendas/stock/${data.item.id}/entry`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ qty: initial, reason: "Estoque inicial" }),
+        });
+      }
+      resetAddForm();
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");
@@ -102,6 +142,10 @@ export function CatalogManager({
     setEditName(it.name);
     setEditPrice(formatCentsBRL(it.priceCents));
     setEditKind(it.kind);
+    setEditTrackStock(it.trackStock);
+    setEditSku(it.sku ?? "");
+    setEditMinStock(it.trackStock ? String(it.minStock) : "");
+    setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
     setEditError(null);
   }
 
@@ -117,10 +161,21 @@ export function CatalogManager({
     if (priceCents == null) return setEditError("Preço inválido.");
     setEditSaving(true);
     try {
+      const patch: Record<string, unknown> = { name: editName.trim(), priceCents, kind: editKind };
+      if (editKind === "PRODUTO") {
+        patch.trackStock = editTrackStock;
+        if (editTrackStock) {
+          patch.sku = editSku.trim() || null;
+          patch.minStock = Math.max(0, Math.floor(Number(editMinStock) || 0));
+          patch.costCents = parseBRLToCents(editCost) ?? null;
+        }
+      } else {
+        patch.trackStock = false;
+      }
       const res = await fetch(`/api/vendas/catalog/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim(), priceCents, kind: editKind }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Erro ao salvar.");
@@ -259,6 +314,43 @@ export function CatalogManager({
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
                     />
                   </div>
+                  {editKind === "PRODUTO" && (
+                    <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
+                      <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={editTrackStock}
+                          onChange={(e) => setEditTrackStock(e.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                        />
+                        Controlar estoque
+                      </label>
+                      {editTrackStock && (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={editSku}
+                            onChange={(e) => setEditSku(e.target.value)}
+                            placeholder="SKU"
+                            className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                          <input
+                            value={editMinStock}
+                            onChange={(e) => setEditMinStock(e.target.value)}
+                            inputMode="numeric"
+                            placeholder="Mínimo"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-28"
+                          />
+                          <input
+                            value={editCost}
+                            onChange={(e) => setEditCost(e.target.value)}
+                            placeholder="Custo (R$)"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
+                          />
+                        </div>
+                      )}
+                      <p className="text-[11px] text-slate-400">O saldo só muda pela aba Estoque (entrada/ajuste).</p>
+                    </div>
+                  )}
                   {editError && <p className="text-xs text-danger">{editError}</p>}
                   <div className="flex justify-end gap-2">
                     <Button variant="secondary" size="sm" onClick={cancelEdit} disabled={editSaving}>
@@ -280,7 +372,18 @@ export function CatalogManager({
                       {it.name}{" "}
                       <span className="text-slate-500">• {formatCentsBRL(it.priceCents)}</span>
                     </p>
-                    <p className="text-xs text-slate-400">{it.kind === "SERVICO" ? "Serviço" : "Produto"}</p>
+                    <p className="flex items-center gap-2 text-xs text-slate-400">
+                      {it.kind === "SERVICO" ? "Serviço" : "Produto"}
+                      {it.trackStock && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            it.stockQty <= it.minStock ? "bg-danger/10 text-danger" : "bg-brand-50 text-brand-700"
+                          }`}
+                        >
+                          Estoque: {it.stockQty}
+                        </span>
+                      )}
+                    </p>
                   </div>
                   {canEdit && (
                     <div className="flex items-center gap-3">
@@ -342,6 +445,49 @@ export function CatalogManager({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
               />
             </div>
+            {kind === "PRODUTO" && (
+              <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={trackStock}
+                    onChange={(e) => setTrackStock(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                  />
+                  Controlar estoque
+                </label>
+                {trackStock && (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      value={sku}
+                      onChange={(e) => setSku(e.target.value)}
+                      placeholder="SKU"
+                      className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                    <input
+                      value={initialQty}
+                      onChange={(e) => setInitialQty(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Estoque inicial"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
+                    />
+                    <input
+                      value={minStock}
+                      onChange={(e) => setMinStock(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Mínimo"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-24"
+                    />
+                    <input
+                      value={costStr}
+                      onChange={(e) => setCostStr(e.target.value)}
+                      placeholder="Custo (R$)"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             {error && <p className="text-xs text-danger">{error}</p>}
             <div className="flex justify-end">
               <Button onClick={addItem} loading={saving} disabled={!name.trim() || !price.trim()}>
