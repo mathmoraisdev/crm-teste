@@ -13,7 +13,13 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "relatorios", label: "Relatórios" },
 ];
 
-export function VendasWorkspace({ canEdit }: { canEdit: boolean }) {
+export function VendasWorkspace({
+  canEdit,
+  accountBusinessId,
+}: {
+  canEdit: boolean;
+  accountBusinessId: string | null;
+}) {
   const [tab, setTab] = useState<Tab>("comandas");
 
   return (
@@ -35,7 +41,7 @@ export function VendasWorkspace({ canEdit }: { canEdit: boolean }) {
       </div>
 
       {tab === "comandas" && <OrderBoard />}
-      {tab === "catalogo" && <CatalogManager canEdit={canEdit} />}
+      {tab === "catalogo" && <CatalogManager canEdit={canEdit} accountBusinessId={accountBusinessId} />}
       {tab === "relatorios" && <ReportsPanel />}
     </div>
   );

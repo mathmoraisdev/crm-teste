@@ -5,7 +5,7 @@ import { Loader2, Pencil, Trash2, Check, X, Sparkles } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
-import { BUSINESS_TEMPLATES, CATEGORY_LABEL, catalogSeedItems, type BusinessCategory } from "@/lib/business-templates";
+import { BUSINESS_TEMPLATES, CATEGORY_LABEL, catalogSeedItems, getTemplate, type BusinessCategory } from "@/lib/business-templates";
 
 interface Item {
   id: string;
@@ -32,7 +32,13 @@ const SEED_GROUPS: { category: BusinessCategory; label: string; templates: { id:
  * /api/vendas/catalog. Cadastrar/editar exige canSettings (canEdit); sem isso o
  * form fica desabilitado (operador só registra comanda, não mexe no catálogo).
  */
-export function CatalogManager({ canEdit }: { canEdit: boolean }) {
+export function CatalogManager({
+  canEdit,
+  accountBusinessId = null,
+}: {
+  canEdit: boolean;
+  accountBusinessId?: string | null;
+}) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -141,15 +147,15 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
     await load();
   }
 
-  async function seedFromTemplate() {
-    if (!seedTemplateId) return;
+  async function seedFromTemplate(templateId: string = seedTemplateId) {
+    if (!templateId) return;
     setError(null);
     setSeeding(true);
     try {
       const r = await fetch("/api/vendas/catalog/seed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId: seedTemplateId }),
+        body: JSON.stringify({ templateId }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error || "Erro ao aplicar modelo.");
@@ -161,6 +167,11 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
       setSeeding(false);
     }
   }
+
+  // Ramo da conta, só se ele gera itens concretos (senão o atalho não faz sentido).
+  const accountTemplate = accountBusinessId ? getTemplate(accountBusinessId) : undefined;
+  const accountSeed =
+    accountTemplate && catalogSeedItems(accountTemplate).length > 0 ? accountTemplate : null;
 
   return (
     <Card>
@@ -186,6 +197,14 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
                   </p>
                 </div>
               </div>
+              {accountSeed && (
+                <div className="flex flex-col gap-1.5">
+                  <Button onClick={() => seedFromTemplate(accountSeed.id)} loading={seeding} className="justify-center">
+                    Usar o modelo do seu ramo ({accountSeed.label})
+                  </Button>
+                  <p className="text-center text-xs text-slate-400">Ou escolha outro ramo abaixo.</p>
+                </div>
+              )}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <select
                   value={seedTemplateId}
@@ -203,7 +222,7 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
                     </optgroup>
                   ))}
                 </select>
-                <Button onClick={seedFromTemplate} loading={seeding} disabled={!seedTemplateId}>
+                <Button onClick={() => seedFromTemplate()} loading={seeding} disabled={!seedTemplateId}>
                   Usar modelo
                 </Button>
               </div>

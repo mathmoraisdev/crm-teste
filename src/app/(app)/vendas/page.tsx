@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getTenantContext } from "@/lib/tenant";
+import { getBusinessTemplateId } from "@/server/services/account.service";
 import { VendasWorkspace } from "@/components/vendas/VendasWorkspace";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export default async function VendasPage() {
   const ctx = await getTenantContext();
   if (!ctx) redirect("/login");
   const canEdit = ctx.perms.canSettings; // cadastrar catálogo exige canSettings; registrar comanda, não
+  const businessTemplateId = await getBusinessTemplateId(ctx.tenantUserId); // ramo da conta (atalho no catálogo vazio)
   return (
     <div className="mx-auto max-w-[960px]">
       <header className="mb-6">
@@ -16,7 +18,7 @@ export default async function VendasPage() {
           Registre as vendas do dia, gerencie seu catálogo e acompanhe o faturamento.
         </p>
       </header>
-      <VendasWorkspace canEdit={canEdit} />
+      <VendasWorkspace canEdit={canEdit} accountBusinessId={businessTemplateId} />
     </div>
   );
 }
