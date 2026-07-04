@@ -57,3 +57,18 @@ export function resolvePeriod(period: ReportPeriod, now = new Date()): { from: D
   }
   return { from: startOfToday, to: now };
 }
+
+/** Rótulo "YYYY-MM" do mês corrente no fuso do projeto. */
+export function competenceMonth(now = new Date()): string {
+  const { year, month } = tzParts(now, TZ);
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+/** Vencimento de um dia-do-mês, clampado ao último dia, fixado ao meio-dia local. */
+export function dueDateForDayOfMonth(competence: string, dayOfMonth: number): Date {
+  const [y, m] = competence.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // dia 0 do próximo mês = último deste
+  const day = Math.min(Math.max(1, Math.floor(dayOfMonth)), lastDay);
+  // meio-dia BRT (-03:00) → 15:00Z; estável longe da borda de dia
+  return new Date(`${competence}-${String(day).padStart(2, "0")}T12:00:00-03:00`);
+}
