@@ -6,7 +6,7 @@
 
 **Architecture:** Duas partes independentes.
 - **Parte A (Extrato):** puro dado que já existe. `Order.openedById` (quem lançou) e `Order.closedAt` (data) já são gravados — só nunca foram lidos de volta. Um service `listSalesHistory` (join `openedById → User.name`) + API + uma seção "Extrato" nos Relatórios. Zero mudança de schema.
-- **Parte B (Design):** hoje `brand-*` já é temável via CSS vars, mas os neutros (`slate-*`), o `ink` e o `white` são **hex fixos** — por isso dark mode não é um flip de classe. A estratégia é promover a escala `slate` e o `ink` a **variáveis CSS** (como já é o `brand`), definir **tokens semânticos de superfície/texto/borda** (claro + escuro), ligar `darkMode:"class"` e um toggle com `data-theme` no `<html>`. Como o app usa a escala `slate` de forma consistente, ~760 usos viram dark **sem editar componente**; sobra varrer `bg-white` (71) e hex de status. O redesign vive nas **primitivas centralizadas** (`Card`, `Button`, inputs, modal), então propaga.
+- **Parte B (Design):** hoje `brand-*` já é temável via CSS vars, mas os neutros (`slate-*`), o `ink` e o `white` são **hex fixos** — por isso dark mode não é um flip de classe. A estratégia é promover a escala `slate` e o `ink` a **variáveis CSS** (como já é o `brand`), definir **tokens semânticos de superfície/texto/borda** (claro + escuro), alinhar a variante `dark:` do Tailwind ao seletor `[data-theme="dark"]` e um toggle que seta `data-theme` no `<html>`. Como o app usa a escala `slate` de forma consistente, ~760 usos viram dark **sem editar componente**; sobra varrer `bg-white` (71) e hex de status. O redesign vive nas **primitivas centralizadas** (`Card`, `Button`, inputs, modal), então propaga.
 
 **Tech Stack:** Next.js (App Router, RSC + client) · TailwindCSS (config em `tailwind.config.ts`, vars em `src/app/globals.css`) · Prisma + Postgres · Zod · Vitest.
 
@@ -38,7 +38,7 @@
 - **Fase 2** — API + UI "Extrato" nos Relatórios (filtros período/operador/cliente).
 
 **Parte B — Design system (dark + cards)**
-- **Fase 3** — Camada de tokens: promover `slate`/`ink` a vars + tokens semânticos + `darkMode:"class"` (sem mudança visual no claro).
+- **Fase 3** — Camada de tokens: promover `slate`/`ink` a vars + tokens semânticos + `darkMode` no seletor `[data-theme="dark"]` (sem mudança visual no claro).
 - **Fase 4** — Valores do tema dark + toggle + persistência + no-flash SSR.
 - **Fase 5** — Redesign das primitivas (`Card`, `Button`, input, modal).
 - **Fase 6** — Varredura em ondas (`bg-white`→token, hex de status→token) + QA visual claro/escuro por área.
@@ -272,7 +272,10 @@ git commit -m "feat(vendas): API do extrato (period/custom, operador, busca)"
 - Create: `src/components/vendas/SalesHistoryPanel.tsx`
 - Modify: `src/components/vendas/ReportsPanel.tsx` (montar como uma sub-seção/aba "Extrato")
 
-Client component: filtros (toggle período Hoje/7d/Mês **+ intervalo custom** com dois `<input type=date>`; `<select>` de operador; input de busca por cliente) + tabela: **Data · Cliente · Operador · Pagamento · Total**. Formata data no fuso (reuse `formatSlot` de `src/lib/utils.ts` ou `toLocaleDateString`), dinheiro com `formatCentsBRL`. Paginação simples ("carregar mais" via `skip`). Estado vazio amigável.
+Client component: filtros (toggle período Hoje/7d/Mês **+ intervalo custom** com dois `<input type=date>`; `<select>` de operador; input de busca por cliente) + tabela: **Data · Cliente · Operador · Pagamento · Total**. **Reuse as primitivas existentes** `Table`/`Th`/`Td` (`src/components/ui/Table.tsx`) e `Badge` (`src/components/ui/Badge.tsx`) para a coluna de pagamento (mapeie DINHEIRO→`green`, PIX→`blue`, CARTAO→`violet`, OUTRO→`slate`). Formata data com `toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })`, dinheiro com `formatCentsBRL`. Paginação simples ("carregar mais" via `skip`). Estado vazio amigável.
+
+> **`PAYMENT_LABEL`:** hoje é um `const` interno do `ReportsPanel`. Para não duplicar, **exporte-o** de `ReportsPanel` (ou extraia para `src/components/vendas/payment-labels.ts`) e importe nos dois. Não deixe dois mapas divergentes.
+> **Performance:** o filtro por `accountId + closedAt` já usa o índice `@@index([accountId, closedAt])` que existe no model `Order` — **não precisa índice novo**.
 
 **Step 1: Componente** (esboço — siga `ReportsPanel`/`Card`; monta a query string com `period` OU `from/to`):
 
@@ -280,10 +283,11 @@ Client component: filtros (toggle período Hoje/7d/Mês **+ intervalo custom** c
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { Table, Th, Td } from "@/components/ui/Table";
+import { Badge } from "@/components/ui/Badge";
 import { formatCentsBRL } from "@/lib/money";
 // estados: period|custom(from,to), operatorId, q, rows, operators, total, loading, skip
-// load(): fetch(`/api/vendas/orders/history?...`) com os filtros; tabela com as 5 colunas
-// PAYMENT_LABEL reuse do ReportsPanel (DINHEIRO→Dinheiro, etc.)
+// load(): fetch(`/api/vendas/orders/history?...`) com os filtros; <Table> com as 5 colunas
 ```
 
 **Step 2:** Em `ReportsPanel`, adicione um seletor de visão ("Resumo" | "Extrato") ou renderize `SalesHistoryPanel` abaixo dos cards. Comportamento atual (resumo) intacto.
@@ -359,7 +363,13 @@ line: "rgb(var(--border-subtle) / <alpha-value>)",
 "line-strong": "rgb(var(--border-strong) / <alpha-value>)",
 ```
 
-**Step 3: darkMode** — no topo do config: `darkMode: "class"` (usaremos `data-theme` via seletor custom na Fase 4; `class` cobre `.dark`). Adicione também a variante por atributo em globals se preferir `[data-theme="dark"]`.
+**Step 3: darkMode** — no topo do config, alinhe a variante `dark:` do Tailwind ao MESMO seletor que usamos nas vars (`[data-theme="dark"]`). Tailwind 3.4 suporta o modo `selector` com seletor custom:
+
+```ts
+darkMode: ["selector", '[data-theme="dark"]'],
+```
+
+> A estratégia principal é troca de CSS vars (não precisa de `dark:` nas classes). Mas setar isto evita a armadilha de alguém escrever `dark:algo` e não casar — assim `dark:` e as vars respondem ao mesmo `data-theme`.
 
 **Step 4: Verificar (crucial: NADA muda no claro)**
 
@@ -398,9 +408,11 @@ git commit -m "refactor(theme): neutros e ink como CSS vars + tokens de superfí
   --border-subtle: 34 48 41;
   --border-default: 42 58 50;
   --border-strong: 54 72 62;
-  /* brand no escuro: leve realce p/ contraste (opcional; ajustar no QA) */
+  /* NÃO sete --brand-* aqui — ver aviso abaixo. */
 }
 ```
+
+> **⚠️ Não sobrescreva `--brand-*` no bloco dark.** O `src/components/app/BrandingStyle.tsx` injeta `:root{--brand-*}` **por conta**, e é renderizado DEPOIS do `globals.css` no DOM. Como `:root` e `[data-theme="dark"]` têm a MESMA especificidade, a ordem do DOM decide — então um `--brand-*` no bloco dark seria **ignorado** quando a conta tem branding custom (e clobber­aria o default quando não tem, de forma inconsistente). Conclusão: o tema escuro troca **só neutros/superfícies/bordas**; o accent da marca é o mesmo nos dois temas (funciona sobre claro e escuro). Se um dia quiser marca dark-ajustada, faça no próprio `BrandingStyle` (com `[data-theme="dark"]` lá dentro) — fora do escopo aqui.
 
 > **Nota:** a inversão do ramp faz `bg-slate-50/100` (superfícies) escurecerem e `text-slate-600/700/900` (textos) clarearem automaticamente — cobrindo a maioria dos usos. Os problemáticos (`bg-slate-800/900` usados como fundo escuro no claro, `text-white` sobre claro) entram no QA da Fase 6.
 
@@ -430,7 +442,7 @@ git commit -m "feat(theme): paleta do tema escuro (forest) via data-theme"
 </html>
 ```
 
-> Troque `bg-slate-50` do body por `bg-surface` (token) para o fundo acompanhar o tema.
+> **Também** troque o fundo global em `src/app/globals.css` — hoje é `html, body { @apply bg-slate-50 text-ink antialiased; }`. Mude para `@apply bg-surface text-ink antialiased;` para o fundo da página acompanhar o tema (senão o `bg-slate-50` invertido já cobre, mas `bg-surface` é o token semântico correto). Ajuste também as vars do scrollbar (`.scroll-thin`/`.scroll-tabs` usam `bg-slate-300`/`slate.100`) — já viram tema via var, sem edição.
 
 **Step 2: ThemeToggle** — botão sol/lua (lucide `Sun`/`Moon`) que alterna `data-theme` e persiste em `localStorage.theme`. Monte na Sidebar.
 
@@ -476,9 +488,11 @@ git commit -m "feat(ui): redesign do Card (tokens, elevação suave, header refi
 **Files:**
 - Modify: `src/components/ui/Button.tsx` (variantes com tokens; `secondary`/`ghost` usam `bg-card`/`border-line`/`text-ink`)
 - Create: `src/components/ui/Input.tsx` (input/select padronizado com `bg-inset border-line-default` — extrai a classe repetida `rounded-lg border border-slate-300 …`)
-- Modify: `src/components/ui/Modal.tsx` (se existir; superfície `bg-raised`, overlay adaptável ao tema)
+- Modify: `src/components/ui/Modal.tsx` (existe — superfície `bg-raised`, overlay adaptável ao tema)
+- Modify: `src/components/ui/Table.tsx` (`Th`/`Td` usam `border-slate-100`/`text-slate-400` → já viram tema via var; só confira o contraste no dark)
+- Modify: `src/components/ui/ConfirmDialog.tsx` (se usar `bg-white` → `bg-raised`)
 
-**Step 1:** Ajuste `Button` (variantes `secondary`/`ghost`/`danger`) para tokens temáveis. Crie `Input` (e opcional `Select`) encapsulando o estilo de campo hoje repetido inline — **não** troque todos os inputs agora; só disponibilize a primitiva (adoção incremental).
+**Step 1:** Ajuste `Button` (variantes `secondary`/`ghost`/`danger`) para tokens temáveis. Crie `Input` (e opcional `Select`) encapsulando o estilo de campo hoje repetido inline — **não** troque todos os inputs agora; só disponibilize a primitiva (adoção incremental). Confira `Modal`/`ConfirmDialog` (superfícies flutuantes) no dark.
 
 **Step 2: Verificar** — botões/campos legíveis nos dois temas; foco (ring da marca) visível no dark.
 
@@ -509,9 +523,9 @@ git commit -m "refactor(theme): superfícies bg-white → tokens (onda: <área>)
 
 ## Task 6.2: Hex de status fixos → tokens semânticos
 
-**Files:** ocorrências de `bg-[#C0392B]`, `text-[#C0392B]`, `bg-[#B97309]`, `text-red-700`, `bg-red-50`, `bg-amber-50`, etc.
+**Files:** `src/components/ui/Badge.tsx` (tones `blue`/`amber`/`red`/`violet` são hex fixos), `src/components/app/LimitsCard.tsx` (`bg-[#C0392B]`/`bg-[#B97309]`), e ocorrências de `text-red-700`/`bg-red-50`/`bg-amber-50`/`text-[#C0392B]` espalhadas (mensagens de erro nos forms de vendas, etc.).
 
-**Step 1:** Defina tokens de status em `globals.css` (claro + escuro): `--danger`, `--danger-surface`, `--warning`, `--warning-surface`, `--success`, `--success-surface`; e aliases no tailwind (`danger`, `danger-surface`, …). Troque os hex/`red-*`/`amber-*` fixos pelos tokens onde afetam legibilidade no dark (erros, badges, barras de limite).
+**Step 1:** Defina tokens de status em `globals.css` (claro + escuro): `--danger`, `--danger-surface`, `--warning`, `--warning-surface`, `--success`, `--success-surface`, `--info`, `--info-surface`; e aliases no tailwind (`danger`, `danger-surface`, …). Reescreva os `tones` do `Badge` e os hex fixos do `LimitsCard`/mensagens de erro usando os tokens, para legibilidade no dark.
 
 **Step 2: Verificar** — mensagens de erro/aviso/sucesso legíveis nos dois temas. Commit.
 
