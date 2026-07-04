@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset } from "lucide-react";
+import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 
@@ -118,6 +118,7 @@ export function Sidebar({
       title: "Gestão",
       items: [
         { href: "/empresas", label: "Empresas", icon: Building2 },
+        { href: "/vendas", label: "Vendas", icon: Receipt },
         { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
         { href: "/consultores", label: "Consultores", icon: Headset, badge: "consultores", show: isAdmin },
         { href: "/financeiro", label: "Financeiro", icon: Wallet, badge: "financeiro", show: isAdmin },
