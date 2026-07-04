@@ -25,9 +25,9 @@ const mono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Disparador.ai — IA que qualifica e agenda seus leads no WhatsApp",
+  title: "Disparador.ai — Atenda e gerencie seu negócio no WhatsApp com IA",
   description:
-    "Dispare campanhas em massa no WhatsApp e deixe a IA responder, qualificar cada lead e marcar reuniões — tudo num CRM em tempo real.",
+    "A IA responde e qualifica cada cliente no WhatsApp enquanto você gerencia CRM, agenda, caixa, estoque e campanhas — tudo integrado num painel só.",
 };
 
 export const viewport: Viewport = {

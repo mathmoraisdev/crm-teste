@@ -16,60 +16,64 @@ const STEPS = [
   {
     n: "01",
     title: "Conecte seu WhatsApp",
-    desc: "Escaneie o QR Code com o celular e pronto. Funciona com seu número atual, sem migrar nada.",
+    desc: "Escaneie o QR Code com o celular e pronto. Funciona com o número que você já usa, sem migrar nada.",
   },
   {
     n: "02",
-    title: "Importe sua lista",
-    desc: "Suba um CSV ou adicione contatos na mão. Organize por campanha e segmente do seu jeito.",
+    title: "Escolha o seu ramo",
+    desc: "A IA já vem treinada com a persona do seu tipo de negócio e o painel se veste com a cara da sua marca.",
   },
   {
     n: "03",
-    title: "Dispare e acompanhe",
-    desc: "Envie em massa com mensagens personalizadas e veja cada resposta chegar no CRM em tempo real.",
+    title: "Atenda e gerencie",
+    desc: "A IA responde e qualifica cada cliente; você acompanha no CRM, marca na agenda, fecha no caixa e controla o estoque — em tempo real.",
     dark: true,
   },
 ];
 
 const FEATURES = [
   {
-    title: "IA que qualifica e agenda",
-    desc: "A IA responde cada lead, faz as perguntas certas, dá um score de 0 a 100 e propõe o horário da reunião com base nas respostas.",
+    title: "Atendimento com IA",
+    desc: "A IA responde cada cliente no WhatsApp, faz as perguntas certas, dá um score de 0 a 100 e propõe o horário — 24h por dia, no tom do seu negócio.",
   },
   {
     title: "Vários números, um painel só",
     desc: "Conecte até 4 números de WhatsApp e atenda todos numa caixa única — cada um com sua própria IA, persona e campanhas. A maioria das ferramentas trava você em 1 número.",
   },
   {
-    title: "Disparo em massa",
-    desc: "Envie para milhares de contatos com mensagens personalizadas por nome, intervalo inteligente e fila automática.",
-  },
-  {
     title: "CRM integrado",
-    desc: "Cada resposta vira um lead com status, score e histórico. Simples de usar, do jeito que o WhatsApp pede.",
+    desc: "Cada conversa vira um lead com status, score e histórico. Kanban simples, do jeito que o WhatsApp pede.",
   },
   {
-    title: "Agendamento",
-    desc: "Programe disparos para o melhor horário. Sua campanha sai sozinha, mesmo com o computador desligado.",
+    title: "Agenda e lembretes",
+    desc: "Marque compromissos e a IA propõe horários. O cliente recebe lembrete no WhatsApp na véspera e na hora — menos falta, mais presença.",
   },
   {
-    title: "Envio com cadência humana",
-    desc: "Aquecimento de número, intervalos ajustáveis e fila com ritmo humano para reduzir o risco de bloqueio.",
+    title: "Caixa e financeiro",
+    desc: "Registre vendas e despesas do dia, contas a pagar e acompanhe o saldo do negócio — sem planilha, direto no painel.",
+  },
+  {
+    title: "Controle de estoque",
+    desc: "Ative por produto: entradas, ajustes e baixa automática a cada venda fechada. Saiba o que tem, o que saiu e o que falta.",
+  },
+  {
+    title: "Disparos e campanhas",
+    desc: "Envie mensagens personalizadas em massa com cadência humana e fila automática — reativação, promoções e avisos, sem esforço.",
   },
   {
     title: "Relatórios em tempo real",
-    desc: "Entregas, respostas, opt-outs e conversões. Saiba exatamente o que está dando retorno.",
+    desc: "Entregas, respostas, conversões e saldo. Saiba exatamente o que está dando retorno.",
   },
   {
     title: "IA inclusa, sem custo escondido",
-    desc: "Todo plano já vem com IA que responde e qualifica seus leads. Quer os modelos mais avançados (GPT-4o, Claude) sem limite de uso? Conecte sua própria chave e a IA fica ilimitada — você paga direto no provedor.",
+    desc: "Todo plano já vem com IA que atende e qualifica. Quer os modelos mais avançados (GPT-4o, Claude) sem limite de uso? Conecte sua própria chave e a IA fica ilimitada — você paga direto no provedor.",
   },
 ];
 
 const PLANS = [
   {
     name: "Inicial",
-    desc: "Para começar a vender no WhatsApp.",
+    desc: "Para começar a atender e vender no WhatsApp.",
     priceMonthly: 97,
     cta: "Começar grátis",
     selfServe: true,
@@ -79,13 +83,13 @@ const PLANS = [
       "4.000 mensagens de IA/mês (≈ 1.000 conversas)",
       "1.000 contatos",
       "Atendimento com IA",
-      "CRM + Kanban",
-      "Importação por CSV",
+      "CRM + Kanban + Agenda",
+      "Caixa e catálogo",
     ],
   },
   {
     name: "Profissional",
-    desc: "Para escalar de verdade as vendas.",
+    desc: "Para escalar o atendimento e a gestão.",
     priceMonthly: 247,
     cta: "Começar grátis",
     selfServe: true,
@@ -95,9 +99,9 @@ const PLANS = [
       "5 usuários",
       "10.000 mensagens de IA/mês (≈ 2.500 conversas)",
       "5.000 contatos",
-      "Qualificação por IA",
-      "Agendamento e lembretes",
-      "Campanhas",
+      "Tudo do Inicial, mais:",
+      "Estoque e controle financeiro",
+      "Campanhas e disparos",
       "Cadência humana e aquecimento",
     ],
   },
@@ -132,7 +136,7 @@ const FAQ = [
   },
   {
     q: "Como funciona o teste grátis?",
-    a: "Você testa sem cartão de crédito: disparos, CRM e campanhas. Se não quiser continuar, é só não assinar — nada é cobrado.",
+    a: "Você testa sem cartão de crédito: atendimento com IA, CRM, agenda, caixa e campanhas. Se não quiser continuar, é só não assinar — nada é cobrado.",
   },
   {
     q: "Posso cancelar quando quiser?",
@@ -187,17 +191,17 @@ export function Landing() {
                 NOVO
               </span>
               <span className="text-[13px] font-semibold text-slate-600">
-                Conecte o WhatsApp e dispare em 30 segundos
+                Conecte o WhatsApp e comece em 30 segundos
               </span>
             </div>
 
             <h1 className="mt-6 font-display text-[42px] font-bold leading-[1.02] tracking-[-0.035em] text-ink sm:text-[54px] md:text-[62px]">
-              Dispare em massa.
-              <br className="hidden sm:block" /> A <span className="text-brand-500">IA qualifica e agenda</span> por você
+              Atenda no WhatsApp.
+              <br className="hidden sm:block" /> Gerencie o <span className="text-brand-500">negócio inteiro</span> num lugar só
             </h1>
             <p className="mt-5 max-w-[600px] text-[17px] leading-relaxed text-slate-600 md:text-[19px]">
-              Envie campanhas para milhares de contatos no WhatsApp e deixe a IA responder cada
-              resposta, qualificar o lead com um score e propor o horário da reunião — tudo num CRM em tempo real.
+              A IA responde e qualifica cada cliente enquanto você gerencia CRM, agenda, caixa,
+              estoque e campanhas — tudo integrado no WhatsApp que você já usa, num painel só.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -217,8 +221,8 @@ export function Landing() {
 
             <div className="mt-5 flex flex-wrap items-center justify-center gap-5 text-[13.5px] font-semibold text-slate-500">
               <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Até 4 números de WhatsApp</span>
-              <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Teste grátis</span>
-              <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Sem cartão de crédito</span>
+              <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> IA de atendimento inclusa</span>
+              <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Teste grátis, sem cartão</span>
               <span className="inline-flex items-center gap-1.5"><Check size={15} className="text-brand-500" /> Cancele quando quiser</span>
             </div>
           </div>
@@ -280,7 +284,7 @@ export function Landing() {
       {/* COMO FUNCIONA */}
       <section id="funciona" className="py-24">
         <div className="mx-auto max-w-[1180px] px-6 md:px-8">
-          <SectionHead eyebrow="Como funciona" title={<>Do zero ao primeiro disparo<br />em 3 passos</>} sub="Sem instalar nada. Sem técnico. Você mesmo configura em minutos." />
+          <SectionHead eyebrow="Como funciona" title={<>Do zero ao negócio rodando<br />em 3 passos</>} sub="Sem instalar nada. Sem técnico. Você mesmo configura em minutos." />
           <div className="grid gap-5 md:grid-cols-3">
             {STEPS.map((s) => (
               <div
@@ -363,11 +367,11 @@ export function Landing() {
             <div className="pointer-events-none absolute -top-24 left-1/2 h-[400px] w-[600px] -translate-x-1/2 bg-[radial-gradient(circle,rgba(95,227,161,.18),transparent_65%)]" />
             <div className="relative">
               <h2 className="font-display text-[34px] font-bold leading-[1.05] tracking-[-0.03em] text-white sm:text-[44px] md:text-[50px]">
-                Sua lista de contatos vale
-                <br />muito mais do que você imagina
+                Seu negócio merece um sistema
+                <br />à altura — no WhatsApp que você já usa
               </h2>
               <p className="mx-auto mt-4 max-w-[520px] text-[17px] leading-snug text-[#9FBCAF] md:text-[18px]">
-                Comece hoje, dispare sua primeira campanha em minutos e veja as respostas chegarem.
+                Conecte em 30 segundos, deixe a IA atender e comece a gerenciar tudo num painel só.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link href="/signup" className="inline-flex items-center gap-2.5 rounded-[13px] bg-brand-500 px-7 py-4 text-base font-bold text-white shadow-[0_14px_30px_-10px_rgba(14,164,107,.6)] transition-colors hover:bg-brand-400">
@@ -389,7 +393,7 @@ export function Landing() {
             <div className="max-w-[280px]">
               <Logo />
               <p className="mt-3.5 text-[13.5px] leading-relaxed text-slate-500">
-                A forma mais simples de transformar sua lista do WhatsApp em vendas.
+                O sistema que atende, vende e gerencia o seu negócio pelo WhatsApp.
               </p>
             </div>
             <div className="flex flex-wrap gap-16">
