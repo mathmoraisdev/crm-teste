@@ -25,7 +25,7 @@ export function VendasWorkspace({
   return (
     <div className="space-y-5">
       {/* Abas */}
-      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+      <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
         {TABS.map((t) => (
           <button
             key={t.value}

@@ -209,7 +209,7 @@ export function CatalogManager({
                 <select
                   value={seedTemplateId}
                   onChange={(e) => setSeedTemplateId(e.target.value)}
-                  className="w-full flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  className="w-full flex-1 rounded-lg border border-line-default bg-inset px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
                   <option value="">Escolha o ramo do seu negócio…</option>
                   {SEED_GROUPS.map((g) => (
@@ -236,7 +236,7 @@ export function CatalogManager({
             {items.map((it) =>
               editingId === it.id ? (
                 // ── Modo edição ──────────────────────────────────────────
-                <li key={it.id} className="space-y-2 rounded-lg border border-brand-200 bg-white px-3 py-2.5">
+                <li key={it.id} className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       value={editName}
@@ -273,7 +273,7 @@ export function CatalogManager({
                 // ── Modo leitura ─────────────────────────────────────────
                 <li
                   key={it.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line-default bg-card px-3 py-2"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink">

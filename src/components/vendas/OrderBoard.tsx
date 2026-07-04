@@ -115,7 +115,7 @@ export function OrderBoard() {
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
                         o.id === selectedId
                           ? "border-brand-300 bg-brand-50"
-                          : "border-slate-200 bg-white hover:border-brand-200"
+                          : "border-line-default bg-card hover:border-brand-200"
                       }`}
                     >
                       <span className="min-w-0 truncate text-sm font-medium text-ink">
@@ -261,7 +261,7 @@ function NewOrderCard({
                     <button
                       type="button"
                       onClick={() => open({ leadId: l.id })}
-                      className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-left text-sm hover:border-brand-300"
+                      className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300"
                     >
                       <span className="truncate font-medium text-ink">{l.name}</span>
                       <span className="text-xs text-slate-400">{l.phone}</span>
@@ -373,7 +373,7 @@ function OrderPanel({
             {order.items.map((it) => (
               <li
                 key={it.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-line-default bg-card px-3 py-2"
               >
                 <span className="min-w-0 truncate text-sm text-ink">
                   {it.quantity > 1 && <span className="text-slate-400">{it.quantity}× </span>}
@@ -421,7 +421,7 @@ function OrderPanel({
                     type="button"
                     onClick={() => addFromCatalog(c.id)}
                     disabled={busy}
-                    className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
+                    className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
                   >
                     <span className="truncate text-ink">{c.name}</span>
                     <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>

@@ -54,7 +54,7 @@ export function ReportsPanel() {
   return (
     <div className="space-y-4">
       {/* Seletor de visão: Resumo | Extrato */}
-      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+      <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
         {VIEWS.map((v) => (
           <button
             key={v.value}
@@ -93,7 +93,7 @@ function ResumoView({
   return (
     <div className="space-y-4">
       {/* Toggle de período */}
-      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+      <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
         {PERIODS.map((p) => (
           <button
             key={p.value}

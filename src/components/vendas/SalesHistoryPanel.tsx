@@ -116,7 +116,7 @@ export function SalesHistoryPanel() {
     <div className="space-y-4">
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+        <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
           {PERIODS.map((p) => (
             <button
               key={p.value}
@@ -137,14 +137,14 @@ export function SalesHistoryPanel() {
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
             <span className="text-sm text-slate-400">até</span>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
           </div>
         )}
@@ -152,7 +152,7 @@ export function SalesHistoryPanel() {
         <select
           value={operatorId}
           onChange={(e) => setOperatorId(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         >
           <option value="">Todos os operadores</option>
           {operators.map((o) => (
@@ -167,7 +167,7 @@ export function SalesHistoryPanel() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar cliente…"
-          className="min-w-[180px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="min-w-[180px] flex-1 rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
       </div>
 
@@ -222,7 +222,7 @@ export function SalesHistoryPanel() {
                   type="button"
                   onClick={() => load(rows.length, true)}
                   disabled={loading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg border border-line-default bg-card px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
                 >
                   {loading && <Loader2 size={14} className="animate-spin" />}
                   Carregar mais
