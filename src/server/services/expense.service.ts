@@ -201,20 +201,26 @@ export async function ensureRecurringForMonth(accountId: string, competence: str
       select: { id: true },
     });
     if (exists) continue;
-    await prisma.expense.create({
-      data: {
-        accountId,
-        description: r.description,
-        amountCents: r.amountCents,
-        category: r.category,
-        status: "PENDENTE",
-        dueDate: dueDateForDayOfMonth(competence, r.dayOfMonth),
-        createdById: r.createdById,
-        recurringId: r.id,
-        competenceMonth: competence,
-      },
-    });
-    created++;
+    try {
+      await prisma.expense.create({
+        data: {
+          accountId,
+          description: r.description,
+          amountCents: r.amountCents,
+          category: r.category,
+          status: "PENDENTE",
+          dueDate: dueDateForDayOfMonth(competence, r.dayOfMonth),
+          createdById: r.createdById,
+          recurringId: r.id,
+          competenceMonth: competence,
+        },
+      });
+      created++;
+    } catch (e) {
+      // Corrida (dois GETs simultâneos no mesmo mês): a chave única
+      // (recurringId, competenceMonth) já barrou a duplicata — trata como idempotente.
+      if (!(e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002")) throw e;
+    }
   }
   return created;
 }

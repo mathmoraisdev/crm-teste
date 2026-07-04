@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/server/db/client", () => ({
-  prisma: {
-    user: { findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
-  },
-}));
+vi.mock("@/server/db/client", () => {
+  const tx = {
+    order: { updateMany: vi.fn() },
+    expense: { updateMany: vi.fn() },
+    recurringExpense: { updateMany: vi.fn() },
+    user: { delete: vi.fn() },
+  };
+  return {
+    prisma: {
+      user: { findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), findFirst: vi.fn(), delete: vi.fn() },
+      // $transaction executa o callback com o tx mockado (mesmas instâncias em __tx).
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+      __tx: tx,
+    },
+  };
+});
 
 // Admin record helper (o que createOperator carrega por id).
 function adminRecord(over: Record<string, unknown> = {}) {
@@ -97,12 +108,17 @@ describe("removeOperator", () => {
     expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 
-  it("remove operador do próprio dono", async () => {
+  it("remove operador do próprio dono, reatribuindo ponteiros de auditoria ao dono", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findFirst as any).mockResolvedValue({ id: "op-1" });
-    (prisma.user.delete as any).mockResolvedValue({ id: "op-1" });
+    const tx = (prisma as any).__tx;
+    tx.user.delete.mockResolvedValue({ id: "op-1" });
     const { removeOperator } = await import("./team.service");
     await removeOperator("dono-1", "op-1");
-    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: "op-1" } });
+    // Comandas/despesas/fixas do operador passam para o dono antes do delete (FKs RESTRICT).
+    expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { openedById: "op-1" }, data: { openedById: "dono-1" } });
+    expect(tx.expense.updateMany).toHaveBeenCalledWith({ where: { createdById: "op-1" }, data: { createdById: "dono-1" } });
+    expect(tx.recurringExpense.updateMany).toHaveBeenCalledWith({ where: { createdById: "op-1" }, data: { createdById: "dono-1" } });
+    expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: "op-1" } });
   });
 });
