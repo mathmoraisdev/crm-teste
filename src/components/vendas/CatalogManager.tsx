@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Trash2, Check, X } from "lucide-react";
+import { Loader2, Pencil, Trash2, Check, X, Sparkles } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
+import { BUSINESS_TEMPLATES, CATEGORY_LABEL, catalogSeedItems, type BusinessCategory } from "@/lib/business-templates";
 
 interface Item {
   id: string;
@@ -13,6 +14,18 @@ interface Item {
   priceCents: number;
   active: boolean;
 }
+
+// Modelos que geram itens (ordenados por categoria) — pré-computado, é estático.
+const SEED_GROUPS: { category: BusinessCategory; label: string; templates: { id: string; label: string; count: number }[] }[] =
+  (Object.keys(CATEGORY_LABEL) as BusinessCategory[])
+    .map((category) => ({
+      category,
+      label: CATEGORY_LABEL[category],
+      templates: BUSINESS_TEMPLATES.filter((t) => t.category === category)
+        .map((t) => ({ id: t.id, label: t.label, count: catalogSeedItems(t).length }))
+        .filter((t) => t.count > 0),
+    }))
+    .filter((g) => g.templates.length > 0);
 
 /**
  * Gestão do catálogo (serviços/produtos com preço) da conta. Fala com
@@ -26,6 +39,10 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
   const [kind, setKind] = useState<"SERVICO" | "PRODUTO">("SERVICO");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Semear a partir do ramo (estado-vazio).
+  const [seedTemplateId, setSeedTemplateId] = useState("");
+  const [seeding, setSeeding] = useState(false);
 
   // Edição inline.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -124,6 +141,27 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
     await load();
   }
 
+  async function seedFromTemplate() {
+    if (!seedTemplateId) return;
+    setError(null);
+    setSeeding(true);
+    try {
+      const r = await fetch("/api/vendas/catalog/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: seedTemplateId }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || "Erro ao aplicar modelo.");
+      setSeedTemplateId("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao aplicar modelo.");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader
@@ -137,7 +175,43 @@ export function CatalogManager({ canEdit }: { canEdit: boolean }) {
             <Loader2 size={14} className="animate-spin" /> Carregando…
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-400">Nenhum item cadastrado ainda.</p>
+          canEdit ? (
+            <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50/50 px-4 py-4">
+              <div className="flex items-start gap-2">
+                <Sparkles size={18} className="mt-0.5 shrink-0 text-brand-600" />
+                <div>
+                  <p className="text-sm font-semibold text-ink">Comece rápido pelo seu ramo</p>
+                  <p className="text-xs text-slate-500">
+                    Escolha um modelo e a gente já cadastra os itens típicos — depois é só ajustar o preço, o nome ou adicionar mais.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={seedTemplateId}
+                  onChange={(e) => setSeedTemplateId(e.target.value)}
+                  className="w-full flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                >
+                  <option value="">Escolha o ramo do seu negócio…</option>
+                  {SEED_GROUPS.map((g) => (
+                    <optgroup key={g.category} label={g.label}>
+                      {g.templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label} ({t.count} {t.count === 1 ? "item" : "itens"})
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <Button onClick={seedFromTemplate} loading={seeding} disabled={!seedTemplateId}>
+                  Usar modelo
+                </Button>
+              </div>
+              <p className="text-xs text-slate-400">Ou cadastre manualmente abaixo.</p>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Nenhum item cadastrado ainda.</p>
+          )
         ) : (
           <ul className="space-y-1.5">
             {items.map((it) =>
