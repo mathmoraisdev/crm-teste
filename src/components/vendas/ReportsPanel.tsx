@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { formatCentsBRL } from "@/lib/money";
+import { PAYMENT_LABEL, type Payment } from "./payment-labels";
+import { SalesHistoryPanel } from "./SalesHistoryPanel";
 
 type Period = "hoje" | "7d" | "mes";
-type Payment = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
+type View = "resumo" | "extrato";
 
 interface Summary { totalCents: number; orderCount: number; avgTicketCents: number; }
 interface ReportData {
@@ -21,14 +23,13 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: "mes", label: "Mês" },
 ];
 
-const PAYMENT_LABEL: Record<Payment, string> = {
-  DINHEIRO: "Dinheiro",
-  PIX: "Pix",
-  CARTAO: "Cartão",
-  OUTRO: "Outro",
-};
+const VIEWS: { value: View; label: string }[] = [
+  { value: "resumo", label: "Resumo" },
+  { value: "extrato", label: "Extrato" },
+];
 
 export function ReportsPanel() {
+  const [view, setView] = useState<View>("resumo");
   const [period, setPeriod] = useState<Period>("hoje");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,8 +51,45 @@ export function ReportsPanel() {
     load(period);
   }, [period, load]);
 
-  const s = data?.summary;
+  return (
+    <div className="space-y-4">
+      {/* Seletor de visão: Resumo | Extrato */}
+      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+        {VIEWS.map((v) => (
+          <button
+            key={v.value}
+            type="button"
+            onClick={() => setView(v.value)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+              view === v.value ? "bg-brand-500 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
 
+      {view === "extrato" ? (
+        <SalesHistoryPanel />
+      ) : (
+        <ResumoView period={period} setPeriod={setPeriod} data={data} loading={loading} />
+      )}
+    </div>
+  );
+}
+
+function ResumoView({
+  period,
+  setPeriod,
+  data,
+  loading,
+}: {
+  period: Period;
+  setPeriod: (p: Period) => void;
+  data: ReportData | null;
+  loading: boolean;
+}) {
+  const s = data?.summary;
   return (
     <div className="space-y-4">
       {/* Toggle de período */}
