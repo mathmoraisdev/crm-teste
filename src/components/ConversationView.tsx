@@ -76,6 +76,16 @@ export function ConversationView({
     setSuggestCoolingDown(false);
   }, [leadId]);
 
+  // Auto-cresce a caixa de resposta manual conforme o texto digitado (até um teto,
+  // depois rola internamente). `resize-none` desliga o handle nativo, então sem
+  // isto a caixa ficaria travada em uma linha.
+  useEffect(() => {
+    const el = replyInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [reply]);
+
   async function send() {
     const content = text.trim();
     if (!content) return;
@@ -364,7 +374,7 @@ export function ConversationView({
                     placeholder={
                       file ? "Legenda (opcional)…" : "Responder manualmente ao lead…"
                     }
-                    className="w-full flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                    className="max-h-40 w-full flex-1 resize-none overflow-y-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />
                   <Button
                     onClick={submitReply}
