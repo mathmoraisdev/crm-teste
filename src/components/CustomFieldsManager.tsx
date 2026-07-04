@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import type { CustomFieldType } from "@prisma/client";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
@@ -99,8 +100,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
     const res = await fetch(`/api/custom-fields/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Falha ao apagar campo");
-      return;
+      throw new Error(data.error ?? "Falha ao apagar campo");
     }
     await load();
   }
@@ -200,15 +200,28 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
                 <Button size="sm" variant="ghost" onClick={() => startEdit(d)} aria-label="Editar campo">
                   <Pencil size={14} />
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => remove(d.id)}
-                  aria-label="Apagar campo"
-                  className="text-danger hover:bg-danger-surface"
-                >
-                  <Trash2 size={14} />
-                </Button>
+                <ConfirmDeleteButton
+                  onConfirm={() => remove(d.id)}
+                  label="Apagar campo"
+                  title="Apagar campo customizado"
+                  message={
+                    <>
+                      Apagar o campo <strong>{d.label}</strong>? Os valores já preenchidos
+                      nos leads serão perdidos. Esta ação não pode ser desfeita.
+                    </>
+                  }
+                  trigger={(open) => (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={open}
+                      aria-label="Apagar campo"
+                      className="text-danger hover:bg-danger-surface"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
+                />
               </div>
             )}
           </div>

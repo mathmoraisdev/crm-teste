@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Trash2, Check, X, Sparkles } from "lucide-react";
+import { Loader2, Pencil, Check, X, Sparkles } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 import { BUSINESS_TEMPLATES, CATEGORY_LABEL, catalogSeedItems, getTemplate, type BusinessCategory } from "@/lib/business-templates";
 
@@ -198,7 +199,11 @@ export function CatalogManager({
   }
 
   async function remove(it: Item) {
-    await fetch(`/api/vendas/catalog/${it.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/vendas/catalog/${it.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || "Erro ao remover o item.");
+    }
     await load();
   }
 
@@ -404,14 +409,18 @@ export function CatalogManager({
                       >
                         <Pencil size={15} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => remove(it)}
-                        className="text-slate-400 hover:text-danger"
-                        aria-label="Remover item"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <ConfirmDeleteButton
+                        onConfirm={() => remove(it)}
+                        label="Remover item"
+                        title="Remover item do catálogo"
+                        message={
+                          <>
+                            Remover <strong>{it.name}</strong> do catálogo? Comandas antigas
+                            mantêm o registro; esta ação não pode ser desfeita.
+                          </>
+                        }
+                        confirmLabel="Remover"
+                      />
                     </div>
                   )}
                 </li>

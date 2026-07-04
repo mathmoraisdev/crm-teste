@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Trash2, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 import { CATEGORY_LABEL, CATEGORY_OPTIONS } from "./expense-labels";
 import type { ExpenseCategory } from "@prisma/client";
@@ -187,7 +188,25 @@ export function ExpensesPanel() {
                       </div>
                       <div className="flex items-center gap-2">
                         <PayButton id={e.id} onDone={() => load()} />
-                        <DeleteButton onDelete={() => fetch(`/api/vendas/expenses/${e.id}`, { method: "DELETE" }).then(() => load())} label="Excluir conta" />
+                        <ConfirmDeleteButton
+                          onConfirm={async () => {
+                            const res = await fetch(`/api/vendas/expenses/${e.id}`, { method: "DELETE" });
+                            if (!res.ok) {
+                              const d = await res.json().catch(() => ({}));
+                              throw new Error(d?.error || "Erro ao excluir a conta.");
+                            }
+                            await load();
+                          }}
+                          label="Excluir conta"
+                          title="Excluir conta a pagar"
+                          message={
+                            <>
+                              Excluir <strong>{e.description}</strong>? Esta ação não pode ser
+                              desfeita.
+                            </>
+                          }
+                          confirmLabel="Excluir"
+                        />
                       </div>
                     </li>
                   );
@@ -275,19 +294,6 @@ function PayButton({ id, onDone }: { id: string; onDone: () => void | Promise<vo
     <Button size="sm" onClick={pay} loading={loading}>
       <Check size={14} /> Marcar paga
     </Button>
-  );
-}
-
-function DeleteButton({ onDelete, label }: { onDelete: () => void | Promise<void>; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onDelete()}
-      className="text-slate-400 hover:text-danger"
-      aria-label={label}
-    >
-      <Trash2 size={15} />
-    </button>
   );
 }
 
@@ -431,7 +437,11 @@ function RecurringManager({ recurring, onChange }: { recurring: Recurring[]; onC
   }
 
   async function remove(r: Recurring) {
-    await fetch(`/api/vendas/expenses/recurring/${r.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/vendas/expenses/recurring/${r.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d?.error || "Erro ao remover a despesa fixa.");
+    }
     await onChange();
   }
 
@@ -468,7 +478,18 @@ function RecurringManager({ recurring, onChange }: { recurring: Recurring[]; onC
                     />
                     Ativa
                   </label>
-                  <DeleteButton onDelete={() => remove(r)} label="Remover despesa fixa" />
+                  <ConfirmDeleteButton
+                    onConfirm={() => remove(r)}
+                    label="Remover despesa fixa"
+                    title="Remover despesa fixa"
+                    message={
+                      <>
+                        Remover a despesa fixa <strong>{r.description}</strong>? Ela deixa de ser
+                        gerada todo mês. Contas já geradas não são afetadas.
+                      </>
+                    }
+                    confirmLabel="Remover"
+                  />
                 </div>
               </li>
             ))}

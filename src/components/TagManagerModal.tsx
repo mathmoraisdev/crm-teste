@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, Check, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import type { TagListItem } from "@/server/services/tag.service";
 
@@ -131,8 +132,7 @@ export function TagManagerModal({
     const res = await fetch(`/api/tags/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Falha ao apagar tag");
-      return;
+      throw new Error(data.error ?? "Falha ao apagar tag");
     }
     await load();
     onChanged?.();
@@ -202,15 +202,29 @@ export function TagManagerModal({
                   <Button size="sm" variant="ghost" onClick={() => startEdit(t)} aria-label="Editar tag">
                     <Pencil size={14} />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => remove(t.id)}
-                    aria-label="Apagar tag"
-                    className="text-danger hover:bg-danger-surface"
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+                  <ConfirmDeleteButton
+                    onConfirm={() => remove(t.id)}
+                    label="Apagar tag"
+                    title="Apagar tag"
+                    message={
+                      <>
+                        Apagar a tag <strong>{t.name}</strong>?
+                        {t.leadCount > 0 && <> Ela será removida de {t.leadCount} lead(s).</>} Esta
+                        ação não pode ser desfeita.
+                      </>
+                    }
+                    trigger={(open) => (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={open}
+                        aria-label="Apagar tag"
+                        className="text-danger hover:bg-danger-surface"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
+                  />
                 </div>
               </div>
             ),

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Trash2, Check, X } from "lucide-react";
+import { Loader2, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 
 interface OfferItem {
@@ -123,7 +124,11 @@ export function OffersManager({ numberId }: { numberId: string }) {
   }
 
   async function removeOffer(offer: OfferItem) {
-    await fetch(`/api/numbers/${numberId}/offers/${offer.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/numbers/${numberId}/offers/${offer.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || "Erro ao remover a oferta.");
+    }
     await load();
   }
 
@@ -207,14 +212,18 @@ export function OffersManager({ numberId }: { numberId: string }) {
                   >
                     <Pencil size={15} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => removeOffer(o)}
-                    className="text-slate-400 hover:text-danger"
-                    aria-label="Remover oferta"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <ConfirmDeleteButton
+                    onConfirm={() => removeOffer(o)}
+                    label="Remover oferta"
+                    title="Remover oferta"
+                    message={
+                      <>
+                        Remover a oferta <strong>{o.name}</strong>? A IA deixa de apresentá-la.
+                        Esta ação não pode ser desfeita.
+                      </>
+                    }
+                    confirmLabel="Remover"
+                  />
                 </div>
               </li>
             ),
