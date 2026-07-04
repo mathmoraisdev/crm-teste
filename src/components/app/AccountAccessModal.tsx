@@ -131,7 +131,7 @@ export function AccountAccessModal({
               <button
                 disabled={busy}
                 onClick={() => send({ kind: "setPlan", plan: planValue || null })}
-                className="rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
+                className="rounded-lg bg-forest px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
               >
                 Salvar
               </button>
@@ -227,7 +227,7 @@ export function AccountAccessModal({
               />
             </label>
             <button disabled={busy} onClick={saveInfo}
-              className="w-full rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40">
+              className="w-full rounded-lg bg-forest px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40">
               Lançar pagamento
             </button>
             {(paymentMethod || paymentDueDate) && (

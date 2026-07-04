@@ -151,7 +151,7 @@ export const ConversationList = memo(function ConversationList({
             className={cn(
               "shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
               selectedNumber === null
-                ? "bg-ink text-white"
+                ? "bg-forest text-white"
                 : "text-slate-500 hover:bg-slate-100 hover:text-ink",
             )}
           >
@@ -165,7 +165,7 @@ export const ConversationList = memo(function ConversationList({
               className={cn(
                 "max-w-[140px] shrink-0 truncate rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
                 selectedNumber === n.id
-                  ? "bg-ink text-white"
+                  ? "bg-forest text-white"
                   : "text-slate-500 hover:bg-slate-100 hover:text-ink",
               )}
             >
