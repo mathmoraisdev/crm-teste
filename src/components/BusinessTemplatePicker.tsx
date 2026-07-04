@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import {
   BUSINESS_TEMPLATES,
   CATEGORY_LABEL,
+  getTemplate,
   type BusinessCategory,
   type BusinessTemplate,
 } from "@/lib/business-templates";
@@ -18,12 +19,15 @@ function usedCategories(): BusinessCategory[] {
 
 export function BusinessTemplatePicker({
   onApply,
+  defaultTemplateId,
 }: {
   onApply: (tpl: BusinessTemplate) => void;
+  defaultTemplateId?: string | null;
 }) {
   const categories = useMemo(usedCategories, []);
-  const [cat, setCat] = useState<BusinessCategory | "">("");
-  const [tplId, setTplId] = useState("");
+  const initial = defaultTemplateId ? getTemplate(defaultTemplateId) : undefined;
+  const [cat, setCat] = useState<BusinessCategory | "">(initial?.category ?? "");
+  const [tplId, setTplId] = useState(initial?.id ?? "");
   const [applyTheme, setApplyTheme] = useState(true);
   const [applying, setApplying] = useState(false);
 
