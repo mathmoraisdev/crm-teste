@@ -439,7 +439,7 @@ export function WhatsAppNumbersPanel() {
           onClick={() => setDeleting(n)}
           title="Remover"
           aria-label="Remover chip"
-          className="text-red-600 hover:bg-red-50"
+          className="text-danger hover:bg-danger-surface"
         >
           <Trash2 size={14} />
         </Button>
@@ -514,7 +514,7 @@ export function WhatsAppNumbersPanel() {
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
                     Enviados hoje:{" "}
-                    <span className={atCap ? "text-amber-700" : "text-slate-700"}>
+                    <span className={atCap ? "text-warning" : "text-slate-700"}>
                       {n.sentToday}/{n.dailyCap}
                     </span>
                   </p>
@@ -553,7 +553,7 @@ export function WhatsAppNumbersPanel() {
                         </Badge>
                       </Td>
                       <Td className="text-center tabular-nums">
-                        <span className={atCap ? "text-amber-700" : "text-slate-700"}>
+                        <span className={atCap ? "text-warning" : "text-slate-700"}>
                           {n.sentToday}/{n.dailyCap}
                         </span>
                       </Td>
@@ -602,7 +602,7 @@ export function WhatsAppNumbersPanel() {
               conectados</em>.
             </p>
             {error && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
             )}
             <div className="flex justify-end">
               <Button onClick={startPairing} loading={submitting}>
@@ -682,7 +682,7 @@ export function WhatsAppNumbersPanel() {
             />
           </div>
           {editError && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</p>
+            <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{editError}</p>
           )}
           <div className="flex justify-end">
             <Button onClick={submitEdit} loading={editSubmitting}>
@@ -713,7 +713,7 @@ export function WhatsAppNumbersPanel() {
               defaultTemplateId={accountBusinessId}
             />
             {service.systemPromptOverride.trim() && (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="rounded-md bg-warning-surface px-3 py-2 text-xs text-warning">
                 Você tem um System prompt (avançado) preenchido — enquanto ele
                 existir, a IA ignora persona/base/horário. Limpe-o para o modelo
                 ter efeito.
@@ -989,7 +989,7 @@ export function WhatsAppNumbersPanel() {
             {salesAllowed && service.salesEnabled && serviceFor && (
               <div className="space-y-3">
                 {!paymentConnected && (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <p className="rounded-lg border border-amber-200 bg-warning-surface px-3 py-2 text-xs text-warning">
                     Nenhum gateway conectado. Conecte um Mercado Pago ou Asaas em{" "}
                     <strong>Configurações → Receber pagamentos (Pix)</strong> para a IA gerar cobranças.
                   </p>
@@ -1041,7 +1041,7 @@ export function WhatsAppNumbersPanel() {
             )}
 
             {serviceError && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">
                 {serviceError}
               </p>
             )}

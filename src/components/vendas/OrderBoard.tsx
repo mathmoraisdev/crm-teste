@@ -140,7 +140,7 @@ export function OrderBoard() {
       {/* ── Painel: comanda selecionada ──────────────────────────────── */}
       <div>
         {error && (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-[#C0392B]">{error}</p>
+          <p className="mb-3 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
         {selected ? (
           <OrderPanel
@@ -385,7 +385,7 @@ function OrderPanel({
                     type="button"
                     onClick={() => removeLine(it.id)}
                     disabled={busy}
-                    className="text-slate-400 hover:text-[#C0392B] disabled:opacity-40"
+                    className="text-slate-400 hover:text-danger disabled:opacity-40"
                     aria-label="Remover item"
                   >
                     <Trash2 size={15} />

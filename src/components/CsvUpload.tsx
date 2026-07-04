@@ -66,7 +66,7 @@ export function CsvUpload({ onImported }: { onImported: () => void }) {
       </div>
 
       {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -84,13 +84,13 @@ export function CsvUpload({ onImported }: { onImported: () => void }) {
             )}
           </p>
           {result.skippedOverLimit > 0 && (
-            <p className="mt-1 text-xs font-semibold text-amber-700">
+            <p className="mt-1 text-xs font-semibold text-warning">
               {result.skippedOverLimit} contato(s) não importados: limite de
               contatos do plano atingido. Faça upgrade para importar o restante.
             </p>
           )}
           {result.invalid.length > 0 && (
-            <ul className="mt-1 list-inside list-disc text-xs text-red-600">
+            <ul className="mt-1 list-inside list-disc text-xs text-danger">
               {result.invalid.slice(0, 5).map((i) => (
                 <li key={i.line}>
                   Linha {i.line}: {i.reason}

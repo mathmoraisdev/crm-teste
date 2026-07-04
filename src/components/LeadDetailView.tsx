@@ -127,7 +127,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             variant="ghost"
             size="sm"
             onClick={() => setDeleteOpen(true)}
-            className="text-red-600 hover:bg-red-50"
+            className="text-danger hover:bg-danger-surface"
           >
             <Trash2 size={14} /> Apagar
           </Button>
@@ -235,7 +235,7 @@ function SalePanel({ sale }: { sale: LeadDetail["sales"][number] }) {
     sale.status === "PAID"
       ? "text-brand-700"
       : sale.status === "PENDING"
-        ? "text-amber-700"
+        ? "text-warning"
         : "text-slate-500";
   return (
     <Card>

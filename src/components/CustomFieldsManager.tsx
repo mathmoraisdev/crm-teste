@@ -121,7 +121,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
       />
       <div className="space-y-2 px-4 py-3">
         {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
 
         {editId !== null && (
@@ -205,7 +205,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
                   variant="ghost"
                   onClick={() => remove(d.id)}
                   aria-label="Apagar campo"
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-danger hover:bg-danger-surface"
                 >
                   <Trash2 size={14} />
                 </Button>

@@ -162,7 +162,7 @@ export function TagManagerModal({
         </div>
 
         {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
 
         {/* lista */}
@@ -207,7 +207,7 @@ export function TagManagerModal({
                     variant="ghost"
                     onClick={() => remove(t.id)}
                     aria-label="Apagar tag"
-                    className="text-red-600 hover:bg-red-50"
+                    className="text-danger hover:bg-danger-surface"
                   >
                     <Trash2 size={14} />
                   </Button>

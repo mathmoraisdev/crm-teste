@@ -93,7 +93,7 @@ export const LeadsTable = memo(function LeadsTable({
                   onClick={() => onDelete(l)}
                   aria-label="Apagar lead"
                   title="Apagar"
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-danger hover:bg-danger-surface"
                 >
                   <Trash2 size={14} />
                 </Button>
@@ -176,7 +176,7 @@ export const LeadsTable = memo(function LeadsTable({
                   onClick={() => onDelete(l)}
                   aria-label="Apagar lead"
                   title="Apagar"
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-danger hover:bg-danger-surface"
                 >
                   <Trash2 size={14} />
                 </Button>

@@ -18,11 +18,11 @@ const PERIODS = [7, 30, 90];
 
 const TONE_BAR: Record<string, string> = {
   slate: "bg-slate-300",
-  blue: "bg-[#2C5BD6]",
-  amber: "bg-[#B97309]",
+  blue: "bg-info",
+  amber: "bg-warning",
   green: "bg-brand-500",
-  red: "bg-[#C0392B]",
-  violet: "bg-[#6D43D6]",
+  red: "bg-danger",
+  violet: "bg-accent",
   emerald: "bg-brand-600",
 };
 
@@ -250,7 +250,7 @@ export function DashboardView() {
                           "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold",
                           m.status === "CONFIRMED"
                             ? "bg-brand-50 text-brand-700"
-                            : "bg-amber-50 text-amber-700",
+                            : "bg-warning-surface text-warning",
                         )}
                       >
                         {m.status === "CONFIRMED" ? "Confirmada" : "Proposta"}
@@ -359,7 +359,7 @@ export function DashboardView() {
                       <tr key={c.campaignId ?? "none"} className="hover:bg-slate-50">
                         <Td>{c.name}</Td>
                         <Td className="text-right font-bold">{c.sent}</Td>
-                        <Td className="text-right text-red-600">{c.failed}</Td>
+                        <Td className="text-right text-danger">{c.failed}</Td>
                       </tr>
                     ))}
                   </tbody>

@@ -57,6 +57,17 @@ const config: Config = {
         line: "rgb(var(--border-subtle) / <alpha-value>)",
         "line-default": "rgb(var(--border-default) / <alpha-value>)",
         "line-strong": "rgb(var(--border-strong) / <alpha-value>)",
+        // Status semânticos (claro/escuro via var).
+        danger: "rgb(var(--danger) / <alpha-value>)",
+        "danger-surface": "rgb(var(--danger-surface) / <alpha-value>)",
+        warning: "rgb(var(--warning) / <alpha-value>)",
+        "warning-surface": "rgb(var(--warning-surface) / <alpha-value>)",
+        info: "rgb(var(--info) / <alpha-value>)",
+        "info-surface": "rgb(var(--info-surface) / <alpha-value>)",
+        success: "rgb(var(--success) / <alpha-value>)",
+        "success-surface": "rgb(var(--success-surface) / <alpha-value>)",
+        accent: "rgb(var(--accent) / <alpha-value>)",
+        "accent-surface": "rgb(var(--accent-surface) / <alpha-value>)",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],

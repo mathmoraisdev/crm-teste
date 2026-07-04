@@ -338,7 +338,7 @@ export function LeadsDashboard() {
       </div>
 
       {moveError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{moveError}</p>
+        <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{moveError}</p>
       )}
 
       {items === null ? (

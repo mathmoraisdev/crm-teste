@@ -275,7 +275,7 @@ export function AccountSettings({
                     <BadgeCheck size={13} /> Verificado
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-warning-surface px-2 py-0.5 text-xs font-semibold text-warning">
                     <MailWarning size={13} /> Não verificado
                   </span>
                 )}
@@ -334,7 +334,7 @@ export function AccountSettings({
             placeholder="Confirmar nova senha"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
-          {pwdError && <p className="text-sm text-[#C0392B]">{pwdError}</p>}
+          {pwdError && <p className="text-sm text-danger">{pwdError}</p>}
           {pwdDone && (
             <p className="text-sm text-brand-700">Senha alterada com sucesso.</p>
           )}
@@ -419,7 +419,7 @@ export function AccountSettings({
                   className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
-              {keyError && <p className="text-sm text-[#C0392B]">{keyError}</p>}
+              {keyError && <p className="text-sm text-danger">{keyError}</p>}
               <div className="flex justify-end">
                 <Button
                   onClick={saveKey}
@@ -449,7 +449,7 @@ export function AccountSettings({
                 Modelo econômico = 1 crédito por atendimento; modelo avançado = 10.
               </p>
               {aiUsage.used >= aiUsage.quota && (
-                <p className="mt-1 text-[#C0392B]">
+                <p className="mt-1 text-danger">
                   Cota esgotada. Faça upgrade de plano ou cadastre sua própria chave de IA acima para
                   liberar atendimentos ilimitados.
                 </p>
@@ -505,7 +505,7 @@ export function AccountSettings({
                     className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
                 </div>
-                {payError && <p className="text-sm text-[#C0392B]">{payError}</p>}
+                {payError && <p className="text-sm text-danger">{payError}</p>}
                 <div className="flex justify-end">
                   <Button onClick={savePaymentKey} loading={paySaving} disabled={payKeyInput.length < 12}>
                     Conectar
@@ -567,7 +567,7 @@ export function AccountSettings({
               </div>
             )}
             {subError && (
-              <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="mt-3 rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">
                 {subError}
               </p>
             )}
@@ -577,9 +577,9 @@ export function AccountSettings({
 
       {/* Zona de perigo — excluir a conta inteira: só o dono. */}
       {isOwner && (
-        <Card className="border-red-200">
+        <Card className="border-danger">
           <CardHeader
-            title={<span className="text-[#C0392B]">Zona de perigo</span>}
+            title={<span className="text-danger">Zona de perigo</span>}
             subtitle="Esta ação é permanente e não pode ser desfeita."
           />
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">

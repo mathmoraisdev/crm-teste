@@ -11,11 +11,11 @@ type Tone =
 
 const tones: Record<Tone, string> = {
   slate: "bg-slate-100 text-slate-600",
-  blue: "bg-[#EAF0FE] text-[#2C5BD6]",
-  amber: "bg-[#FEF3E2] text-[#B97309]",
+  blue: "bg-info-surface text-info",
+  amber: "bg-warning-surface text-warning",
   green: "bg-brand-50 text-brand-700",
-  red: "bg-[#FDECEC] text-[#C0392B]",
-  violet: "bg-[#EFEAFE] text-[#6D43D6]",
+  red: "bg-danger-surface text-danger",
+  violet: "bg-accent-surface text-accent",
   emerald: "bg-brand-100 text-brand-800",
 };
 

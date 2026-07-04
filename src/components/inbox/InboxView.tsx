@@ -298,7 +298,7 @@ export function InboxView() {
                     )}
                   </div>
                 </div>
-                {actionError && <p className="mt-2 text-xs text-red-600">{actionError}</p>}
+                {actionError && <p className="mt-2 text-xs text-danger">{actionError}</p>}
               </div>
 
               <div className="min-h-0 flex-1">

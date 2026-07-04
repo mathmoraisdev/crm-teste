@@ -101,7 +101,7 @@ export function SeatsDropdown({
                   <span
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
                       s.isOwner
-                        ? "bg-[#EAF0FE] text-[#2C5BD6]"
+                        ? "bg-info-surface text-info"
                         : "bg-slate-100 text-slate-500"
                     }`}
                   >
@@ -116,7 +116,7 @@ export function SeatsDropdown({
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                       s.isOwner
-                        ? "bg-[#EAF0FE] text-[#2C5BD6]"
+                        ? "bg-info-surface text-info"
                         : "bg-slate-100 text-slate-500"
                     }`}
                   >

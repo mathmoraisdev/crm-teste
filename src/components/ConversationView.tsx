@@ -260,7 +260,7 @@ export function ConversationView({
             </div>
             )}
             {!hideHandoff && handoffError && (
-              <p className="mb-2 text-xs text-red-600">{handoffError}</p>
+              <p className="mb-2 text-xs text-danger">{handoffError}</p>
             )}
 
             {aiPaused ? (
@@ -328,7 +328,7 @@ export function ConversationView({
                     </span>
                   )}
                   {suggestError && (
-                    <span className="text-[11px] text-red-600">{suggestError}</span>
+                    <span className="text-[11px] text-danger">{suggestError}</span>
                   )}
                 </div>
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
@@ -375,7 +375,7 @@ export function ConversationView({
                     <Send size={16} /> Enviar
                   </Button>
                 </div>
-                {replyError && <p className="mt-1 text-xs text-red-600">{replyError}</p>}
+                {replyError && <p className="mt-1 text-xs text-danger">{replyError}</p>}
                 <p className="mt-1 text-xs text-slate-400">
                   A mensagem (ou arquivo) vai para o lead pelo mesmo número. A IA não
                   responde enquanto você está no controle.
@@ -407,7 +407,7 @@ export function ConversationView({
                     <Send size={16} /> Enviar
                   </Button>
                 </div>
-                {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                {error && <p className="mt-1 text-xs text-danger">{error}</p>}
               </>
             )}
           </>

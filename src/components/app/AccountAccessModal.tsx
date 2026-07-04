@@ -149,11 +149,11 @@ export function AccountAccessModal({
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button disabled={busy} onClick={() => send({ kind: "trial", days: 3 })}
-                className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success-surface disabled:opacity-40">
                 Trial 3 dias
               </button>
               <button disabled={busy} onClick={() => send({ kind: "trial", days: 7 })}
-                className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+                className="rounded-lg bg-success-surface px-3 py-2 text-xs font-bold text-success hover:bg-success-surface disabled:opacity-40">
                 Trial 7 dias
               </button>
             </div>
@@ -174,7 +174,7 @@ export function AccountAccessModal({
               </button>
               <button disabled={busy || isAdmin} onClick={() => send({ kind: "forceSuspend" })}
                 title={isAdmin ? "Conta admin não pode ser suspensa" : undefined}
-                className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40">
+                className="rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger-surface disabled:opacity-40">
                 Suspender
               </button>
               <button disabled={busy} onClick={() => send({ kind: "auto" })}
@@ -232,7 +232,7 @@ export function AccountAccessModal({
             </button>
             {(paymentMethod || paymentDueDate) && (
               <button disabled={busy} onClick={() => send({ kind: "clearPayment" })}
-                className="w-full rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-40">
+                className="w-full rounded-lg bg-danger-surface px-3 py-2 text-xs font-bold text-danger hover:bg-danger-surface disabled:opacity-40">
                 Remover pagamento
               </button>
             )}

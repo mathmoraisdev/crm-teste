@@ -62,7 +62,7 @@ export function StatCard({
             <span
               className={cn(
                 "inline-flex items-center gap-0.5",
-                up ? "text-brand-600" : "text-[#C0392B]",
+                up ? "text-brand-600" : "text-danger",
                 dark && up && "text-mint",
               )}
             >

@@ -119,12 +119,12 @@ export function TeamManager({
       <Card className="p-4">
         <p className="mb-3 text-sm font-bold text-ink">Adicionar operador</p>
         {noPlan && (
-          <p className="mb-3 rounded-md bg-[#FEF3E2] px-3 py-2 text-sm text-[#B97309]">
+          <p className="mb-3 rounded-md bg-warning-surface px-3 py-2 text-sm text-warning">
             Defina um plano para esta conta no Financeiro antes de adicionar usuários.
           </p>
         )}
         {full && !noPlan && (
-          <p className="mb-3 rounded-md bg-[#FEF3E2] px-3 py-2 text-sm text-[#B97309]">
+          <p className="mb-3 rounded-md bg-warning-surface px-3 py-2 text-sm text-warning">
             Limite de usuários do plano atingido ({maxSeats}). Faça upgrade para adicionar mais.
           </p>
         )}
@@ -205,7 +205,7 @@ export function TeamManager({
           </div>
 
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-3">
+            <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger sm:col-span-3">
               {error}
             </p>
           )}
@@ -333,7 +333,7 @@ function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void 
             <option value="ASSIGNED">Só os atribuídos a ele</option>
           </select>
         </label>
-        {err && <p className="text-xs font-medium text-red-600">{err}</p>}
+        {err && <p className="text-xs font-medium text-danger">{err}</p>}
       </div>
     </div>
   );

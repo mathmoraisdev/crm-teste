@@ -24,7 +24,7 @@ function Meter({
 }) {
   const pct = unlimited || max <= 0 ? 0 : Math.min(100, Math.round((used / max) * 100));
   // Cor da barra: verde normal, âmbar ≥80%, vermelho no teto.
-  const tone = pct >= 100 ? "bg-[#C0392B]" : pct >= 80 ? "bg-[#B97309]" : "bg-brand-500";
+  const tone = pct >= 100 ? "bg-danger" : pct >= 80 ? "bg-warning" : "bg-brand-500";
 
   return (
     <div className="bg-card p-4">
@@ -46,7 +46,7 @@ function Meter({
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
         {unlimited ? (
-          <div className="h-full w-full bg-[repeating-linear-gradient(45deg,#E2E8F0,#E2E8F0_6px,#F1F5F9_6px,#F1F5F9_12px)]" />
+          <div className="h-full w-full bg-[repeating-linear-gradient(45deg,rgb(var(--slate-200)),rgb(var(--slate-200))_6px,rgb(var(--slate-100))_6px,rgb(var(--slate-100))_12px)]" />
         ) : (
           <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${pct}%` }} />
         )}

@@ -32,6 +32,13 @@
   --border-subtle: 237 242 239;
   --border-default: 226 234 230;
   --border-strong: 213 223 218;
+
+  /* Status semânticos (claro = hex já usados no design → zero mudança visual). */
+  --danger: 192 57 43;          --danger-surface: 253 236 236;   /* #C0392B / #FDECEC */
+  --warning: 185 115 9;         --warning-surface: 254 243 226;  /* #B97309 / #FEF3E2 */
+  --info: 44 91 214;            --info-surface: 234 240 254;     /* #2C5BD6 / #EAF0FE */
+  --success: 11 125 82;         --success-surface: 231 246 238;  /* brand-700 / brand-50 */
+  --accent: 109 67 214;         --accent-surface: 239 234 254;   /* #6D43D6 / #EFEAFE */
 }
 
 /* Tema escuro (forest dessaturado). O ramp neutro é INVERTIDO e afinado —
@@ -52,6 +59,13 @@
   --border-subtle: 34 48 41;
   --border-default: 42 58 50;
   --border-strong: 54 72 62;
+
+  /* Status no escuro: texto clareado, superfície escurecida (contraste AA). */
+  --danger: 240 118 122;   --danger-surface: 56 28 30;
+  --warning: 232 176 92;   --warning-surface: 56 44 22;
+  --info: 143 176 245;     --info-surface: 26 40 66;
+  --success: 95 214 158;   --success-surface: 18 46 30;
+  --accent: 182 156 240;   --accent-surface: 40 32 66;
 }
 
 html,

@@ -69,7 +69,7 @@ export function BusinessCategorySettings({ canEdit, initial }: { canEdit: boolea
             </optgroup>
           ))}
         </select>
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>}
         {!canEdit ? (
           <p className="text-sm text-slate-500">Apenas o administrador da conta pode definir o ramo do negócio.</p>
         ) : (

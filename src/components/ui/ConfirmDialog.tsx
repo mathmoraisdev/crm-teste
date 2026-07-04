@@ -46,7 +46,7 @@ export function ConfirmDialog({
       <div className="space-y-4">
         <div className="text-sm text-slate-600">{message}</div>
         {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={loading}>

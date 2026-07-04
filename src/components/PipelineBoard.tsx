@@ -26,8 +26,8 @@ const SLA_QUEUE_MINUTES = 10;
  * aquele lead precisa de humano.
  */
 const ATTENDANCE_HINT: Partial<Record<AttendanceStatus, { label: string; cls: string }>> = {
-  FILA: { label: "Na fila", cls: "bg-[#FEF3E2] text-[#B97309]" },
-  ATENDENDO: { label: "Atendendo", cls: "bg-[#EFEAFE] text-[#6D43D6]" },
+  FILA: { label: "Na fila", cls: "bg-warning-surface text-warning" },
+  ATENDENDO: { label: "Atendendo", cls: "bg-accent-surface text-accent" },
   AGUARDANDO: { label: "Aguardando", cls: "bg-slate-100 text-slate-500" },
 };
 
@@ -43,7 +43,7 @@ function AttendancePill({ lead }: { lead: LeadListItem }) {
     <span
       className={cn(
         "mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold",
-        overdue ? "bg-[#FDECEC] text-[#C0392B]" : hint.cls,
+        overdue ? "bg-danger-surface text-danger" : hint.cls,
       )}
       title={overdue ? `Na fila há mais de ${SLA_QUEUE_MINUTES} min sem atendimento` : undefined}
     >

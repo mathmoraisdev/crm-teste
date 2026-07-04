@@ -224,12 +224,12 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
                       <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
                         <span className="text-green-700">{c.jobs.sent} enviados</span>
                         {c.jobs.pending > 0 && (
-                          <span className="text-amber-700">
+                          <span className="text-warning">
                             {c.jobs.pending} na fila
                           </span>
                         )}
                         {c.jobs.failed > 0 && (
-                          <span className="text-red-700">{c.jobs.failed} falhas</span>
+                          <span className="text-danger">{c.jobs.failed} falhas</span>
                         )}
                       </div>
                     )}
@@ -259,7 +259,7 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
                         onClick={() => setDeleting(c)}
                         aria-label="Apagar campanha"
                         title="Apagar"
-                        className="text-red-600 hover:bg-red-50"
+                        className="text-danger hover:bg-danger-surface"
                       >
                         <Trash2 size={14} />
                       </Button>
@@ -312,12 +312,12 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
                             {c.jobs.sent} enviados
                           </span>
                           {c.jobs.pending > 0 && (
-                            <span className="text-amber-700">
+                            <span className="text-warning">
                               {c.jobs.pending} na fila
                             </span>
                           )}
                           {c.jobs.failed > 0 && (
-                            <span className="text-red-700">
+                            <span className="text-danger">
                               {c.jobs.failed} falhas
                             </span>
                           )}
@@ -350,7 +350,7 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
                           onClick={() => setDeleting(c)}
                           aria-label="Apagar campanha"
                           title="Apagar"
-                          className="text-red-600 hover:bg-red-50"
+                          className="text-danger hover:bg-danger-surface"
                         >
                           <Trash2 size={14} />
                         </Button>
