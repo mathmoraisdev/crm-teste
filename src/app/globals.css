@@ -34,6 +34,26 @@
   --border-strong: 213 223 218;
 }
 
+/* Tema escuro (forest dessaturado). O ramp neutro é INVERTIDO e afinado —
+   50 = superfície escura … 900/950 = texto claro — então bg-slate-50/100
+   escurecem e text-slate-600/700/900 clareiam sem editar componente.
+   NÃO sobrescreva --brand-* aqui (o BrandingStyle injeta por conta depois). */
+[data-theme="dark"] {
+  --slate-50: 16 26 21;     --slate-100: 20 32 26;    --slate-200: 26 42 35;
+  --slate-300: 40 56 48;    --slate-400: 110 126 118; --slate-500: 150 165 157;
+  --slate-600: 180 194 186; --slate-700: 205 217 210; --slate-800: 225 234 229;
+  --slate-900: 236 243 239; --slate-950: 245 250 247;
+  --ink: 232 240 236;
+
+  --surface-app: 10 20 15;    /* forest-black          */
+  --surface-card: 16 32 26;   /* card elevado          */
+  --surface-raised: 20 38 30; /* modal/popover elevado */
+  --surface-inset: 12 26 20;  /* inputs/wells recuados */
+  --border-subtle: 34 48 41;
+  --border-default: 42 58 50;
+  --border-strong: 54 72 62;
+}
+
 html,
 body {
   @apply bg-slate-50 text-ink antialiased;
