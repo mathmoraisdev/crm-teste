@@ -9,6 +9,11 @@ export interface CatalogItemDTO {
   name: string;
   priceCents: number;
   active: boolean;
+  trackStock: boolean;
+  sku: string | null;
+  stockQty: number;
+  minStock: number;
+  costCents: number | null;
 }
 
 const upsertSchema = z.object({
@@ -17,17 +22,40 @@ const upsertSchema = z.object({
   kind: z.enum(["SERVICO", "PRODUTO"]).default("SERVICO"),
 });
 
-function toDTO(o: { id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean }): CatalogItemDTO {
-  return { id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active };
+const stockConfigSchema = z.object({
+  trackStock: z.boolean().optional(),
+  sku: z.string().trim().max(60).nullish(),
+  minStock: z.number().int().min(0).optional(),
+  costCents: z.number().int().min(0).nullish(),
+});
+
+function toDTO(o: {
+  id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
+  trackStock: boolean; sku: string | null; stockQty: number; minStock: number; costCents: number | null;
+}): CatalogItemDTO {
+  return {
+    id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
+    trackStock: o.trackStock, sku: o.sku, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
+  };
 }
 
 export async function createCatalogItem(
   accountId: string,
-  data: { name: string; priceCents: number; kind?: CatalogItemKind },
+  data: {
+    name: string; priceCents: number; kind?: CatalogItemKind;
+    trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+  },
 ): Promise<CatalogItemDTO> {
   const parsed = upsertSchema.parse(data);
+  const cfg = stockConfigSchema.parse(data);
   const item = await prisma.catalogItem.create({
-    data: { accountId, name: parsed.name, priceCents: parsed.priceCents, kind: parsed.kind },
+    data: {
+      accountId, name: parsed.name, priceCents: parsed.priceCents, kind: parsed.kind,
+      trackStock: cfg.trackStock ?? false,
+      sku: cfg.sku?.trim() || null,
+      minStock: cfg.minStock ?? 0,
+      costCents: cfg.costCents ?? null,
+    },
   });
   return toDTO(item);
 }
@@ -43,7 +71,10 @@ export async function listCatalogItems(accountId: string, opts?: { activeOnly?: 
 export async function updateCatalogItem(
   accountId: string,
   id: string,
-  data: { name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean },
+  data: {
+    name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
+    trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+  },
 ): Promise<CatalogItemDTO> {
   const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
   if (!owned) throw new Error("Item não encontrado.");
@@ -59,6 +90,13 @@ export async function updateCatalogItem(
   }
   if (data.kind !== undefined) patch.kind = data.kind;
   if (data.active !== undefined) patch.active = data.active;
+  if (data.trackStock !== undefined) patch.trackStock = data.trackStock;
+  if (data.sku !== undefined) patch.sku = data.sku?.trim() || null;
+  if (data.minStock !== undefined) {
+    if (!Number.isInteger(data.minStock) || data.minStock < 0) throw new Error("Mínimo inválido.");
+    patch.minStock = data.minStock;
+  }
+  if (data.costCents !== undefined) patch.costCents = data.costCents === null ? null : data.costCents;
   const item = await prisma.catalogItem.update({ where: { id }, data: patch });
   return toDTO(item);
 }

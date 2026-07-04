@@ -64,4 +64,30 @@ describe("catalog.service", () => {
     await expect(seedCatalogFromTemplate(a, "nao-existe")).rejects.toThrow();
     await expect(seedCatalogFromTemplate(a, "advocacia")).rejects.toThrow(); // só placeholder
   });
+
+  it("cria produto com controle de estoque e expõe os campos", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, {
+      name: "Pomada", priceCents: 2500, kind: "PRODUTO",
+      trackStock: true, sku: "POM-01", minStock: 3, costCents: 1200,
+    });
+    expect(item.trackStock).toBe(true);
+    expect(item.sku).toBe("POM-01");
+    expect(item.stockQty).toBe(0); // nasce zerado; entra estoque via movimento
+    expect(item.minStock).toBe(3);
+    expect(item.costCents).toBe(1200);
+
+    const upd = await updateCatalogItem(a, item.id, { minStock: 5, trackStock: false, sku: null });
+    expect(upd.minStock).toBe(5);
+    expect(upd.trackStock).toBe(false);
+    expect(upd.sku).toBeNull();
+  });
+
+  it("serviço comum ignora campos de estoque (default off)", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO" });
+    expect(item.trackStock).toBe(false);
+    expect(item.stockQty).toBe(0);
+    expect(item.sku).toBeNull();
+  });
 });
