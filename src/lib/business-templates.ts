@@ -1757,6 +1757,75 @@ export function getTemplate(id: string): BusinessTemplate | undefined {
   return BUSINESS_TEMPLATES.find((t) => t.id === id);
 }
 
+// ── Sementes de catálogo (módulo Vendas) ────────────────────────────────
+// Deriva a lista de itens sugeridos de um modelo A PARTIR do próprio
+// knowledgeBase (a seção de serviços/produtos que já existe), sem duplicar
+// conteúdo. Usado no estado-vazio do Catálogo: o dono escolhe o ramo, os itens
+// entram com preço zerado (a definir) e ele ajusta nome/preço ou adiciona mais.
+
+export type CatalogSeedKind = "SERVICO" | "PRODUTO";
+export interface CatalogSeedItem {
+  name: string;
+  kind: CatalogSeedKind;
+}
+
+// Cabeçalhos de seção do knowledgeBase que listam itens vendáveis. Comparação
+// é uppercase + "contém" (pega "SERVIÇOS E PREÇOS", "PROCEDIMENTOS E PREÇOS"…).
+const SEED_SECTION_KEYWORDS = [
+  "SERVIÇO",
+  "SERVICO",
+  "PROCEDIMENTO",
+  "EXAME",
+  "ESPECIALIDADE",
+  "CONSULTA",
+  "MODALIDADE",
+  "VALORES",
+  "PLANO",
+  "CARDÁPIO",
+  "CARDAPIO",
+  "PRODUTO",
+  "PACOTE",
+];
+
+function isSeedPlaceholder(s: string): boolean {
+  return s.length === 0 || s.startsWith("[");
+}
+
+/**
+ * Itens sugeridos para semear o catálogo de uma conta com base no ramo.
+ * Vazio quando o modelo não tem uma seção de itens concreta (ex.: advocacia,
+ * cujo "áreas de atuação" é só placeholder) — nesse caso cai no cadastro manual.
+ */
+export function catalogSeedItems(tpl: BusinessTemplate): CatalogSeedItem[] {
+  const kind: CatalogSeedKind =
+    tpl.category === "alimentacao" || tpl.category === "varejo" ? "PRODUTO" : "SERVICO";
+  const lines = tpl.knowledgeBase.split("\n");
+  // Acha o cabeçalho da 1ª seção de itens (linha em maiúsculas, sem "-").
+  const start = lines.findIndex((l) => {
+    const up = l.trim().toUpperCase();
+    return up.length > 0 && !up.startsWith("-") && SEED_SECTION_KEYWORDS.some((k) => up.includes(k));
+  });
+  if (start < 0) return [];
+
+  const out: CatalogSeedItem[] = [];
+  const seen = new Set<string>();
+  for (let j = start + 1; j < lines.length; j++) {
+    const raw = lines[j].trim();
+    if (raw === "" || !raw.startsWith("-")) break; // fim da seção
+    // Remove "- ", corta a parte de preço/detalhe após o 1º ":" e quebra listas "·".
+    const body = raw.replace(/^-\s*/, "").split(":")[0];
+    for (const rawPiece of body.split("·")) {
+      const name = rawPiece.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+      if (isSeedPlaceholder(name) || name.length > 45) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name, kind });
+    }
+  }
+  return out;
+}
+
 /** Há algum campo de texto já preenchido no alvo? (decide o "sobrescrever?") */
 export function hasTextContent(target: TemplateApplyTarget): boolean {
   return Boolean(

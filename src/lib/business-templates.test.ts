@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   applyTemplate,
   hasTextContent,
+  catalogSeedItems,
+  getTemplate,
   BUSINESS_TEMPLATES,
   CATEGORY_LABEL,
   type BusinessCategory,
@@ -135,5 +137,45 @@ describe("catálogo — invariantes de produção", () => {
     for (const cat of Object.keys(CATEGORY_LABEL) as BusinessCategory[]) {
       expect(used.has(cat), `categoria sem modelo: ${cat}`).toBe(true);
     }
+  });
+});
+
+describe("catalogSeedItems", () => {
+  it("barbearia: extrai serviços da seção, sem preço/placeholder", () => {
+    const tpl = getTemplate("barbearia")!;
+    const items = catalogSeedItems(tpl);
+    const names = items.map((i) => i.name);
+    expect(names).toContain("Corte");
+    expect(names).toContain("Barba");
+    expect(names).toContain("Corte + barba"); // parêntese "(combo)" removido
+    expect(items.every((i) => i.kind === "SERVICO")).toBe(true);
+    // nenhum item vem com "R$", ":" ou placeholder "["
+    expect(names.every((n) => !/[:\[]|R\$/.test(n))).toBe(true);
+  });
+
+  it("varejo (ótica): itens de lista inline com '·' viram PRODUTO", () => {
+    const tpl = getTemplate("otica")!;
+    const names = catalogSeedItems(tpl).map((i) => i.name);
+    expect(names).toContain("Armações");
+    expect(names).toContain("Óculos de sol");
+    expect(catalogSeedItems(tpl).every((i) => i.kind === "PRODUTO")).toBe(true);
+  });
+
+  it("modelo só com placeholder (advocacia) não gera itens", () => {
+    const tpl = getTemplate("advocacia")!;
+    expect(catalogSeedItems(tpl)).toHaveLength(0);
+  });
+
+  it("nunca lança e não repete nomes em nenhum modelo", () => {
+    for (const t of BUSINESS_TEMPLATES) {
+      const items = catalogSeedItems(t);
+      const keys = items.map((i) => i.name.toLowerCase());
+      expect(new Set(keys).size, `nomes duplicados em ${t.id}`).toBe(keys.length);
+    }
+  });
+
+  it("a maioria dos modelos gera ao menos 1 item", () => {
+    const withItems = BUSINESS_TEMPLATES.filter((t) => catalogSeedItems(t).length > 0);
+    expect(withItems.length).toBeGreaterThan(BUSINESS_TEMPLATES.length / 2);
   });
 });
