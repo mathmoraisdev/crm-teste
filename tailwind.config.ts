@@ -9,6 +9,8 @@ import type { Config } from "tailwindcss";
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
+  // Variante `dark:` alinhada ao MESMO seletor das CSS vars (data-theme no <html>).
+  darkMode: ["selector", '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -28,24 +30,33 @@ const config: Config = {
           900: "rgb(var(--brand-900) / <alpha-value>)",
           950: "rgb(var(--brand-950) / <alpha-value>)",
         },
-        // Neutros do design (verde-acinzentado) sobrepondo o slate padrão.
+        // Neutros do design (verde-acinzentado) — agora TEMÁVEIS via CSS vars.
+        // Os valores (claro/escuro) vivem em src/app/globals.css.
         slate: {
-          50: "#F4F7F5",
-          100: "#EDF2EF",
-          200: "#E2EAE6",
-          300: "#D5DFDA",
-          400: "#94A39B",
-          500: "#6B7A73",
-          600: "#46544D",
-          700: "#34433B",
-          800: "#1A2A23",
-          900: "#0A1B14",
-          950: "#050D09",
+          50: "rgb(var(--slate-50) / <alpha-value>)",
+          100: "rgb(var(--slate-100) / <alpha-value>)",
+          200: "rgb(var(--slate-200) / <alpha-value>)",
+          300: "rgb(var(--slate-300) / <alpha-value>)",
+          400: "rgb(var(--slate-400) / <alpha-value>)",
+          500: "rgb(var(--slate-500) / <alpha-value>)",
+          600: "rgb(var(--slate-600) / <alpha-value>)",
+          700: "rgb(var(--slate-700) / <alpha-value>)",
+          800: "rgb(var(--slate-800) / <alpha-value>)",
+          900: "rgb(var(--slate-900) / <alpha-value>)",
+          950: "rgb(var(--slate-950) / <alpha-value>)",
         },
         // Tokens semânticos auxiliares.
         forest: "rgb(var(--brand-950))",
-        ink: "#0A1410",
+        ink: "rgb(var(--ink) / <alpha-value>)",
         mint: "rgb(var(--brand-300))",
+        // Tokens semânticos de superfície/borda (respondem ao tema via var).
+        surface: "rgb(var(--surface-app) / <alpha-value>)",
+        card: "rgb(var(--surface-card) / <alpha-value>)",
+        raised: "rgb(var(--surface-raised) / <alpha-value>)",
+        inset: "rgb(var(--surface-inset) / <alpha-value>)",
+        line: "rgb(var(--border-subtle) / <alpha-value>)",
+        "line-default": "rgb(var(--border-default) / <alpha-value>)",
+        "line-strong": "rgb(var(--border-strong) / <alpha-value>)",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],

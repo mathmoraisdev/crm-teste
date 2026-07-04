@@ -16,6 +16,22 @@
   --brand-800: 6 122 82;
   --brand-900: 10 61 41;
   --brand-950: 10 27 20;
+
+  /* Neutros (espelham os hex atuais do tailwind.config → zero mudança visual). */
+  --slate-50: 244 247 245;   --slate-100: 237 242 239; --slate-200: 226 234 230;
+  --slate-300: 213 223 218;  --slate-400: 148 163 155; --slate-500: 107 122 115;
+  --slate-600: 70 84 77;     --slate-700: 52 67 59;    --slate-800: 26 42 35;
+  --slate-900: 10 27 20;     --slate-950: 5 13 9;
+  --ink: 10 20 16;
+
+  /* Tokens semânticos de superfície/texto/borda (tema claro). */
+  --surface-app: 244 247 245;    /* fundo da página */
+  --surface-card: 255 255 255;   /* cards           */
+  --surface-raised: 255 255 255; /* modal/popover    */
+  --surface-inset: 244 247 245;  /* inputs/wells     */
+  --border-subtle: 237 242 239;
+  --border-default: 226 234 230;
+  --border-strong: 213 223 218;
 }
 
 html,
@@ -41,7 +57,7 @@ body {
    claro que dá para deslizar (o strip é baixo, então a barra padrão some). */
 .scroll-tabs {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--brand-500)) theme("colors.slate.100");
+  scrollbar-color: rgb(var(--brand-500)) rgb(var(--slate-100));
 }
 .scroll-tabs::-webkit-scrollbar {
   height: 6px;
