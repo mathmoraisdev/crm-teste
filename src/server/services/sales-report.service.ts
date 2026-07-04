@@ -34,6 +34,27 @@ export async function revenueByPayment(accountId: string, from: Date, to: Date):
   return [...map.entries()].map(([payment, totalCents]) => ({ payment, totalCents }));
 }
 
+export interface OperatorRevenue { operatorId: string; operatorName: string; totalCents: number; orderCount: number; }
+
+/** Faturamento e nº de comandas por operador (quem lançou), maior receita primeiro. */
+export async function revenueByOperator(accountId: string, from: Date, to: Date): Promise<OperatorRevenue[]> {
+  const orders = await prisma.order.findMany({
+    where: { accountId, status: "FECHADA", closedAt: { gte: from, lte: to } },
+    select: { openedById: true, openedBy: { select: { name: true } }, items: { select: { unitPriceCents: true, quantity: true } } },
+  });
+  const map = new Map<string, { name: string; totalCents: number; orderCount: number }>();
+  for (const o of orders) {
+    const t = o.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+    const cur = map.get(o.openedById) ?? { name: o.openedBy?.name ?? "—", totalCents: 0, orderCount: 0 };
+    cur.totalCents += t;
+    cur.orderCount += 1;
+    map.set(o.openedById, cur);
+  }
+  return [...map.entries()]
+    .map(([operatorId, v]) => ({ operatorId, operatorName: v.name, totalCents: v.totalCents, orderCount: v.orderCount }))
+    .sort((a, b) => b.totalCents - a.totalCents);
+}
+
 export async function topItems(accountId: string, from: Date, to: Date, limit = 10): Promise<{ name: string; quantity: number; totalCents: number }[]> {
   const ids = await closedOrderIds(accountId, from, to);
   if (!ids.length) return [];

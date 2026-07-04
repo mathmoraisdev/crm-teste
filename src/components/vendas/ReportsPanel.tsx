@@ -11,9 +11,11 @@ type Period = "hoje" | "7d" | "mes";
 type View = "resumo" | "extrato";
 
 interface Summary { totalCents: number; orderCount: number; avgTicketCents: number; }
+interface OperatorRevenue { operatorId: string; operatorName: string; totalCents: number; orderCount: number; }
 interface ReportData {
   summary: Summary;
   byPayment: { payment: Payment; totalCents: number }[];
+  byOperator: OperatorRevenue[];
   topItems: { name: string; quantity: number; totalCents: number }[];
 }
 
@@ -134,6 +136,32 @@ function ResumoView({
                     {it.name}
                   </span>
                   <span className="text-slate-600">{formatCentsBRL(it.totalCents)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
+
+      {/* Por operador (quem lançou) */}
+      <Card>
+        <CardHeader title="Por operador" subtitle="Faturamento e nº de comandas por quem lançou" />
+        <div className="px-5 py-4">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 size={14} className="animate-spin" /> Carregando…
+            </div>
+          ) : !data || data.byOperator.length === 0 ? (
+            <p className="text-sm text-slate-400">Nenhuma venda no período.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {data.byOperator.map((op) => (
+                <li key={op.operatorId} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate text-ink">
+                    {op.operatorName}
+                    <span className="text-slate-400"> · {op.orderCount} comanda{op.orderCount === 1 ? "" : "s"}</span>
+                  </span>
+                  <span className="whitespace-nowrap font-medium text-slate-600">{formatCentsBRL(op.totalCents)}</span>
                 </li>
               ))}
             </ul>
