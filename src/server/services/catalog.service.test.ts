@@ -1,0 +1,47 @@
+import { describe, it, expect } from "vitest";
+import { prisma } from "@/server/db/client";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem } from "./catalog.service";
+
+// Cria um usuário-dono descartável por teste (isolamento).
+async function makeOwner() {
+  const u = await prisma.user.create({
+    data: { email: `cat_${Math.round(performance.now())}_${Math.random()}@t.test`, name: "T", passwordHash: "x" },
+  });
+  return u.id;
+}
+
+describe("catalog.service", () => {
+  it("cria item e lista escopado por conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO" });
+    await createCatalogItem(b, { name: "X-Burguer", priceCents: 2500, kind: "PRODUTO" });
+    const listA = await listCatalogItems(a);
+    expect(listA).toHaveLength(1);
+    expect(listA[0].name).toBe("Corte");
+    expect(listA[0].priceCents).toBe(4000);
+  });
+
+  it("rejeita nome vazio e preço negativo", async () => {
+    const a = await makeOwner();
+    await expect(createCatalogItem(a, { name: "  ", priceCents: 1000 })).rejects.toThrow();
+    await expect(createCatalogItem(a, { name: "X", priceCents: -1 })).rejects.toThrow();
+  });
+
+  it("update só afeta item da própria conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Barba", priceCents: 3000 });
+    await expect(updateCatalogItem(b, item.id, { priceCents: 1 })).rejects.toThrow();
+    const upd = await updateCatalogItem(a, item.id, { priceCents: 3500, active: false });
+    expect(upd.priceCents).toBe(3500);
+    expect(upd.active).toBe(false);
+  });
+
+  it("delete remove o item", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Sobrancelha", priceCents: 1500 });
+    await deleteCatalogItem(a, item.id);
+    expect(await listCatalogItems(a)).toHaveLength(0);
+  });
+});
