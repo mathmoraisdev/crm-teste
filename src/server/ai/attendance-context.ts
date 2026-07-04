@@ -40,3 +40,23 @@ export function renderActiveOffers(offers: OfferForContext[]): string {
   });
   return `OFERTAS DISPONÍVEIS (use o id ao escolher; o preço é fixo, não altere):\n${lines.join("\n")}`;
 }
+
+export interface CatalogItemForContext {
+  name: string;
+  priceCents: number;
+  kind: "SERVICO" | "PRODUTO";
+}
+
+/**
+ * Renderiza (PURA) o catálogo ativo da conta como bloco de contexto — para a IA
+ * conhecer serviços/produtos e responder dúvidas. Preço só quando > 0 (item sem
+ * preço definido = "sob consulta"). Vazio quando não há itens (chamador omite).
+ */
+export function renderCatalogForAI(items: CatalogItemForContext[], limit = 40): string {
+  if (!items.length) return "";
+  const lines = items.slice(0, limit).map((i) => {
+    const price = i.priceCents > 0 ? formatCentsBRL(i.priceCents) : "sob consulta";
+    return `- ${i.name}: ${price}`;
+  });
+  return `SERVIÇOS E PRODUTOS (catálogo da empresa; informe preço só se listado):\n${lines.join("\n")}`;
+}

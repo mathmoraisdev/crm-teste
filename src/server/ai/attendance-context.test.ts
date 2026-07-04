@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAttendanceContext, renderActiveOffers } from "./attendance-context";
+import { buildAttendanceContext, renderActiveOffers, renderCatalogForAI } from "./attendance-context";
 
 describe("buildAttendanceContext", () => {
   it("inclui persona, base e horário quando presentes", () => {
@@ -36,5 +36,26 @@ describe("renderActiveOffers", () => {
 
   it("retorna string vazia sem ofertas", () => {
     expect(renderActiveOffers([])).toBe("");
+  });
+});
+
+describe("renderCatalogForAI", () => {
+  it("lista itens com preço; zero vira 'sob consulta'", () => {
+    const out = renderCatalogForAI([
+      { name: "X-Burguer", priceCents: 2500, kind: "PRODUTO" },
+      { name: "Corte", priceCents: 0, kind: "SERVICO" },
+    ]);
+    expect(out).toContain("X-Burguer");
+    expect(out).toContain("R$ 25,00");
+    expect(out).toContain("Corte");
+    expect(out).toMatch(/Corte.*sob consulta/);
+  });
+  it("vazio → string vazia", () => {
+    expect(renderCatalogForAI([])).toBe("");
+  });
+  it("respeita o teto de itens", () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({ name: `Item ${i}`, priceCents: 100, kind: "PRODUTO" as const }));
+    const out = renderCatalogForAI(many, 40);
+    expect(out.split("\n").filter((l) => l.startsWith("- ")).length).toBe(40);
   });
 });
