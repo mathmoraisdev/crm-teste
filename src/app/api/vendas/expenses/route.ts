@@ -6,13 +6,28 @@ import { createExpense, listPayable, listPaid, ensureRecurringForMonth } from "@
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+
+  const sp = req.nextUrl.searchParams;
+  const fromRaw = sp.get("from");
+  const toRaw = sp.get("to");
+  let from: Date | undefined;
+  let to: Date | undefined;
+  if (fromRaw) { from = new Date(fromRaw); if (isNaN(+from)) return NextResponse.json({ error: "Data inicial inválida" }, { status: 400 }); }
+  if (toRaw) { to = new Date(toRaw); if (isNaN(+to)) return NextResponse.json({ error: "Data final inválida" }, { status: 400 }); }
+  const q = sp.get("q") || undefined;
+  const paidSkip = Number(sp.get("paidSkip") ?? 0) || 0;
+  const paidTake = Math.min(Number(sp.get("paidTake") ?? 50) || 50, 100);
+
   // Garante as fixas do mês corrente antes de listar (lazy, idempotente).
   await ensureRecurringForMonth(ctx.tenantUserId, competenceMonth());
-  const [payable, paid] = await Promise.all([listPayable(ctx.tenantUserId), listPaid(ctx.tenantUserId)]);
+  const [payable, paid] = await Promise.all([
+    listPayable(ctx.tenantUserId, { from, to, query: q }),
+    listPaid(ctx.tenantUserId, { from, to, query: q, skip: paidSkip, take: paidTake }),
+  ]);
   return NextResponse.json({ payable, paid });
 }
 
