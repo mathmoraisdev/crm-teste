@@ -111,6 +111,10 @@ model User {
   // Plano comercial do DONO (null = não definido → entitlements não aplicados).
   // O admin define no /financeiro. Só faz sentido no dono (ownerId = null).
   plan            Plan?
+  // Ramo do negócio da conta (id de BUSINESS_TEMPLATES, ex.: "barbearia"). Fonte
+  // de verdade da vertical no NÍVEL CONTA — pré-seleciona o modelo de Atendimento
+  // dos números e habilita semear o catálogo. Só faz sentido no dono (ownerId=null).
+  businessTemplateId String?
   // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
   role            AccountRole     @default(ADMIN)
   // Limitações configuráveis do OPERADOR (o admin define no /equipe). No dono/ADMIN
