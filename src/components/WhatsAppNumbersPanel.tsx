@@ -741,7 +741,7 @@ export function WhatsAppNumbersPanel() {
                 onChange={(e) =>
                   setService({ ...service, aiModel: e.target.value })
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                className="w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="">Padrão da conta</option>
                 {AI_MODELS_BY_PROVIDER[provider]

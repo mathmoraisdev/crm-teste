@@ -127,7 +127,7 @@ export const ConversationList = memo(function ConversationList({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome ou telefone…"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+            className="w-full rounded-lg border border-line-default bg-inset py-2 pl-8 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
           />
           {search && (
             <button

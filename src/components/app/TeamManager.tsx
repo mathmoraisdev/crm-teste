@@ -23,7 +23,7 @@ interface Member {
 }
 
 const inputCls =
-  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-slate-400 focus:border-brand-400";
+  "w-full rounded-xl border border-line-default bg-inset px-3 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-slate-400 focus:border-brand-400";
 
 export function TeamManager({
   owner,
@@ -324,7 +324,7 @@ function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void 
         <label className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-semibold text-ink">Leads:</span>
           <select
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-ink outline-none focus:border-brand-400 disabled:opacity-50"
+            className="rounded-lg border border-line-default bg-inset px-2 py-1.5 text-sm text-ink outline-none focus:border-brand-400 disabled:opacity-50"
             value={member.leadsScope}
             onChange={(e) => patch({ leadsScope: e.target.value as LeadsScope })}
             disabled={saving}

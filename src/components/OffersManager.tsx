@@ -146,7 +146,7 @@ export function OffersManager({ numberId }: { numberId: string }) {
           {offers.map((o) =>
             editingId === o.id ? (
               // ── Modo edição ─────────────────────────────────────────────
-              <li key={o.id} className="space-y-2 rounded-lg border border-brand-200 bg-white px-3 py-2.5">
+              <li key={o.id} className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     value={editName}
@@ -181,7 +181,7 @@ export function OffersManager({ numberId }: { numberId: string }) {
               // ── Modo leitura ────────────────────────────────────────────
               <li
                 key={o.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line-default bg-card px-3 py-2"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">

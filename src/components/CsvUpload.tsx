@@ -59,7 +59,7 @@ export function CsvUpload({ onImported }: { onImported: () => void }) {
         <a
           href="/sample-leads.csv"
           download
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line-default bg-card px-4 py-2 text-sm font-medium text-slate-700 hover:bg-inset"
         >
           <FileDown size={16} /> Baixar exemplo
         </a>

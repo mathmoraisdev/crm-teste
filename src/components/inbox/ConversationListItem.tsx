@@ -54,7 +54,7 @@ export const ConversationListItem = memo(function ConversationListItem({
             "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
             selected
               ? "border-brand-500 bg-brand-500 text-white"
-              : "border-slate-300 bg-white",
+              : "border-line-default bg-card",
           )}
           aria-hidden
         >

@@ -84,7 +84,7 @@ export function SeatsDropdown({
           {/* Backdrop invisível: clique fora fecha. */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            className="fixed z-50 w-64 max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+            className="fixed z-50 w-64 max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-line bg-raised shadow-lg"
             style={{ top: coords.top, left: coords.left }}
           >
             <div className="border-b border-slate-100 px-3 py-2">

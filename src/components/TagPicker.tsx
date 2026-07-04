@@ -141,7 +141,7 @@ export function TagPicker({
       </div>
 
       {open && (
-        <div className="absolute z-20 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+        <div className="absolute z-20 mt-2 w-64 rounded-xl border border-line bg-raised p-3 shadow-xl">
           <div className="max-h-48 space-y-1 overflow-y-auto">
             {catalog.length === 0 && (
               <p className="px-1 py-2 text-xs text-slate-400">Nenhuma tag ainda.</p>

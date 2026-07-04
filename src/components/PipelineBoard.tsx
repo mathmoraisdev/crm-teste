@@ -92,7 +92,7 @@ const KanbanCard = memo(function KanbanCard({
         }
       }}
       className={cn(
-        "block cursor-pointer rounded-xl border bg-white p-3.5 transition-shadow hover:shadow-[0_8px_20px_-12px_rgba(10,27,20,.35)] focus:outline-none focus:ring-2 focus:ring-brand-400",
+        "block cursor-pointer rounded-xl border bg-card p-3.5 transition-shadow hover:shadow-[0_8px_20px_-12px_rgba(10,27,20,.35)] focus:outline-none focus:ring-2 focus:ring-brand-400",
         h.positive ? "border-brand-100" : "border-slate-200",
         h.draggingId === lead.id && "opacity-50",
       )}
@@ -177,7 +177,7 @@ const KanbanColumn = memo(function KanbanColumn({
         </span>
         <span
           className={cn(
-            "rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold",
+            "rounded-full bg-card px-2.5 py-0.5 text-[11px] font-bold",
             positive ? "text-brand-700" : "text-slate-500",
           )}
         >

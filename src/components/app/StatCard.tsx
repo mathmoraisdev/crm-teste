@@ -29,7 +29,7 @@ export function StatCard({
     <div
       className={cn(
         "relative overflow-hidden rounded-2xl border p-5",
-        dark ? "border-forest bg-forest" : "border-slate-200 bg-white",
+        dark ? "border-forest bg-forest" : "border-line-default bg-card",
       )}
     >
       {dark && (

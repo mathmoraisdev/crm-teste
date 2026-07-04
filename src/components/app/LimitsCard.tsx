@@ -27,7 +27,7 @@ function Meter({
   const tone = pct >= 100 ? "bg-[#C0392B]" : pct >= 80 ? "bg-[#B97309]" : "bg-brand-500";
 
   return (
-    <div className="bg-white p-4">
+    <div className="bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
           <span className="text-slate-400">{icon}</span>

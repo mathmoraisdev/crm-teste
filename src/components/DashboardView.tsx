@@ -120,7 +120,7 @@ export function DashboardView() {
                 className={cn(
                   "rounded-lg px-3.5 py-1.5 text-[13px] font-bold transition-colors",
                   !customActive && days === p
-                    ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
+                    ? "bg-card text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
                     : "text-slate-500 hover:text-ink",
                 )}
               >
@@ -130,7 +130,7 @@ export function DashboardView() {
           </div>
 
           {/* Intervalo específico (De/Até) — tem precedência sobre os presets. */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-1">
+          <div className="flex items-center gap-1.5 rounded-xl border border-line-default bg-card px-2 py-1">
             <input
               type="date"
               value={from}

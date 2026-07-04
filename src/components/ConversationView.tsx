@@ -444,7 +444,7 @@ function Bubble({
         className={cn(
           "max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm",
           inbound
-            ? "rounded-bl-sm bg-white text-slate-800"
+            ? "rounded-bl-sm bg-card text-slate-800"
             : "rounded-br-sm bg-brand-500 text-white",
         )}
       >

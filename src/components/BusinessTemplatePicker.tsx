@@ -78,7 +78,7 @@ export function BusinessTemplatePicker({
             setCat(e.target.value as BusinessCategory | "");
             setTplId("");
           }}
-          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="rounded-lg border border-line-default bg-inset px-2.5 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         >
           <option value="">Categoria…</option>
           {categories.map((c) => (
@@ -91,7 +91,7 @@ export function BusinessTemplatePicker({
           value={tplId}
           onChange={(e) => setTplId(e.target.value)}
           disabled={!cat}
-          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+          className="rounded-lg border border-line-default bg-inset px-2.5 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
         >
           <option value="">{cat ? "Ramo…" : "Escolha a categoria"}</option>
           {options.map((t) => (

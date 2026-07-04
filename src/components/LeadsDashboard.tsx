@@ -25,7 +25,7 @@ const NO_CAMPAIGN = "__none__";
 const TAKE = 50;
 
 const selectClass =
-  "min-w-[140px] flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 sm:flex-none";
+  "min-w-[140px] flex-1 rounded-xl border border-line-default bg-inset px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 sm:flex-none";
 
 export function LeadsDashboard() {
   // Lista PAGINADA (server-side): página atual em `items`, total filtrado em `total`.
@@ -248,7 +248,7 @@ export function LeadsDashboard() {
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-bold transition-colors",
                 view === "table"
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
+                  ? "bg-card text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
                   : "text-slate-500 hover:text-ink",
               )}
             >
@@ -259,7 +259,7 @@ export function LeadsDashboard() {
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-bold transition-colors",
                 view === "board"
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
+                  ? "bg-card text-ink shadow-[0_1px_2px_rgba(10,20,16,.08)]"
                   : "text-slate-500 hover:text-ink",
               )}
             >
@@ -294,7 +294,7 @@ export function LeadsDashboard() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nome ou telefone…"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
+            className="w-full rounded-xl border border-line-default bg-inset py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
           />
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
