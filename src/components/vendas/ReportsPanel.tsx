@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { formatCentsBRL } from "@/lib/money";
 import { PAYMENT_LABEL, type Payment } from "./payment-labels";
+import { CATEGORY_LABEL } from "./expense-labels";
 import { SalesHistoryPanel } from "./SalesHistoryPanel";
 
 type Period = "hoje" | "7d" | "mes";
@@ -17,6 +18,10 @@ interface ReportData {
   byPayment: { payment: Payment; totalCents: number }[];
   byOperator: OperatorRevenue[];
   topItems: { name: string; quantity: number; totalCents: number }[];
+  // Só presentes para quem tem canSettings (dono/gerente) — ver rota de reports.
+  expensesTotalCents?: number;
+  balanceCents?: number;
+  expensesByCategory?: { category: string; totalCents: number }[];
 }
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -92,6 +97,7 @@ function ResumoView({
   loading: boolean;
 }) {
   const s = data?.summary;
+  const hasExpenses = data?.expensesTotalCents !== undefined;
   return (
     <div className="space-y-4">
       {/* Toggle de período */}
@@ -111,11 +117,25 @@ function ResumoView({
       </div>
 
       {/* Cards de resumo */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Faturamento" value={s ? formatCentsBRL(s.totalCents) : "—"} loading={loading} />
-        <StatCard label="Comandas" value={s ? String(s.orderCount) : "—"} loading={loading} />
-        <StatCard label="Ticket médio" value={s ? formatCentsBRL(s.avgTicketCents) : "—"} loading={loading} />
-      </div>
+      {hasExpenses ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Faturamento" value={s ? formatCentsBRL(s.totalCents) : "—"} loading={loading} />
+          <StatCard label="Despesas" value={data ? formatCentsBRL(data.expensesTotalCents ?? 0) : "—"} loading={loading} />
+          <StatCard
+            label="Saldo"
+            value={data ? formatCentsBRL(data.balanceCents ?? 0) : "—"}
+            loading={loading}
+            valueClassName={(data?.balanceCents ?? 0) < 0 ? "text-red-600" : "text-ink"}
+          />
+          <StatCard label="Ticket médio" value={s ? formatCentsBRL(s.avgTicketCents) : "—"} loading={loading} />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Faturamento" value={s ? formatCentsBRL(s.totalCents) : "—"} loading={loading} />
+          <StatCard label="Comandas" value={s ? String(s.orderCount) : "—"} loading={loading} />
+          <StatCard label="Ticket médio" value={s ? formatCentsBRL(s.avgTicketCents) : "—"} loading={loading} />
+        </div>
+      )}
 
       {/* Mais vendidos */}
       <Card>
@@ -191,18 +211,43 @@ function ResumoView({
           )}
         </div>
       </Card>
+
+      {/* Despesas por categoria (só dono/gerente) */}
+      {hasExpenses && (
+        <Card>
+          <CardHeader title="Despesas por categoria" />
+          <div className="px-5 py-4">
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 size={14} className="animate-spin" /> Carregando…
+              </div>
+            ) : !data || (data.expensesByCategory?.length ?? 0) === 0 ? (
+              <p className="text-sm text-slate-400">Nenhuma despesa paga no período.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {data.expensesByCategory!.map((c) => (
+                  <li key={c.category} className="flex items-center justify-between text-sm">
+                    <span className="text-ink">{CATEGORY_LABEL[c.category as keyof typeof CATEGORY_LABEL] ?? c.category}</span>
+                    <span className="text-slate-600">{formatCentsBRL(c.totalCents)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, loading }: { label: string; value: string; loading: boolean }) {
+function StatCard({ label, value, loading, valueClassName = "text-ink" }: { label: string; value: string; loading: boolean; valueClassName?: string }) {
   return (
     <Card className="px-5 py-4">
       <p className="text-xs text-slate-500">{label}</p>
       {loading ? (
         <Loader2 size={18} className="mt-1 animate-spin text-slate-300" />
       ) : (
-        <p className="mt-0.5 text-2xl font-bold text-ink">{value}</p>
+        <p className={`mt-0.5 text-2xl font-bold ${valueClassName}`}>{value}</p>
       )}
     </Card>
   );
