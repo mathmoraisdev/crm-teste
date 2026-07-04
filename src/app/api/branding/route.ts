@@ -34,10 +34,18 @@ export async function POST(req: Request) {
     if (url) data.logoUrl = url;
   }
 
-  await prisma.accountBranding.upsert({
-    where: { accountId: ctx.tenantUserId },
-    create: { accountId: ctx.tenantUserId, ...data },
-    update: data,
-  });
+  try {
+    await prisma.accountBranding.upsert({
+      where: { accountId: ctx.tenantUserId },
+      create: { accountId: ctx.tenantUserId, ...data },
+      update: data,
+    });
+  } catch (e) {
+    // Simétrico ao getBranding: a falha aqui costuma ser a tabela ainda não
+    // migrada em prod. Devolve mensagem legível em vez de 500 opaco (corpo vazio).
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[branding] upsert falhou: ${msg}`);
+    return NextResponse.json({ error: "Falha ao salvar branding" }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
