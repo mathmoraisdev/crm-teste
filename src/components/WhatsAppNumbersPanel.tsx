@@ -131,6 +131,15 @@ export function WhatsAppNumbersPanel() {
   const [service, setService] = useState<ServiceConfig | null>(null);
   const [serviceSubmitting, setServiceSubmitting] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
+  // Ramo do negócio da conta — pré-seleciona o modelo no picker de Atendimento.
+  const [accountBusinessId, setAccountBusinessId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/account/business", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setAccountBusinessId((d.businessTemplateId as string | null) ?? null))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -695,7 +704,7 @@ export function WhatsAppNumbersPanel() {
       >
         {service && (
           <div className="space-y-3">
-            <BusinessTemplatePicker onApply={handleApplyTemplate} />
+            <BusinessTemplatePicker onApply={handleApplyTemplate} defaultTemplateId={accountBusinessId} />
             {service.systemPromptOverride.trim() && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Você tem um System prompt (avançado) preenchido — enquanto ele
