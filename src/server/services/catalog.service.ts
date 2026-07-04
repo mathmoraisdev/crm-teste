@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import type { CatalogItemKind } from "@prisma/client";
+import { getTemplate, catalogSeedItems } from "@/lib/business-templates";
 
 export interface CatalogItemDTO {
   id: string;
@@ -66,4 +67,22 @@ export async function deleteCatalogItem(accountId: string, id: string): Promise<
   const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
   if (!owned) throw new Error("Item não encontrado.");
   await prisma.catalogItem.delete({ where: { id } });
+}
+
+/**
+ * Semeia o catálogo com os itens sugeridos de um modelo de negócio (ramo).
+ * Preço entra ZERADO (o dono precifica depois). Não-destrutivo: só roda quando
+ * o catálogo está vazio, para nunca sobrescrever o que já foi cadastrado.
+ */
+export async function seedCatalogFromTemplate(accountId: string, templateId: string): Promise<CatalogItemDTO[]> {
+  const tpl = getTemplate(templateId);
+  if (!tpl) throw new Error("Modelo não encontrado.");
+  const seeds = catalogSeedItems(tpl);
+  if (!seeds.length) throw new Error("Este modelo não tem itens sugeridos.");
+  const existing = await prisma.catalogItem.count({ where: { accountId } });
+  if (existing > 0) throw new Error("O catálogo já tem itens — o modelo só entra num catálogo vazio.");
+  await prisma.catalogItem.createMany({
+    data: seeds.map((s) => ({ accountId, name: s.name, priceCents: 0, kind: s.kind })),
+  });
+  return listCatalogItems(accountId);
 }

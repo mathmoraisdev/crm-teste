@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
-import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem } from "./catalog.service";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate } from "./catalog.service";
 
 // Cria um usuário-dono descartável por teste (isolamento).
 async function makeOwner() {
@@ -43,5 +43,25 @@ describe("catalog.service", () => {
     const item = await createCatalogItem(a, { name: "Sobrancelha", priceCents: 1500 });
     await deleteCatalogItem(a, item.id);
     expect(await listCatalogItems(a)).toHaveLength(0);
+  });
+
+  it("seedCatalogFromTemplate semeia itens do ramo com preço zerado", async () => {
+    const a = await makeOwner();
+    const items = await seedCatalogFromTemplate(a, "barbearia");
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.map((i) => i.name)).toContain("Corte");
+    expect(items.every((i) => i.priceCents === 0)).toBe(true); // dono precifica depois
+  });
+
+  it("seed é não-destrutivo: recusa se o catálogo já tem itens", async () => {
+    const a = await makeOwner();
+    await createCatalogItem(a, { name: "Já existe", priceCents: 100 });
+    await expect(seedCatalogFromTemplate(a, "barbearia")).rejects.toThrow();
+  });
+
+  it("seed rejeita modelo inexistente ou sem itens", async () => {
+    const a = await makeOwner();
+    await expect(seedCatalogFromTemplate(a, "nao-existe")).rejects.toThrow();
+    await expect(seedCatalogFromTemplate(a, "advocacia")).rejects.toThrow(); // só placeholder
   });
 });
