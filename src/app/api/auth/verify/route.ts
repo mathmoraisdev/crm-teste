@@ -20,7 +20,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${base}/verificar-email?status=erro`);
   }
 
-  const ok = await verifyEmailToken(token);
+  // verifyEmailToken toca o banco: se falhar (infra/schema), não estoura 500 —
+  // loga e cai no redirect de erro, mesmo destino de token inválido.
+  let ok = false;
+  try {
+    ok = await verifyEmailToken(token);
+  } catch (e) {
+    console.error(`[verify] falha ao validar token: ${e instanceof Error ? e.message : String(e)}`);
+  }
   return NextResponse.redirect(
     ok ? `${base}/leads?verificado=1` : `${base}/verificar-email?status=erro`,
   );
