@@ -704,7 +704,14 @@ export function WhatsAppNumbersPanel() {
       >
         {service && (
           <div className="space-y-3">
-            <BusinessTemplatePicker onApply={handleApplyTemplate} defaultTemplateId={accountBusinessId} />
+            {/* key remonta o picker quando o ramo da conta chega (fetch async) —
+                senão o defaultTemplateId (só lido no init do useState) se perde
+                se o modal abrir antes do fetch resolver. */}
+            <BusinessTemplatePicker
+              key={accountBusinessId ?? "none"}
+              onApply={handleApplyTemplate}
+              defaultTemplateId={accountBusinessId}
+            />
             {service.systemPromptOverride.trim() && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 Você tem um System prompt (avançado) preenchido — enquanto ele
