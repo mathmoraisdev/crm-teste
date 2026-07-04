@@ -3,15 +3,10 @@
 import { useState } from "react";
 import { OrderBoard } from "./OrderBoard";
 import { CatalogManager } from "./CatalogManager";
+import { ExpensesPanel } from "./ExpensesPanel";
 import { ReportsPanel } from "./ReportsPanel";
 
-type Tab = "comandas" | "catalogo" | "relatorios";
-
-const TABS: { value: Tab; label: string }[] = [
-  { value: "comandas", label: "Comandas" },
-  { value: "catalogo", label: "Catálogo" },
-  { value: "relatorios", label: "Relatórios" },
-];
+type Tab = "comandas" | "catalogo" | "despesas" | "relatorios";
 
 export function VendasWorkspace({
   canEdit,
@@ -22,11 +17,19 @@ export function VendasWorkspace({
 }) {
   const [tab, setTab] = useState<Tab>("comandas");
 
+  // Despesas é do dono (canEdit = canSettings) — operador nem vê a aba.
+  const tabs: { value: Tab; label: string }[] = [
+    { value: "comandas", label: "Comandas" },
+    { value: "catalogo", label: "Catálogo" },
+    ...(canEdit ? [{ value: "despesas" as const, label: "Despesas" }] : []),
+    { value: "relatorios", label: "Relatórios" },
+  ];
+
   return (
     <div className="space-y-5">
       {/* Abas */}
       <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.value}
             type="button"
@@ -42,6 +45,7 @@ export function VendasWorkspace({
 
       {tab === "comandas" && <OrderBoard />}
       {tab === "catalogo" && <CatalogManager canEdit={canEdit} accountBusinessId={accountBusinessId} />}
+      {tab === "despesas" && canEdit && <ExpensesPanel />}
       {tab === "relatorios" && <ReportsPanel />}
     </div>
   );

@@ -119,7 +119,7 @@ export function Sidebar({
       title: "Gestão",
       items: [
         { href: "/empresas", label: "Empresas", icon: Building2 },
-        { href: "/vendas", label: "Vendas", icon: Receipt },
+        { href: "/caixa", label: "Caixa", icon: Receipt },
         { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
         { href: "/consultores", label: "Consultores", icon: Headset, badge: "consultores", show: isAdmin },
         { href: "/financeiro", label: "Financeiro", icon: Wallet, badge: "financeiro", show: isAdmin },
