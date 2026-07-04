@@ -5,6 +5,7 @@ vi.mock("@/server/db/client", () => {
     order: { updateMany: vi.fn() },
     expense: { updateMany: vi.fn() },
     recurringExpense: { updateMany: vi.fn() },
+    stockMovement: { updateMany: vi.fn() },
     user: { delete: vi.fn() },
   };
   return {
@@ -119,6 +120,8 @@ describe("removeOperator", () => {
     expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { openedById: "op-1" }, data: { openedById: "dono-1" } });
     expect(tx.expense.updateMany).toHaveBeenCalledWith({ where: { createdById: "op-1" }, data: { createdById: "dono-1" } });
     expect(tx.recurringExpense.updateMany).toHaveBeenCalledWith({ where: { createdById: "op-1" }, data: { createdById: "dono-1" } });
+    // Movimentos de estoque que o operador gerou (baixa ao fechar comanda) também são FK RESTRICT.
+    expect(tx.stockMovement.updateMany).toHaveBeenCalledWith({ where: { createdById: "op-1" }, data: { createdById: "dono-1" } });
     expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: "op-1" } });
   });
 });

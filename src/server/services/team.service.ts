@@ -136,12 +136,14 @@ export async function removeOperator(adminUserId: string, operatorId: string): P
   });
   if (!op) throw new Error("Operador não encontrado nesta conta.");
   // Ponteiros de auditoria para o operador são FKs RESTRICT (comandas que ele abriu,
-  // despesas/despesas-fixas que ele lançou). Sem reatribuir ao dono, o delete falha
-  // com P2003 e a vaga fica presa. Reatribui ao dono (registro da conta é preservado).
+  // despesas/despesas-fixas que ele lançou, movimentos de estoque que ele gerou — a
+  // baixa ao fechar comanda grava createdById = operador). Sem reatribuir ao dono, o
+  // delete falha com P2003 e a vaga fica presa. Reatribui ao dono (registro preservado).
   await prisma.$transaction(async (tx) => {
     await tx.order.updateMany({ where: { openedById: operatorId }, data: { openedById: adminUserId } });
     await tx.expense.updateMany({ where: { createdById: operatorId }, data: { createdById: adminUserId } });
     await tx.recurringExpense.updateMany({ where: { createdById: operatorId }, data: { createdById: adminUserId } });
+    await tx.stockMovement.updateMany({ where: { createdById: operatorId }, data: { createdById: adminUserId } });
     await tx.user.delete({ where: { id: operatorId } });
   });
 }
