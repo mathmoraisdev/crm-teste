@@ -14,7 +14,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  badge?: "inbox" | "financeiro" | "consultores"; // qual contador alimenta o badge deste item
+  badge?: "inbox" | "financeiro" | "consultores" | "agenda"; // qual contador alimenta o badge deste item
   show?: boolean;
 };
 
@@ -34,6 +34,7 @@ export function Sidebar({
   const [inboxBadge, setInboxBadge] = useState(0);
   const [financeiroBadge, setFinanceiroBadge] = useState(0);
   const [consultoresBadge, setConsultoresBadge] = useState(0);
+  const [agendaBadge, setAgendaBadge] = useState(0);
 
   // Badge de "Atendimento" = fila + não-lidas. Polling leve.
   useEffect(() => {
@@ -51,6 +52,27 @@ export function Sidebar({
     }
     load();
     const t = setInterval(load, 10000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Badge de "Agenda" = agendamentos cuja resposta do cliente ao lembrete aguarda
+  // conferência (needsReview). Polling leve, igual ao de Atendimento.
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const res = await fetch("/api/appointments/review-count", { cache: "no-store" });
+        const data = await res.json();
+        if (active && typeof data.count === "number") setAgendaBadge(data.count);
+      } catch {
+        // ignora
+      }
+    }
+    load();
+    const t = setInterval(load, 15000);
     return () => {
       active = false;
       clearInterval(t);
@@ -113,7 +135,7 @@ export function Sidebar({
       title: "Crescimento",
       items: [
         { href: "/campaigns", label: "Campanhas", icon: Send },
-        { href: "/agenda", label: "Agenda", icon: CalendarClock },
+        { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda" },
       ],
     },
     {
@@ -208,7 +230,9 @@ export function Sidebar({
                       ? financeiroBadge
                       : badge === "consultores"
                         ? consultoresBadge
-                        : 0;
+                        : badge === "agenda"
+                          ? agendaBadge
+                          : 0;
                 const showBadge = !!badge && badgeCount > 0;
                 return (
                   <Link
