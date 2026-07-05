@@ -102,3 +102,28 @@ describe("closeOrder — baixa de estoque", () => {
     expect(await listMovements(acc, prod.id)).toHaveLength(2); // ENTRADA + 1 SAIDA (não 2)
   });
 });
+
+describe("openOrder — captura de lead por telefone", () => {
+  it("com telefone: cria lead e vincula na comanda", async () => {
+    const acc = await makeOwner();
+    const order = await openOrder(acc, { openedById: acc, customerName: "Zé", customerPhone: "11988887777" });
+    expect(order.leadId).toBeTruthy();
+    const lead = await prisma.lead.findFirst({ where: { userId: acc, id: order.leadId! } });
+    expect(lead).toBeTruthy();
+    expect(lead!.name).toBe("Zé");
+  });
+
+  it("reabrir com o mesmo telefone não duplica lead", async () => {
+    const acc = await makeOwner();
+    await openOrder(acc, { openedById: acc, customerPhone: "11988887777" });
+    await openOrder(acc, { openedById: acc, customerPhone: "11988887777" });
+    expect(await prisma.lead.count({ where: { userId: acc } })).toBe(1);
+  });
+
+  it("sem telefone: comanda avulsa pura (não cria lead)", async () => {
+    const acc = await makeOwner();
+    const order = await openOrder(acc, { openedById: acc, customerName: "Zé" });
+    expect(order.leadId).toBeNull();
+    expect(await prisma.lead.count({ where: { userId: acc } })).toBe(0);
+  });
+});

@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { OrderPayment, OrderStatus } from "@prisma/client";
 import { applyOrderStockExit } from "./stock.service";
+import { createLead } from "@/server/services/lead.service";
 
 export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; }
 export interface OrderDTO {
@@ -35,13 +36,31 @@ async function loadOwned(accountId: string, id: string) {
 
 export async function openOrder(
   accountId: string,
-  data: { openedById: string; leadId?: string | null; customerName?: string | null },
+  data: {
+    openedById: string;
+    leadId?: string | null;
+    customerName?: string | null;
+    customerPhone?: string | null; // NOVO: se vier, cria/vincula lead por telefone
+  },
 ): Promise<OrderDTO> {
+  let leadId = data.leadId ?? null;
+
+  // Captura de lead: telefone informado numa comanda avulsa → cria/vincula lead
+  // (dedup por telefone dentro de createLead) e passa a tratar como comanda de lead.
+  if (!leadId && data.customerPhone?.trim()) {
+    const lead = await createLead(
+      accountId,
+      data.customerName?.trim() || "Sem nome",
+      data.customerPhone.trim(),
+    );
+    leadId = lead.id;
+  }
+
   const o = await prisma.order.create({
     data: {
       accountId, openedById: data.openedById,
-      leadId: data.leadId ?? null,
-      customerName: data.leadId ? null : (data.customerName?.trim() || "Sem nome"),
+      leadId,
+      customerName: leadId ? null : (data.customerName?.trim() || "Sem nome"),
     },
     include: { items: true },
   });
