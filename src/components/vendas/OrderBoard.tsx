@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus, Trash2, Search, X, SlidersHorizontal, Printer } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, Search, X, SlidersHorizontal, Printer } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
@@ -457,12 +457,24 @@ function OrderPanel({
     }
   }
 
-  const addFromCatalog = (id: string) =>
-    call(`/api/vendas/orders/${order.id}/items`, {
+  const setQty = (itemId: string, quantity: number) =>
+    call(`/api/vendas/orders/${order.id}/items/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity }),
+    });
+
+  // Adicionar do catálogo: se o item já está na comanda, incrementa a linha
+  // existente em vez de criar outra (resolve o hack de "repetir linha").
+  const addFromCatalog = (id: string) => {
+    const existing = order.items.find((i) => i.catalogItemId === id);
+    if (existing) return setQty(existing.id, existing.quantity + 1);
+    return call(`/api/vendas/orders/${order.id}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ catalogItemId: id, quantity: 1 }),
     });
+  };
 
   async function addAvulso() {
     const cents = parseBRLToCents(avulsoPrice);
@@ -520,11 +532,30 @@ function OrderPanel({
             {order.items.map((it) => (
               <li key={it.id} className="rounded-lg border border-line-default bg-card">
                 <div className="flex items-center justify-between px-3 py-2">
-                  <span className="min-w-0 truncate text-sm text-ink">
-                    {it.quantity > 1 && <span className="text-slate-400">{it.quantity}× </span>}
-                    {it.nameSnapshot}
-                  </span>
+                  <span className="min-w-0 truncate text-sm text-ink">{it.nameSnapshot}</span>
                   <div className="flex items-center gap-3">
+                    {/* Stepper de quantidade */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setQty(it.id, it.quantity - 1)}
+                        disabled={busy || it.quantity <= 1}
+                        className="rounded border border-line-default p-1 text-slate-500 hover:border-brand-300 hover:text-brand-600 disabled:opacity-30"
+                        aria-label="Diminuir quantidade"
+                      >
+                        <Minus size={13} />
+                      </button>
+                      <span className="w-6 text-center text-sm tabular-nums text-ink">{it.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => setQty(it.id, it.quantity + 1)}
+                        disabled={busy}
+                        className="rounded border border-line-default p-1 text-slate-500 hover:border-brand-300 hover:text-brand-600 disabled:opacity-30"
+                        aria-label="Aumentar quantidade"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
                     <span className="text-sm text-slate-600">{formatCentsBRL(it.unitPriceCents * it.quantity)}</span>
                     {itemDefs.length > 0 && (
                       <button
