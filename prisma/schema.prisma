@@ -684,6 +684,8 @@ model Appointment {
   orderId              String? // comanda gerada quando REALIZADO
   remindedDayBeforeAt  DateTime?
   remindedHourBeforeAt DateTime?
+  needsReview          Boolean           @default(false) // resposta do cliente ao lembrete aguarda conferência
+  reviewReason         String? // ex.: "cliente confirmou", "cliente pediu remarcar", "cliente recusou"
   createdById          String
   createdBy            User              @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
   createdAt            DateTime          @default(now())
@@ -692,6 +694,7 @@ model Appointment {
   @@index([leadId, scheduledAt])
   @@index([seriesId])
   @@index([status, scheduledAt])
+  @@index([needsReview])
 }
 
 model OutboundJob {
