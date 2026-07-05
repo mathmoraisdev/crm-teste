@@ -135,3 +135,31 @@ export const slotChoiceJsonSchema = {
   },
   required: ["chosenIndex", "confident"],
 } as const;
+
+// ── Interpretação da resposta a um lembrete de agendamento (modelo "cheap") ──
+export const APPT_REPLY_INTENTS = ["confirm", "decline", "reschedule", "unclear"] as const;
+export type ApptReplyIntent = (typeof APPT_REPLY_INTENTS)[number];
+
+export const apptReplySchema = z.object({
+  intent: z.enum(APPT_REPLY_INTENTS),
+  confident: z.boolean(),
+});
+export type ApptReply = z.infer<typeof apptReplySchema>;
+
+export const apptReplyJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    intent: {
+      type: "string",
+      enum: APPT_REPLY_INTENTS,
+      description:
+        "confirm = cliente confirma que vem; decline = não vem / quer cancelar; reschedule = quer remarcar para outra data; unclear = não deu para entender ou fala de outro assunto.",
+    },
+    confident: {
+      type: "boolean",
+      description: "Se há confiança razoável na classificação.",
+    },
+  },
+  required: ["intent", "confident"],
+} as const;

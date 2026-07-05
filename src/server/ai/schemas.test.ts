@@ -5,6 +5,8 @@ import {
   qualificationJsonSchema,
   slotChoiceSchema,
   slotChoiceJsonSchema,
+  apptReplySchema,
+  apptReplyJsonSchema,
 } from "./schemas";
 
 // Uma qualificação válida mínima — todos os campos opcionais como null.
@@ -100,5 +102,24 @@ describe("espelho zod ↔ JSON Schema", () => {
     const zodKeys = Object.keys(slotChoiceSchema.shape).sort();
     const jsonRequired = [...slotChoiceJsonSchema.required].sort();
     expect(jsonRequired).toEqual(zodKeys);
+  });
+});
+
+describe("apptReplySchema", () => {
+  it("aceita intents válidos com confiança", () => {
+    expect(apptReplySchema.safeParse({ intent: "confirm", confident: true }).success).toBe(true);
+    expect(apptReplySchema.safeParse({ intent: "decline", confident: false }).success).toBe(true);
+    expect(apptReplySchema.safeParse({ intent: "reschedule", confident: true }).success).toBe(true);
+    expect(apptReplySchema.safeParse({ intent: "unclear", confident: false }).success).toBe(true);
+  });
+
+  it("rejeita intent fora do enum", () => {
+    expect(apptReplySchema.safeParse({ intent: "talvez", confident: true }).success).toBe(false);
+  });
+
+  it("zod e JSON Schema declaram as mesmas chaves obrigatórias", () => {
+    const zodKeys = Object.keys(apptReplySchema.shape).sort();
+    const jsonRequired = [...apptReplyJsonSchema.required].sort();
+    expect(zodKeys).toEqual(jsonRequired);
   });
 });
