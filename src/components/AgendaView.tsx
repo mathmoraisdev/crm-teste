@@ -107,13 +107,16 @@ export function AgendaView() {
     [meetings],
   );
 
-  // Agendamentos futuros (não-terminais), filtrados pela mesma busca por nome/telefone.
+  // Agenda mostra só o que ainda está de pé (AGENDADO/CONFIRMADO); realizados,
+  // faltas e cancelamentos são histórico e ficam na ficha do cliente. Mesma busca
+  // por nome/telefone das reuniões.
   const filteredAppts = useMemo(() => {
     if (!appointments) return null;
     const q = query.trim();
     const lower = q.toLowerCase();
     const digits = q.replace(/\D/g, "");
     return appointments.filter((a) => {
+      if (a.status !== "AGENDADO" && a.status !== "CONFIRMADO") return false;
       if (!q) return true;
       return (
         a.lead.name.toLowerCase().includes(lower) ||
@@ -264,9 +267,9 @@ export function AgendaView() {
           ) : filteredAppts.length === 0 ? (
             <Card>
               <div className="py-10 text-center text-sm text-slate-500">
-                {appointments && appointments.length === 0
-                  ? "Nenhum agendamento ainda. Agende um serviço na ficha do cliente."
-                  : "Nenhum agendamento corresponde à busca."}
+                {query.trim()
+                  ? "Nenhum agendamento corresponde à busca."
+                  : "Nenhum agendamento em aberto. Agende um serviço na ficha do cliente."}
               </div>
             </Card>
           ) : (

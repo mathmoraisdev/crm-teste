@@ -85,7 +85,7 @@ export function ClientesView() {
               <Users size={26} className="text-slate-300" />
               {query
                 ? "Nenhum cliente corresponde à busca."
-                : "Nenhum cliente ainda. Quando você abrir uma comanda ligada a um contato, ele aparece aqui."}
+                : "Nenhum cliente ainda. Seus contatos do CRM aparecem aqui com o total gasto e o histórico de serviços."}
             </div>
           ) : (
             <ul className="divide-y divide-line-default">
