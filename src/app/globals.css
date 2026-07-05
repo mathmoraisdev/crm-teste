@@ -46,7 +46,7 @@
    50 = superfície escura … 900/950 = texto claro — então bg-slate-50/100
    escurecem e text-slate-600/700/900 clareiam sem editar componente.
    Canais RGB neutros (levemente frios) p/ um dark de verdade, sem tinta verde;
-   a cor da marca fica só nos acentos brand-*/status.
+   a cor da marca fica só nos acentos (brand e status).
    NÃO sobrescreva --brand-* aqui (o BrandingStyle injeta por conta depois). */
 [data-theme="dark"] {
   color-scheme: dark;
