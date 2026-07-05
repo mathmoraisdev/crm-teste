@@ -14,3 +14,11 @@ ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "openDrawer" BOOLEAN NOT 
 
 -- Fase N3: setor de impressão do item (comanda de cozinha).
 ALTER TABLE "CatalogItem" ADD COLUMN IF NOT EXISTS "printSector" TEXT;
+
+-- POS Fase 2: ajustes financeiros da comanda (total continua derivado).
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "discountCents" INTEGER;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "surchargeCents" INTEGER;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "tipCents" INTEGER;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "amountTenderedCents" INTEGER;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "changeCents" INTEGER;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "tableLabel" TEXT;

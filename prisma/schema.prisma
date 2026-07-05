@@ -303,6 +303,14 @@ model Order {
   createdAt      DateTime        @default(now())
   closedAt       DateTime? // quando foi fechada (FECHADA)
   number         Int? // nº sequencial do cupom POR conta; atribuído no fechamento (null = comanda antiga)
+  // Camada financeira (POS): ajustes sobre Σ itens. O total continua DERIVADO —
+  // estes campos são ENTRADAS do cálculo, nunca o total desnormalizado.
+  discountCents       Int? // desconto da comanda (valor OU % resolvido na borda → centavos)
+  surchargeCents      Int? // acréscimo / taxa de serviço
+  tipCents            Int? // gorjeta estruturada
+  amountTenderedCents Int? // valor recebido (dinheiro) — base do troco
+  changeCents         Int? // troco derivado no fechamento (max(0, recebido − total))
+  tableLabel          String? // mesa/comanda física (rótulo livre)
   items          OrderItem[]
   stockMovements StockMovement[]
   appointments   Appointment[]
