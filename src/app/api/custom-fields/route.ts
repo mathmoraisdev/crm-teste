@@ -7,18 +7,22 @@ import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 const NO_SETTINGS_PERM =
   "Seu usuário não tem permissão para alterar as configurações da conta.";
 
+const scopeSchema = z.enum(["LEAD", "ORDER", "ORDER_ITEM"]).catch("LEAD");
+
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const defs = await listDefs(userId);
+  const scope = scopeSchema.parse(req.nextUrl.searchParams.get("scope") ?? "LEAD");
+  const defs = await listDefs(userId, scope);
   return NextResponse.json({ defs });
 }
 
 const createSchema = z.object({
   label: z.string().min(1, "Rótulo obrigatório"),
   type: z.nativeEnum(CustomFieldType),
+  scope: z.enum(["LEAD", "ORDER", "ORDER_ITEM"]).default("LEAD"),
   options: z.array(z.string()).optional(),
   order: z.number().int().optional(),
 });
