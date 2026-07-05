@@ -26,11 +26,15 @@ function toDTO(o: {
   id: string; status: OrderStatus; leadId: string | null; customerName: string | null;
   payment: OrderPayment | null; note: string | null; createdAt: Date; closedAt: Date | null;
   customFields?: Prisma.JsonValue | null;
+  lead?: { name: string } | null;
   items: { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields?: Prisma.JsonValue | null }[];
 }): OrderDTO {
   const items = o.items.map((i) => ({ id: i.id, nameSnapshot: i.nameSnapshot, unitPriceCents: i.unitPriceCents, quantity: i.quantity, catalogItemId: i.catalogItemId, customFields: asRecord(i.customFields) }));
   return {
-    id: o.id, status: o.status, leadId: o.leadId, customerName: o.customerName,
+    id: o.id, status: o.status, leadId: o.leadId,
+    // Nome de exibição: avulsa usa customerName; comanda de lead exibe o nome do
+    // lead (a comanda guarda leadId, não duplica o nome — ver openOrder).
+    customerName: o.customerName ?? o.lead?.name ?? null,
     payment: o.payment, note: o.note, createdAt: o.createdAt.toISOString(),
     closedAt: o.closedAt ? o.closedAt.toISOString() : null,
     customFields: asRecord(o.customFields), items, totalCents: orderTotalCents(items),
@@ -38,7 +42,10 @@ function toDTO(o: {
 }
 
 async function loadOwned(accountId: string, id: string) {
-  const o = await prisma.order.findFirst({ where: { id, accountId }, include: { items: { orderBy: { createdAt: "asc" } } } });
+  const o = await prisma.order.findFirst({
+    where: { id, accountId },
+    include: { items: { orderBy: { createdAt: "asc" } }, lead: { select: { name: true } } },
+  });
   if (!o) throw new Error("Comanda não encontrada.");
   return o;
 }
@@ -71,7 +78,7 @@ export async function openOrder(
       leadId,
       customerName: leadId ? null : (data.customerName?.trim() || "Sem nome"),
     },
-    include: { items: true },
+    include: { items: true, lead: { select: { name: true } } },
   });
   return toDTO(o);
 }
@@ -146,7 +153,7 @@ export async function closeOrder(
 export async function listOpenOrders(accountId: string): Promise<OrderDTO[]> {
   const orders = await prisma.order.findMany({
     where: { accountId, status: "ABERTA" },
-    include: { items: { orderBy: { createdAt: "asc" } } },
+    include: { items: { orderBy: { createdAt: "asc" } }, lead: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
   return orders.map(toDTO);

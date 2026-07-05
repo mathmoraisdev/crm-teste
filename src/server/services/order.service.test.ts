@@ -109,6 +109,8 @@ describe("openOrder — captura de lead por telefone", () => {
     const acc = await makeOwner();
     const order = await openOrder(acc, { openedById: acc, customerName: "Zé", customerPhone: "11988887777" });
     expect(order.leadId).toBeTruthy();
+    // exibe o nome do lead (a comanda guarda leadId, não duplica o nome)
+    expect(order.customerName).toBe("Zé");
     const lead = await prisma.lead.findFirst({ where: { userId: acc, id: order.leadId! } });
     expect(lead).toBeTruthy();
     expect(lead!.name).toBe("Zé");

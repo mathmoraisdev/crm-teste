@@ -168,7 +168,7 @@ export function OrderBoard() {
                       onClick={() => setSelectedId(o.id)}
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
                         o.id === selectedId
-                          ? "border-brand-300 bg-brand-50"
+                          ? "border-brand-400 bg-brand-500/10"
                           : "border-line-default bg-card hover:border-brand-200"
                       }`}
                     >
