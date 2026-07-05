@@ -30,7 +30,14 @@ interface Order {
   createdAt: string;
   closedAt: string | null;
   customFields: Record<string, unknown> | null;
+  discountCents: number | null;
+  surchargeCents: number | null;
+  tipCents: number | null;
+  amountTenderedCents: number | null;
+  changeCents: number | null;
+  tableLabel: string | null;
   items: OrderItem[];
+  subtotalCents: number;
   totalCents: number;
 }
 interface CatalogItem { id: string; kind: "SERVICO" | "PRODUTO"; name: string; priceCents: number; active: boolean; }
@@ -494,6 +501,15 @@ function OrderPanel({
   const removeLine = (itemId: string) =>
     call(`/api/vendas/orders/${order.id}/items/${itemId}`, { method: "DELETE" });
 
+  // Grava um ajuste financeiro (desconto/taxa/gorjeta/mesa) sem fechar — cai no
+  // ramo "sem payment" do PATCH. O total volta recalculado pelo servidor.
+  const saveAdjustment = (patch: Record<string, unknown>) =>
+    call(`/api/vendas/orders/${order.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+
   async function close() {
     const ok = await call(`/api/vendas/orders/${order.id}`, {
       method: "PATCH",
@@ -613,10 +629,39 @@ function OrderPanel({
           </ul>
         )}
 
-        {/* Total ao vivo */}
-        <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-          <span className="text-sm font-semibold text-slate-600">Total</span>
-          <span className="text-xl font-bold text-ink">{formatCentsBRL(order.totalCents)}</span>
+        {/* Ajustes financeiros + total ao vivo */}
+        <div className="space-y-2 border-t border-slate-100 pt-3">
+          <AdjustmentsEditor order={order} disabled={busy} onSave={saveAdjustment} />
+
+          {/* Desdobramento: só mostra as linhas de ajuste != 0 */}
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center justify-between text-slate-500">
+              <span>Subtotal</span>
+              <span>{formatCentsBRL(order.subtotalCents)}</span>
+            </div>
+            {!!order.discountCents && (
+              <div className="flex items-center justify-between text-danger">
+                <span>Desconto</span>
+                <span>− {formatCentsBRL(order.discountCents)}</span>
+              </div>
+            )}
+            {!!order.surchargeCents && (
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Taxa de serviço</span>
+                <span>+ {formatCentsBRL(order.surchargeCents)}</span>
+              </div>
+            )}
+            {!!order.tipCents && (
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Gorjeta</span>
+                <span>+ {formatCentsBRL(order.tipCents)}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+            <span className="text-sm font-semibold text-slate-600">Total</span>
+            <span className="text-xl font-bold text-ink">{formatCentsBRL(order.totalCents)}</span>
+          </div>
         </div>
 
         {/* Adicionar do catálogo */}
@@ -703,5 +748,136 @@ function OrderPanel({
         </div>
       </div>
     </Card>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Ajustes financeiros: desconto / taxa de serviço / gorjeta
+// ───────────────────────────────────────────────────────────────────────
+
+/** centavos → "12,34" (sem "R$", p/ preencher os inputs de edição). */
+function centsToPlain(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+type AdjMode = "BRL" | "PCT";
+
+/** Um campo de ajuste: valor em R$ OU %. O % é resolvido em centavos na borda
+ * (`baseForPct`) e persistido; ao reler, o campo volta em R$ com o valor resolvido. */
+function AdjField({
+  label,
+  valueCents,
+  baseForPct,
+  quickPct,
+  disabled,
+  onApply,
+}: {
+  label: string;
+  valueCents: number | null;
+  baseForPct: number; // base p/ converter % → centavos
+  quickPct?: number; // atalho (ex.: 10 → taxa de 10%)
+  disabled: boolean;
+  onApply: (cents: number | null) => void;
+}) {
+  const [mode, setMode] = useState<AdjMode>("BRL");
+  const [raw, setRaw] = useState("");
+
+  // Reflete o valor persistido (após salvar/recarregar), sempre em R$.
+  useEffect(() => {
+    setRaw(valueCents != null ? centsToPlain(valueCents) : "");
+    setMode("BRL");
+  }, [valueCents]);
+
+  function pctToCents(text: string): number | null {
+    const pct = parseFloat(text.replace(",", "."));
+    if (!Number.isFinite(pct) || pct < 0) return null;
+    return Math.round((baseForPct * pct) / 100);
+  }
+
+  function apply() {
+    const t = raw.trim();
+    if (!t) {
+      if (valueCents != null) onApply(null); // limpou o campo → zera o ajuste
+      return;
+    }
+    const cents = mode === "PCT" ? pctToCents(t) : parseBRLToCents(t);
+    if (cents == null) return;
+    if (cents !== (valueCents ?? 0)) onApply(cents);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-28 shrink-0 text-sm text-slate-600">{label}</span>
+      <div className="flex flex-1 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setMode((m) => (m === "BRL" ? "PCT" : "BRL"))}
+          disabled={disabled}
+          className="w-9 shrink-0 rounded-lg border border-slate-300 py-1.5 text-xs font-semibold text-slate-500 hover:border-brand-300 hover:text-brand-600 disabled:opacity-50"
+          aria-label={`Alternar para ${mode === "BRL" ? "porcentagem" : "reais"}`}
+        >
+          {mode === "BRL" ? "R$" : "%"}
+        </button>
+        <input
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onBlur={apply}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          disabled={disabled}
+          placeholder={mode === "BRL" ? "0,00" : "0"}
+          inputMode="decimal"
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+        />
+        {quickPct != null && (
+          <button
+            type="button"
+            onClick={() => onApply(Math.round((baseForPct * quickPct) / 100))}
+            disabled={disabled || baseForPct === 0}
+            className="shrink-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600 disabled:opacity-50"
+          >
+            {quickPct}%
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdjustmentsEditor({
+  order,
+  disabled,
+  onSave,
+}: {
+  order: Order;
+  disabled: boolean;
+  onSave: (patch: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const afterDiscount = Math.max(0, order.subtotalCents - (order.discountCents ?? 0));
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+      <p className="text-xs font-semibold text-slate-600">Ajustes</p>
+      <AdjField
+        label="Desconto"
+        valueCents={order.discountCents}
+        baseForPct={order.subtotalCents}
+        disabled={disabled}
+        onApply={(cents) => onSave({ discountCents: cents })}
+      />
+      <AdjField
+        label="Taxa de serviço"
+        valueCents={order.surchargeCents}
+        baseForPct={afterDiscount}
+        quickPct={10}
+        disabled={disabled}
+        onApply={(cents) => onSave({ surchargeCents: cents })}
+      />
+      <AdjField
+        label="Gorjeta"
+        valueCents={order.tipCents}
+        baseForPct={afterDiscount}
+        disabled={disabled}
+        onApply={(cents) => onSave({ tipCents: cents })}
+      />
+    </div>
   );
 }
