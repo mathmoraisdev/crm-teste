@@ -7,6 +7,8 @@
 // Em kiosk (chrome --kiosk-printing) o print() do caminho browser imprime sem
 // diálogo — orientar no onboarding se quiser eliminar o clique de confirmação.
 import { isQzAvailable, qzPrintRawBase64 } from "./qz-client";
+import { buildKitchenEscposBytes } from "./escpos";
+import type { KitchenTicket } from "./kitchen";
 
 export type ReceiptWidthMM = 80 | 58;
 
@@ -52,10 +54,53 @@ export async function printReceipt(orderId: string, width: ReceiptWidthMM = 80):
   printReceiptBrowser(orderId, width);
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+/**
+ * Envia as comandas de PRODUÇÃO (N3), um ticket por setor. Rota conforme a config:
+ *  • escpos + QZ: um job por setor na impressora configurada (cortes separados).
+ *  • browser: abre a rota /producao (um iframe) que imprime todos os setores com
+ *    quebra de página entre eles.
+ * Retorna a quantidade de tickets (0 = nenhum item tem setor de produção).
+ */
+export async function printKitchenTickets(orderId: string): Promise<number> {
+  let tickets: KitchenTicket[] = [];
+  try {
+    const res = await fetch(`/api/vendas/orders/${orderId}/kitchen`, { cache: "no-store" });
+    if (res.ok) tickets = ((await res.json()) as { tickets: KitchenTicket[] }).tickets ?? [];
+  } catch {
+    return 0;
+  }
+  if (tickets.length === 0) return 0;
+
+  const settings = await fetchPosSettings();
+  if (settings?.printMode === "escpos" && settings.printerName && isQzAvailable()) {
+    try {
+      for (const t of tickets) {
+        const base64 = uint8ToBase64(buildKitchenEscposBytes(t, 32));
+        await qzPrintRawBase64(settings.printerName, base64);
+      }
+      return tickets.length;
+    } catch {
+      // QZ falhou → cai no navegador.
+    }
+  }
+  printReceiptBrowserSrc(`/producao/${orderId}?print=1`);
+  return tickets.length;
+}
+
 /** Caminho universal (N1): iframe oculto + AutoPrint. Fallback: nova aba. */
 function printReceiptBrowser(orderId: string, width: ReceiptWidthMM): void {
+  printReceiptBrowserSrc(`/recibo/${orderId}?print=1&w=${width}`);
+}
+
+/** Carrega uma rota de impressão standalone num iframe oculto e limpa depois. */
+function printReceiptBrowserSrc(src: string): void {
   if (typeof document === "undefined") return;
-  const src = `/recibo/${orderId}?print=1&w=${width}`;
 
   try {
     const iframe = document.createElement("iframe");

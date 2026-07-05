@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus, Minus, Trash2, Search, X, SlidersHorizontal, Printer } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, Search, X, SlidersHorizontal, Printer, ChefHat } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
-import { printReceipt } from "@/lib/receipt/print-client";
+import { printReceipt, printKitchenTickets } from "@/lib/receipt/print-client";
 import { OrderCustomFields } from "@/components/vendas/OrderCustomFields";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
@@ -505,6 +505,20 @@ function OrderPanel({
     if (ok) onClosed(order.id, order.customerName ?? "lead");
   }
 
+  // N3: imprime as comandas de produção (um ticket por setor). Roda com a comanda
+  // ABERTA (a cozinha prepara antes de fechar). 0 tickets = nenhum item tem setor.
+  const [sendingProd, setSendingProd] = useState(false);
+  async function sendToProduction() {
+    setSendingProd(true);
+    onError(null);
+    try {
+      const n = await printKitchenTickets(order.id);
+      if (n === 0) onError("Nenhum item tem setor de produção. Defina o setor no catálogo (ex.: cozinha, bar).");
+    } finally {
+      setSendingProd(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader
@@ -655,6 +669,19 @@ function OrderPanel({
               <Plus size={14} /> Adicionar
             </Button>
           </div>
+        </div>
+
+        {/* Produção (N3): envia os itens p/ a(s) impressora(s) de setor */}
+        <div className="flex justify-end border-t border-slate-100 pt-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={sendToProduction}
+            loading={sendingProd}
+            disabled={order.items.length === 0}
+          >
+            <ChefHat size={14} /> Enviar para produção
+          </Button>
         </div>
 
         {/* Fechar */}

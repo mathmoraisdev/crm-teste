@@ -72,7 +72,7 @@ function padRow(left: string, right: string, width: number): string {
 }
 
 /** dd/MM/yyyy HH:mm no fuso de São Paulo (produto BR). Determinístico. */
-function formatDateTime(d: Date): string {
+export function formatReceiptDateTime(d: Date): string {
   const parts = new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
     day: "2-digit", month: "2-digit", year: "numeric",
@@ -117,7 +117,7 @@ export function buildReceiptModel(order: ReceiptOrderInput, business: ReceiptBus
       title: business.name,
       subtitle: business.subtitle?.trim() || null,
       docNumber,
-      dateTime: order.closedAt ? formatDateTime(order.closedAt) : null,
+      dateTime: order.closedAt ? formatReceiptDateTime(order.closedAt) : null,
       customer: order.customerName?.trim() || null,
     },
     lines,

@@ -12,6 +12,7 @@
 //   GS V m       (1D 56 m)        corte de papel (66/0x42 = corte parcial c/ avanço)
 //   ESC p m t1 t2(1B 70 …)        pulso de gaveta (m=0 → pino 2; tempos on/off)
 import type { ReceiptModel } from "./model";
+import type { KitchenTicket } from "./kitchen";
 
 export const ESC = 0x1b;
 export const GS = 0x1d;
@@ -93,5 +94,39 @@ export function buildEscposBytes(model: ReceiptModel, opts: EscposOptions = {}):
   // Gaveta (opcional): pulso no pino, tempos on=25ms off=250ms (0x19/0xFA).
   if (opts.openDrawer) b.raw(ESC, 0x70, 0x00, 0x19, 0xfa);
 
+  return b.done();
+}
+
+/** Ticket de cozinha (N3) em bytes ESC/POS — SEM valores, corta ao final, nunca
+ * abre gaveta. Fonte grande no setor p/ leitura rápida na produção. */
+export function buildKitchenEscposBytes(ticket: KitchenTicket, width: 32 | 24 = 32): Uint8Array {
+  const b = new ByteBuf();
+  const divider = "-".repeat(width);
+
+  b.raw(ESC, 0x40); // init
+  b.raw(ESC, 0x74, 0x13); // CP858
+
+  // Setor em destaque (negrito + fonte dupla altura/largura via GS ! 0x11)
+  b.align("center").bold(true).raw(GS, 0x21, 0x11);
+  b.line(ticket.sector.toUpperCase());
+  b.raw(GS, 0x21, 0x00).bold(false); // volta fonte normal
+
+  b.align("left").line(divider);
+  b.line(ticket.header.docNumber);
+  if (ticket.header.customerName) b.line(ticket.header.customerName);
+  if (ticket.header.dateTime) b.line(ticket.header.dateTime);
+  b.line(divider);
+
+  for (const l of ticket.lines) {
+    b.bold(true).line(`${l.quantity}x ${l.name}`).bold(false);
+    if (l.note) b.line(`   * ${l.note}`);
+  }
+  if (ticket.header.note) {
+    b.line(divider);
+    b.line(`Obs: ${ticket.header.note}`);
+  }
+
+  b.raw(0x0a, 0x0a, 0x0a);
+  b.raw(GS, 0x56, 0x42, 0x00); // corte parcial
   return b.done();
 }

@@ -6,6 +6,8 @@ import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { getBranding } from "@/server/services/branding.service";
 import type { ReceiptOrderInput } from "@/lib/receipt/model";
+import { formatReceiptDateTime } from "@/lib/receipt/model";
+import type { KitchenOrderInput } from "@/lib/receipt/kitchen";
 
 export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields: Record<string, unknown> | null; }
 export interface OrderDTO {
@@ -228,6 +230,44 @@ export async function getReceiptData(accountId: string, orderId: string): Promis
       })),
     },
     business: { name: branding.appName, subtitle: null },
+  };
+}
+
+/** Extrai uma observação livre dos customFields do item (chaves comuns), se houver. */
+function extractItemNote(customFields: Prisma.JsonValue | null | undefined): string | null {
+  const rec = asRecord(customFields);
+  if (!rec) return null;
+  for (const k of ["obs", "observacao", "observação", "nota", "note"]) {
+    const v = rec[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/** Dados p/ a comanda de cozinha (N3): itens anotados com o setor do catálogo,
+ * escopado por conta. O setor vem de CatalogItem.printSector (null p/ linha avulsa
+ * ou item sem setor). Retorna no formato que `buildKitchenTickets` espera. */
+export async function getKitchenOrder(accountId: string, orderId: string): Promise<KitchenOrderInput> {
+  const o = await prisma.order.findFirst({
+    where: { id: orderId, accountId },
+    include: {
+      items: { orderBy: { createdAt: "asc" }, include: { catalogItem: { select: { printSector: true } } } },
+      lead: { select: { name: true } },
+    },
+  });
+  if (!o) throw new Error("Comanda não encontrada.");
+  const docNumber = o.number != null ? `Comanda #${o.number}` : `Comanda ${o.id}`.slice(0, 20);
+  return {
+    docNumber,
+    customerName: o.customerName ?? o.lead?.name ?? null,
+    dateTime: formatReceiptDateTime(o.createdAt),
+    note: o.note,
+    items: o.items.map((i) => ({
+      name: i.nameSnapshot,
+      quantity: i.quantity,
+      sector: i.catalogItem?.printSector ?? null,
+      note: extractItemNote(i.customFields),
+    })),
   };
 }
 
