@@ -22,10 +22,12 @@ function firstName(name: string): string {
  * nome), {{servico}} (nome do serviço, ou "atendimento" quando não há), {{quando}}
  * (data/hora formatada). Sem link — agendamento de balcão não tem URL.
  */
+// Forma NEUTRA de gênero ("Lembrete: {{servico}}..."), evita "do seu Restauração"
+// para serviços femininos. Serve a qualquer serviço sem concordância capenga.
 export const DEFAULT_APPT_REMINDER_DAY_BEFORE =
-  "Oi, {{nome}}! Lembrete do seu {{servico}} amanhã.\n📅 {{quando}}\nAté lá! 😊";
+  "Oi, {{nome}}! Lembrete: {{servico}} amanhã.\n📅 {{quando}}\nAté lá! 😊";
 export const DEFAULT_APPT_REMINDER_HOUR_BEFORE =
-  "Oi, {{nome}}! Seu {{servico}} é daqui a pouco.\n📅 {{quando}}\nAté já! 😊";
+  "Oi, {{nome}}! Lembrete: {{servico}} é daqui a pouco.\n📅 {{quando}}\nAté já! 😊";
 
 /**
  * PURA: renderiza o template de agendamento substituindo {{nome}}/{{servico}}/
