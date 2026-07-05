@@ -34,6 +34,7 @@ export async function listSalesHistory(
       take: opts.take ?? 50,
       select: {
         id: true, closedAt: true, customerName: true, leadId: true, payment: true,
+        discountCents: true, surchargeCents: true, tipCents: true,
         openedBy: { select: { name: true } },
         items: { select: { unitPriceCents: true, quantity: true } },
       },
@@ -47,7 +48,7 @@ export async function listSalesHistory(
     leadId: o.leadId,
     operatorName: o.openedBy?.name ?? "—",
     payment: o.payment,
-    totalCents: orderTotalCents(o.items),
+    totalCents: orderTotalCents(o),
   }));
   return { items, total };
 }

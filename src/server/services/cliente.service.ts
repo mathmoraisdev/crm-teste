@@ -115,6 +115,7 @@ export async function listClientes(
         where: { status: "FECHADA" },
         select: {
           closedAt: true,
+          discountCents: true, surchargeCents: true, tipCents: true,
           items: { select: { unitPriceCents: true, quantity: true } },
         },
       },
@@ -125,7 +126,7 @@ export async function listClientes(
   // Preserva a ordem do raw (findMany com `in` não garante ordem).
   const items: ClienteListItem[] = ids.map((id) => {
     const l = byId.get(id)!;
-    const totalSpentCents = l.orders.reduce((sum, o) => sum + orderTotalCents(o.items), 0);
+    const totalSpentCents = l.orders.reduce((sum, o) => sum + orderTotalCents(o), 0);
     const lastOrderAt = l.orders.reduce<Date | null>((latest, o) => {
       if (!o.closedAt) return latest;
       return !latest || o.closedAt > latest ? o.closedAt : latest;
@@ -190,6 +191,7 @@ export async function getClienteHistory(
           note: true,
           createdAt: true,
           closedAt: true,
+          discountCents: true, surchargeCents: true, tipCents: true,
           items: {
             orderBy: { createdAt: "asc" },
             select: { id: true, nameSnapshot: true, unitPriceCents: true, quantity: true },
@@ -207,7 +209,7 @@ export async function getClienteHistory(
     note: o.note,
     createdAt: o.createdAt,
     closedAt: o.closedAt,
-    totalCents: orderTotalCents(o.items),
+    totalCents: orderTotalCents(o),
     items: o.items,
   }));
 

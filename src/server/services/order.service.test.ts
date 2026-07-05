@@ -14,10 +14,23 @@ async function makeOwner() {
 
 describe("orderTotalCents (puro)", () => {
   it("soma preço × quantidade", () => {
-    expect(orderTotalCents([{ unitPriceCents: 4000, quantity: 1 }, { unitPriceCents: 2500, quantity: 2 }])).toBe(9000);
+    expect(orderTotalCents({ items: [{ unitPriceCents: 4000, quantity: 1 }, { unitPriceCents: 2500, quantity: 2 }] })).toBe(9000);
   });
   it("comanda vazia = 0", () => {
-    expect(orderTotalCents([])).toBe(0);
+    expect(orderTotalCents({ items: [] })).toBe(0);
+  });
+
+  const itens = [{ unitPriceCents: 10000, quantity: 1 }]; // Σ = 10000
+  it("aplica desconto sobre o subtotal", () => {
+    expect(orderTotalCents({ items: itens, discountCents: 1500 })).toBe(8500);
+  });
+  it("aplica acréscimo/taxa e gorjeta sobre o subtotal já com desconto", () => {
+    // 10000 − 1500 = 8500; + 850 (taxa 10%) = 9350; + 500 gorjeta = 9850
+    expect(orderTotalCents({ items: itens, discountCents: 1500, surchargeCents: 850, tipCents: 500 })).toBe(9850);
+  });
+  it("desconto maior que o subtotal clampa o subtotal em 0 (não negativo)", () => {
+    // desconto 12000 > 10000 → subtotal 0; acréscimo/gorjeta ainda somam
+    expect(orderTotalCents({ items: itens, discountCents: 12000, surchargeCents: 300 })).toBe(300);
   });
 });
 

@@ -14,12 +14,25 @@ export interface OrderDTO {
   id: string; status: OrderStatus; leadId: string | null; customerName: string | null;
   payment: OrderPayment | null; note: string | null; createdAt: string; closedAt: string | null;
   customFields: Record<string, unknown> | null;
-  items: OrderItemDTO[]; totalCents: number;
+  // Ajustes financeiros (POS) — entradas do total derivado, expostas p/ a UI.
+  discountCents: number | null; surchargeCents: number | null; tipCents: number | null;
+  amountTenderedCents: number | null; changeCents: number | null; tableLabel: string | null;
+  items: OrderItemDTO[]; subtotalCents: number; totalCents: number;
 }
 
-/** Soma pura — total derivado dos itens. */
-export function orderTotalCents(items: { unitPriceCents: number; quantity: number }[]): number {
-  return items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+export interface OrderTotalInput {
+  items: { unitPriceCents: number; quantity: number }[];
+  discountCents?: number | null;
+  surchargeCents?: number | null;
+  tipCents?: number | null;
+}
+
+/** Total DERIVADO: max(0, Σ itens − desconto) + acréscimo/taxa + gorjeta.
+ * O desconto nunca deixa o subtotal negativo; acréscimo/gorjeta somam por cima. */
+export function orderTotalCents(input: OrderTotalInput): number {
+  const subtotal = input.items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
+  const discounted = Math.max(0, subtotal - (input.discountCents ?? 0));
+  return discounted + (input.surchargeCents ?? 0) + (input.tipCents ?? 0);
 }
 
 function asRecord(v: Prisma.JsonValue | null | undefined): Record<string, unknown> | null {
@@ -30,10 +43,16 @@ function toDTO(o: {
   id: string; status: OrderStatus; leadId: string | null; customerName: string | null;
   payment: OrderPayment | null; note: string | null; createdAt: Date; closedAt: Date | null;
   customFields?: Prisma.JsonValue | null;
+  discountCents?: number | null; surchargeCents?: number | null; tipCents?: number | null;
+  amountTenderedCents?: number | null; changeCents?: number | null; tableLabel?: string | null;
   lead?: { name: string } | null;
   items: { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields?: Prisma.JsonValue | null }[];
 }): OrderDTO {
   const items = o.items.map((i) => ({ id: i.id, nameSnapshot: i.nameSnapshot, unitPriceCents: i.unitPriceCents, quantity: i.quantity, catalogItemId: i.catalogItemId, customFields: asRecord(i.customFields) }));
+  const discountCents = o.discountCents ?? null;
+  const surchargeCents = o.surchargeCents ?? null;
+  const tipCents = o.tipCents ?? null;
+  const subtotalCents = items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
   return {
     id: o.id, status: o.status, leadId: o.leadId,
     // Nome de exibição: avulsa usa customerName; comanda de lead exibe o nome do
@@ -41,7 +60,12 @@ function toDTO(o: {
     customerName: o.customerName ?? o.lead?.name ?? null,
     payment: o.payment, note: o.note, createdAt: o.createdAt.toISOString(),
     closedAt: o.closedAt ? o.closedAt.toISOString() : null,
-    customFields: asRecord(o.customFields), items, totalCents: orderTotalCents(items),
+    customFields: asRecord(o.customFields),
+    discountCents, surchargeCents, tipCents,
+    amountTenderedCents: o.amountTenderedCents ?? null, changeCents: o.changeCents ?? null,
+    tableLabel: o.tableLabel ?? null,
+    items, subtotalCents,
+    totalCents: orderTotalCents({ items, discountCents, surchargeCents, tipCents }),
   };
 }
 
