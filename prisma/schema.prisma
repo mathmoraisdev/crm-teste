@@ -312,6 +312,7 @@ model Order {
   changeCents         Int? // troco derivado no fechamento (max(0, recebido − total))
   tableLabel          String? // mesa/comanda física (rótulo livre)
   items          OrderItem[]
+  tenders        OrderTender[]
   stockMovements StockMovement[]
   appointments   Appointment[]
 
@@ -334,6 +335,20 @@ model OrderItem {
   quantity       Int          @default(1)
   customFields   Json? // valores dos CustomFieldDef scope=ORDER_ITEM (chaveado por `key`)
   createdAt      DateTime     @default(now())
+
+  @@index([orderId])
+}
+
+// Pagamento da comanda: N linhas (multi-meio / parcial). Um meio único = 1 tender.
+// O troco é derivado no fechamento (Order.changeCents). Order.payment é mantido
+// espelhado (retrocompat com relatório/extrato antigos até a Fase 4 migrar tudo).
+model OrderTender {
+  id          String       @id @default(cuid())
+  orderId     String
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method      OrderPayment
+  amountCents Int
+  createdAt   DateTime     @default(now())
 
   @@index([orderId])
 }

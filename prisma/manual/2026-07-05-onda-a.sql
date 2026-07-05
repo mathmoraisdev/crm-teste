@@ -22,3 +22,19 @@ ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "tipCents" INTEGER;
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "amountTenderedCents" INTEGER;
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "changeCents" INTEGER;
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "tableLabel" TEXT;
+
+-- POS Fase 3: multi-pagamento (N tenders por comanda). "OrderPayment" já existe.
+CREATE TABLE IF NOT EXISTS "OrderTender" (
+  "id"          TEXT NOT NULL,
+  "orderId"     TEXT NOT NULL,
+  "method"      "OrderPayment" NOT NULL,
+  "amountCents" INTEGER NOT NULL,
+  "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "OrderTender_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "OrderTender_orderId_idx" ON "OrderTender"("orderId");
+-- FK só se ainda não existir (idempotente — Postgres não tem ADD CONSTRAINT IF NOT EXISTS).
+DO $$ BEGIN
+  ALTER TABLE "OrderTender" ADD CONSTRAINT "OrderTender_orderId_fkey"
+    FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
