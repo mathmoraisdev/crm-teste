@@ -151,6 +151,7 @@ export interface ListAppointmentsParams {
   to?: Date;
   leadId?: string;
   status?: AppointmentStatus;
+  needsReview?: boolean;
 }
 
 /**
@@ -163,6 +164,7 @@ export async function listAppointments(userId: string, params: ListAppointmentsP
     lead: { userId },
     ...(params.leadId ? { leadId: params.leadId } : {}),
     ...(params.status ? { status: params.status } : {}),
+    ...(params.needsReview !== undefined ? { needsReview: params.needsReview } : {}),
     ...(params.from || params.to
       ? { scheduledAt: { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) } }
       : {}),

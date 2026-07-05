@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     status: STATUSES.includes(status as AppointmentStatus) ? (status as AppointmentStatus) : undefined,
     from: parseDate(sp.get("from")),
     to: parseDate(sp.get("to")),
+    needsReview: sp.get("needsReview") === "true" ? true : undefined,
   });
   return NextResponse.json({ items });
 }

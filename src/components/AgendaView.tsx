@@ -11,6 +11,7 @@ import {
   Search,
   Video,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -65,6 +66,7 @@ export function AgendaView() {
   const [appointments, setAppointments] = useState<AppointmentDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
+  const [reviewOnly, setReviewOnly] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -107,23 +109,33 @@ export function AgendaView() {
     [meetings],
   );
 
+  const reviewCount = useMemo(
+    () => appointments?.filter((a) => a.needsReview).length ?? 0,
+    [appointments],
+  );
+
   // Agenda mostra só o que ainda está de pé (AGENDADO/CONFIRMADO); realizados,
   // faltas e cancelamentos são histórico e ficam na ficha do cliente. Mesma busca
-  // por nome/telefone das reuniões.
+  // por nome/telefone das reuniões. O filtro "Aguardando revisão" ignora o status
+  // (uma recusa vira CANCELADO mas ainda precisa de conferência).
   const filteredAppts = useMemo(() => {
     if (!appointments) return null;
     const q = query.trim();
     const lower = q.toLowerCase();
     const digits = q.replace(/\D/g, "");
     return appointments.filter((a) => {
-      if (a.status !== "AGENDADO" && a.status !== "CONFIRMADO") return false;
+      if (reviewOnly) {
+        if (!a.needsReview) return false;
+      } else if (a.status !== "AGENDADO" && a.status !== "CONFIRMADO") {
+        return false;
+      }
       if (!q) return true;
       return (
         a.lead.name.toLowerCase().includes(lower) ||
         (digits.length > 0 && a.lead.phone.replace(/\D/g, "").includes(digits))
       );
     });
-  }, [appointments, query]);
+  }, [appointments, query, reviewOnly]);
 
   return (
     <div className="space-y-4">
@@ -236,28 +248,47 @@ export function AgendaView() {
         </>
       ) : (
         <>
-          {/* Busca (nome/telefone) para agendamentos */}
-          <div className="relative min-w-[220px] max-w-[300px]">
-            <Search
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nome ou telefone…"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Limpar busca"
-              >
-                <X size={14} />
-              </button>
-            )}
+          {/* Busca (nome/telefone) + filtro de revisão para agendamentos */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[220px] max-w-[300px] flex-1 sm:flex-none">
+              <Search
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por nome ou telefone…"
+                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Limpar busca"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setReviewOnly((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                reviewOnly
+                  ? "border-warning bg-warning-surface text-warning"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              <AlertTriangle size={14} /> Aguardando revisão
+              {reviewCount > 0 && (
+                <span className="rounded-full bg-warning px-1.5 py-0.5 text-[11px] font-bold text-white">
+                  {reviewCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {filteredAppts === null ? (
@@ -267,9 +298,11 @@ export function AgendaView() {
           ) : filteredAppts.length === 0 ? (
             <Card>
               <div className="py-10 text-center text-sm text-slate-500">
-                {query.trim()
-                  ? "Nenhum agendamento corresponde à busca."
-                  : "Nenhum agendamento em aberto. Agende um serviço na ficha do cliente."}
+                {reviewOnly
+                  ? "Nenhum agendamento aguardando revisão."
+                  : query.trim()
+                    ? "Nenhum agendamento corresponde à busca."
+                    : "Nenhum agendamento em aberto. Agende um serviço na ficha do cliente."}
               </div>
             </Card>
           ) : (
@@ -290,15 +323,26 @@ export function AgendaView() {
 function AppointmentRow({ item }: { item: AppointmentDTO }) {
   const relDay = relativeDayLabel(item.scheduledAt);
   const service = item.serviceName ?? item.catalogItem?.name ?? "Atendimento";
+  // Resposta do cliente ao lembrete aguardando conferência: destaca com a cor de
+  // aviso (tem precedência sobre o realce de "Hoje/Amanhã").
+  const review = item.needsReview;
   return (
     <li
       className={cn(
         "flex flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 sm:flex-nowrap",
-        relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3" : "px-1",
+        review
+          ? "-mx-1 rounded-lg border-l-2 border-warning bg-warning-surface pl-3"
+          : relDay
+            ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3"
+            : "px-1",
       )}
     >
       <span className="mt-0.5">
-        <CalendarClock size={18} className="text-brand-500" />
+        {review ? (
+          <AlertTriangle size={18} className="text-warning" />
+        ) : (
+          <CalendarClock size={18} className="text-brand-500" />
+        )}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -318,6 +362,11 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
         <p className="mt-0.5 text-sm text-slate-600">
           {service} · {formatSlot(item.scheduledAt)}
         </p>
+        {review && item.reviewReason && (
+          <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-warning">
+            <AlertTriangle size={12} /> {item.reviewReason}
+          </p>
+        )}
         <p className="mt-0.5 font-mono text-xs text-slate-400">{item.lead.phone}</p>
       </div>
     </li>

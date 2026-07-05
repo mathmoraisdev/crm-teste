@@ -29,6 +29,8 @@ export interface AppointmentDTO {
   note: string | null;
   seriesId: string | null;
   orderId: string | null;
+  needsReview: boolean;
+  reviewReason: string | null;
   lead: { id: string; name: string; phone: string };
   catalogItem: { id: string; name: string } | null;
 }

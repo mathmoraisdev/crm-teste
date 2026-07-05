@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, CalendarClock, Check, CheckCheck, X as XIcon } from "lucide-react";
+import { CalendarPlus, CalendarClock, Check, CheckCheck, X as XIcon, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { formatSlot } from "@/lib/utils";
+import { cn, formatSlot } from "@/lib/utils";
 import {
   APPT_STATUS_LABEL,
   APPT_STATUS_TONE,
@@ -80,7 +80,13 @@ export function AppointmentSection({ leadId }: { leadId: string }) {
       ) : (
         <ul className="space-y-2">
           {appts.map((a) => (
-            <li key={a.id} className="rounded-lg border border-line-default bg-card px-3 py-2.5">
+            <li
+              key={a.id}
+              className={cn(
+                "rounded-lg border bg-card px-3 py-2.5",
+                a.needsReview ? "border-warning bg-warning-surface" : "border-line-default",
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-medium text-ink">
                   {a.serviceName ?? a.catalogItem?.name ?? "Atendimento"}
@@ -88,6 +94,11 @@ export function AppointmentSection({ leadId }: { leadId: string }) {
                 <Badge tone={APPT_STATUS_TONE[a.status]}>{APPT_STATUS_LABEL[a.status]}</Badge>
               </div>
               <p className="mt-0.5 text-xs text-slate-500">{formatSlot(a.scheduledAt)}</p>
+              {a.needsReview && a.reviewReason && (
+                <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-warning">
+                  <AlertTriangle size={12} /> {a.reviewReason}
+                </p>
+              )}
               {a.note && <p className="mt-0.5 text-xs italic text-slate-400">{a.note}</p>}
               {!TERMINAL.has(a.status) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
