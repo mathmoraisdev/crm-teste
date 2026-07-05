@@ -10,6 +10,8 @@ import { CustomFieldsManager } from "@/components/CustomFieldsManager";
 import { PipelineLabelsManager } from "@/components/PipelineLabelsManager";
 import { BrandingSettings } from "@/components/app/BrandingSettings";
 import { getBranding } from "@/server/services/branding.service";
+import { PosPrintSettings } from "@/components/app/PosPrintSettings";
+import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
 import { getBusinessTemplateId } from "@/server/services/account.service";
 
@@ -33,12 +35,13 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId] = await Promise.all([
+  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
     getBranding(ownerId), // identidade visual da conta (só o dono edita)
     getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
+    getPosSettings(ownerId), // config de impressão de cupom (só o dono edita)
   ]);
 
   return (
@@ -81,6 +84,12 @@ export default async function ConfiguracoesPage() {
               logoUrl: branding.logoUrl,
             }}
           />
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="mt-6">
+          <PosPrintSettings initial={posSettings} />
         </div>
       )}
 

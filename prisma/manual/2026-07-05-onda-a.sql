@@ -6,3 +6,8 @@
 -- Task N1.1: nº sequencial do cupom por conta (null = comanda antiga).
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "number" INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS "Order_accountId_number_key" ON "Order"("accountId","number");
+
+-- Fase N2: config opt-in de impressão ESC/POS via QZ Tray (por conta).
+ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "printMode" TEXT;
+ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "printerName" TEXT;
+ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "openDrawer" BOOLEAN NOT NULL DEFAULT false;

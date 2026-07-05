@@ -245,6 +245,11 @@ model AccountBranding {
   logoUrl    String? // URL pública do logo no Storage; null = logo padrão
   appName    String? // nome exibido no lugar de "Disparador.ai"; null = padrão
 
+  // --- Impressão de cupom (N2, opt-in por conta) ---
+  printMode   String? // null/"browser" = imprime pelo navegador (N1); "escpos" = QZ Tray
+  printerName String? // nome da impressora no QZ Tray (quando printMode=escpos)
+  openDrawer  Boolean @default(false) // abre a gaveta no pagamento em dinheiro (N2.3)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
