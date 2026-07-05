@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Plus, Trash2, Search, X } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -86,6 +87,37 @@ export function OrderBoard() {
     loadCatalog();
     loadToday();
   }, [loadOrders, loadCatalog, loadToday]);
+
+  // Pré-vínculo vindo da ficha do cliente (/caixa?leadId=…): abre automaticamente
+  // uma comanda ligada àquele lead e limpa o parâmetro (roda uma única vez).
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    const leadId = searchParams.get("leadId");
+    if (!leadId || prefilledRef.current) return;
+    prefilledRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/vendas/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          await loadOrders();
+          setSelectedId(data.order.id as string);
+        } else {
+          setError(data?.error || "Erro ao abrir comanda do cliente.");
+        }
+      } catch {
+        setError("Erro ao abrir comanda do cliente.");
+      } finally {
+        router.replace("/caixa"); // tira o leadId da URL (evita reabrir no refresh)
+      }
+    })();
+  }, [searchParams, loadOrders, router]);
 
   async function refreshAfterAction() {
     await Promise.all([loadOrders(), loadToday()]);
