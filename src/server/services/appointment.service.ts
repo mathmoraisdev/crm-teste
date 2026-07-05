@@ -149,6 +149,16 @@ export interface UpdateAppointmentInput {
   catalogItemId?: string | null;
   serviceName?: string | null;
   note?: string | null;
+  orderId?: string | null; // liga/desliga a comanda gerada (ex.: ao marcar REALIZADO)
+}
+
+/** Confere que a comanda é da conta antes de vincular (evita referência cross-tenant). */
+async function assertOrderOwned(userId: string, orderId: string): Promise<void> {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, accountId: userId },
+    select: { id: true },
+  });
+  if (!order) throw new Error("Comanda não encontrada.");
 }
 
 /** Edita um agendamento (reagendar/trocar serviço/observação/status). Scoping por conta. */
@@ -158,17 +168,27 @@ export async function updateAppointment(userId: string, id: string, input: Updat
   if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt;
   if (input.status !== undefined) data.status = input.status;
   if (input.note !== undefined) data.note = input.note?.trim() || null;
-  // Trocar o serviço re-snapshota o nome (a menos que serviceName venha explícito).
-  if (input.catalogItemId !== undefined || input.serviceName !== undefined) {
+  // Trocar o item do catálogo re-snapshota o nome (salvo serviceName explícito) e
+  // religa/desliga o vínculo. Mandar SÓ serviceName renomeia o snapshot SEM mexer
+  // no vínculo com o catálogo (renomear ≠ desvincular).
+  if (input.catalogItemId !== undefined) {
     const { catalogItemId, serviceName } = await resolveServiceName(
       userId,
       input.catalogItemId,
       input.serviceName,
     );
     data.serviceName = serviceName;
-    data.catalogItem = catalogItemId
-      ? { connect: { id: catalogItemId } }
-      : { disconnect: true };
+    data.catalogItem = catalogItemId ? { connect: { id: catalogItemId } } : { disconnect: true };
+  } else if (input.serviceName !== undefined) {
+    data.serviceName = input.serviceName?.trim() || null;
+  }
+  if (input.orderId !== undefined) {
+    if (input.orderId) {
+      await assertOrderOwned(userId, input.orderId);
+      data.order = { connect: { id: input.orderId } };
+    } else {
+      data.order = { disconnect: true };
+    }
   }
   return prisma.appointment.update({ where: { id }, data });
 }
@@ -182,6 +202,7 @@ export async function cancelAppointment(userId: string, id: string) {
 /** Marca como REALIZADO, opcionalmente ligando a comanda gerada (orderId). */
 export async function markRealized(userId: string, id: string, opts: { orderId?: string } = {}) {
   await loadOwned(userId, id);
+  if (opts.orderId) await assertOrderOwned(userId, opts.orderId);
   return prisma.appointment.update({
     where: { id },
     data: { status: "REALIZADO", ...(opts.orderId ? { orderId: opts.orderId } : {}) },

@@ -7,7 +7,9 @@ import {
   listAppointments,
   cancelAppointment,
   markRealized,
+  updateAppointment,
 } from "./appointment.service";
+import { openOrder } from "./order.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({
@@ -99,5 +101,36 @@ describe("appointment.service", () => {
 
     const b = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     expect((await markRealized(acc, b.id)).status).toBe("REALIZADO");
+  });
+
+  it("renomear só o serviceName NÃO desvincula o item do catálogo", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000006");
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), catalogItemId: item.id, createdById: acc });
+
+    const upd = await updateAppointment(acc, a.id, { serviceName: "Corte masculino" });
+    expect(upd.serviceName).toBe("Corte masculino");
+    expect(upd.catalogItemId).toBe(item.id); // vínculo preservado
+  });
+
+  it("aplica status + nota juntos no mesmo update (REALIZADO não descarta os outros campos)", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000007");
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
+    const upd = await updateAppointment(acc, a.id, { status: "REALIZADO", note: "cobrado" });
+    expect(upd.status).toBe("REALIZADO");
+    expect(upd.note).toBe("cobrado"); // não foi descartado
+  });
+
+  it("rejeita vincular comanda de outro dono (orderId cross-tenant)", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000008");
+    const otherLeadId = (await prisma.lead.create({ data: { userId: other, name: "X", phone: "+5511900000009" } })).id;
+    const otherOrder = await openOrder(other, { openedById: other, leadId: otherLeadId });
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
+    await expect(markRealized(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
+    await expect(updateAppointment(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
   });
 });

@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  updateAppointment,
-  cancelAppointment,
-  markRealized,
-} from "@/server/services/appointment.service";
+import { updateAppointment, cancelAppointment } from "@/server/services/appointment.service";
 import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -32,17 +28,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const d = parsed.data;
   try {
-    // REALIZADO tem caminho próprio (pode gravar orderId da comanda gerada).
-    if (d.status === "REALIZADO") {
-      const appointment = await markRealized(ctx.tenantUserId, id, { orderId: d.orderId });
-      return NextResponse.json({ appointment });
-    }
+    // Um caminho só: status (inclusive REALIZADO), reagendar, trocar serviço,
+    // observação e/ou orderId — tudo aplicado junto, nada é descartado.
     const appointment = await updateAppointment(ctx.tenantUserId, id, {
       scheduledAt: d.scheduledAt ? new Date(d.scheduledAt) : undefined,
       status: d.status,
       catalogItemId: d.catalogItemId,
       serviceName: d.serviceName,
       note: d.note,
+      orderId: d.orderId,
     });
     return NextResponse.json({ appointment });
   } catch (e) {

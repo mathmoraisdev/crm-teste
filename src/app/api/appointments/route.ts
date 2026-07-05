@@ -8,18 +8,23 @@ export const dynamic = "force-dynamic";
 
 const STATUSES = ["AGENDADO", "CONFIRMADO", "REALIZADO", "FALTOU", "CANCELADO"] as const;
 
+/** Parseia data da query; ignora valor inválido (não deixa `Invalid Date` chegar no Prisma → 500). */
+function parseDate(s: string | null): Date | undefined {
+  if (!s) return undefined;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 export async function GET(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const sp = req.nextUrl.searchParams;
   const status = sp.get("status");
-  const from = sp.get("from");
-  const to = sp.get("to");
   const items = await listAppointments(ctx.tenantUserId, {
     leadId: sp.get("leadId") ?? undefined,
     status: STATUSES.includes(status as AppointmentStatus) ? (status as AppointmentStatus) : undefined,
-    from: from ? new Date(from) : undefined,
-    to: to ? new Date(to) : undefined,
+    from: parseDate(sp.get("from")),
+    to: parseDate(sp.get("to")),
   });
   return NextResponse.json({ items });
 }
