@@ -463,6 +463,11 @@ enum WhatsAppNumberStatus {
   DISABLED // desativado pelo operador
 }
 
+enum PersonType {
+  PF
+  PJ
+}
+
 model Lead {
   id                String           @id @default(cuid())
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -470,6 +475,8 @@ model Lead {
   name              String
   phone             String // E.164 normalizado — único POR conta (ver @@unique abaixo)
   email             String? // capturado pela IA na conversa (ou informado manualmente)
+  personType        PersonType       @default(PF)
+  document          String? // CPF (PF) ou CNPJ (PJ), só dígitos; opcional
   status            LeadStatus       @default(NOVO)
   score             Int              @default(0)
   campaign          Campaign?        @relation(fields: [campaignId], references: [id])
