@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus, Trash2, Search, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Search, X, SlidersHorizontal } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
+import { OrderCustomFields } from "@/components/vendas/OrderCustomFields";
+import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
 type Payment = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
 
@@ -15,6 +17,7 @@ interface OrderItem {
   unitPriceCents: number;
   quantity: number;
   catalogItemId: string | null;
+  customFields: Record<string, unknown> | null;
 }
 interface Order {
   id: string;
@@ -25,6 +28,7 @@ interface Order {
   note: string | null;
   createdAt: string;
   closedAt: string | null;
+  customFields: Record<string, unknown> | null;
   items: OrderItem[];
   totalCents: number;
 }
@@ -42,6 +46,8 @@ export function OrderBoard() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [orderDefs, setOrderDefs] = useState<CustomFieldDefItem[]>([]);
+  const [itemDefs, setItemDefs] = useState<CustomFieldDefItem[]>([]);
   const [todayCents, setTodayCents] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,11 +88,27 @@ export function OrderBoard() {
     }
   }, []);
 
+  const loadDefs = useCallback(async () => {
+    try {
+      const [orderRes, itemRes] = await Promise.all([
+        fetch("/api/custom-fields?scope=ORDER", { cache: "no-store" }),
+        fetch("/api/custom-fields?scope=ORDER_ITEM", { cache: "no-store" }),
+      ]);
+      const orderData = await orderRes.json().catch(() => ({}));
+      const itemData = await itemRes.json().catch(() => ({}));
+      if (orderRes.ok) setOrderDefs((orderData.defs as CustomFieldDefItem[]) ?? []);
+      if (itemRes.ok) setItemDefs((itemData.defs as CustomFieldDefItem[]) ?? []);
+    } catch {
+      /* sem defs → seção de campos fica oculta */
+    }
+  }, []);
+
   useEffect(() => {
     loadOrders();
     loadCatalog();
     loadToday();
-  }, [loadOrders, loadCatalog, loadToday]);
+    loadDefs();
+  }, [loadOrders, loadCatalog, loadToday, loadDefs]);
 
   // Pré-vínculo vindo da ficha do cliente (/caixa?leadId=…): abre automaticamente
   // uma comanda ligada àquele lead e limpa o parâmetro (roda uma única vez).
@@ -178,6 +200,8 @@ export function OrderBoard() {
           <OrderPanel
             order={selected}
             catalog={catalog}
+            orderDefs={orderDefs}
+            itemDefs={itemDefs}
             onChanged={refreshAfterAction}
             onError={setError}
           />
@@ -341,11 +365,15 @@ function NewOrderCard({
 function OrderPanel({
   order,
   catalog,
+  orderDefs,
+  itemDefs,
   onChanged,
   onError,
 }: {
   order: Order;
   catalog: CatalogItem[];
+  orderDefs: CustomFieldDefItem[];
+  itemDefs: CustomFieldDefItem[];
   onChanged: () => Promise<void>;
   onError: (msg: string | null) => void;
 }) {
@@ -354,6 +382,28 @@ function OrderPanel({
   const [avulsoPrice, setAvulsoPrice] = useState("");
   const [payment, setPayment] = useState<Payment>("DINHEIRO");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // PATCH de customFields (comanda ou item). Lança em erro → OrderCustomFields exibe.
+  async function saveFields(url: string, patch: Record<string, unknown>) {
+    onError(null);
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customFields: patch }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Erro ao salvar campos.");
+    await onChanged();
+  }
 
   const filtered = catQuery.trim()
     ? catalog.filter((c) => c.name.toLowerCase().includes(catQuery.trim().toLowerCase()))
@@ -415,32 +465,69 @@ function OrderPanel({
         subtitle="Adicione itens do catálogo ou linhas avulsas. O total é calculado ao vivo."
       />
       <div className="space-y-4 px-5 py-4">
+        {/* Campos da comanda (scope=ORDER) */}
+        {orderDefs.length > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <OrderCustomFields
+              defs={orderDefs}
+              values={order.customFields}
+              title="Dados da comanda"
+              onSave={(patch) => saveFields(`/api/vendas/orders/${order.id}/fields`, patch)}
+            />
+          </div>
+        )}
+
         {/* Itens da comanda */}
         {order.items.length === 0 ? (
           <p className="text-sm text-slate-400">Nenhum item ainda.</p>
         ) : (
           <ul className="space-y-1.5">
             {order.items.map((it) => (
-              <li
-                key={it.id}
-                className="flex items-center justify-between rounded-lg border border-line-default bg-card px-3 py-2"
-              >
-                <span className="min-w-0 truncate text-sm text-ink">
-                  {it.quantity > 1 && <span className="text-slate-400">{it.quantity}× </span>}
-                  {it.nameSnapshot}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-600">{formatCentsBRL(it.unitPriceCents * it.quantity)}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeLine(it.id)}
-                    disabled={busy}
-                    className="text-slate-400 hover:text-danger disabled:opacity-40"
-                    aria-label="Remover item"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+              <li key={it.id} className="rounded-lg border border-line-default bg-card">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="min-w-0 truncate text-sm text-ink">
+                    {it.quantity > 1 && <span className="text-slate-400">{it.quantity}× </span>}
+                    {it.nameSnapshot}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-600">{formatCentsBRL(it.unitPriceCents * it.quantity)}</span>
+                    {itemDefs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(it.id)}
+                        className={`${
+                          expanded.has(it.id) || (it.customFields && Object.keys(it.customFields).length > 0)
+                            ? "text-brand-600"
+                            : "text-slate-400"
+                        } hover:text-brand-600`}
+                        aria-label="Campos do item"
+                        aria-expanded={expanded.has(it.id)}
+                      >
+                        <SlidersHorizontal size={15} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeLine(it.id)}
+                      disabled={busy}
+                      className="text-slate-400 hover:text-danger disabled:opacity-40"
+                      aria-label="Remover item"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
+                {itemDefs.length > 0 && expanded.has(it.id) && (
+                  <div className="border-t border-line-default px-3 py-2">
+                    <OrderCustomFields
+                      defs={itemDefs}
+                      values={it.customFields}
+                      onSave={(patch) =>
+                        saveFields(`/api/vendas/orders/${order.id}/items/${it.id}/fields`, patch)
+                      }
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

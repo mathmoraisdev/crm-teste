@@ -5,6 +5,7 @@ import type { LeadStatus } from "@prisma/client";
 import { Button } from "@/components/ui/Button";
 import { PIPELINE_ORDER, resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
+import { CustomFieldInput } from "@/components/CustomFieldInput";
 
 export interface LeadFormValues {
   id: string;
@@ -14,9 +15,6 @@ export interface LeadFormValues {
   status: LeadStatus;
   optOut: boolean;
 }
-
-const cfInputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
 
 /**
  * Formulário de lead. Sem `lead` cria um lead avulso (status NOVO); com `lead`
@@ -226,48 +224,7 @@ export function LeadForm({
               </p>
               {cfDefs.map((d) => (
                 <div key={d.id}>
-                  {d.type === "BOOLEAN" ? (
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={cfValues[d.key] === true}
-                        onChange={(e) => setCf(d.key, e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/40"
-                      />
-                      {d.label}
-                    </label>
-                  ) : (
-                    <>
-                      <label className="mb-1 block text-xs font-medium text-slate-600">
-                        {d.label}
-                      </label>
-                      {d.type === "SELECT" ? (
-                        <select
-                          value={(cfValues[d.key] as string) ?? ""}
-                          onChange={(e) => setCf(d.key, e.target.value)}
-                          className={cfInputClass}
-                        >
-                          <option value="">—</option>
-                          {(d.options ?? []).map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type={d.type === "NUMBER" ? "number" : d.type === "DATE" ? "date" : "text"}
-                          value={
-                            d.type === "DATE" && typeof cfValues[d.key] === "string"
-                              ? (cfValues[d.key] as string).slice(0, 10)
-                              : (cfValues[d.key] as string | number) ?? ""
-                          }
-                          onChange={(e) => setCf(d.key, e.target.value)}
-                          className={cfInputClass}
-                        />
-                      )}
-                    </>
-                  )}
+                  <CustomFieldInput def={d} value={cfValues[d.key]} onChange={(v) => setCf(d.key, v)} />
                 </div>
               ))}
             </div>
