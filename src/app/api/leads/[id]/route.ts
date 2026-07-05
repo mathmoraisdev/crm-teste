@@ -31,6 +31,8 @@ const updateSchema = z
     status: z.nativeEnum(LeadStatus).optional(),
     optOut: z.boolean().optional(),
     customFields: z.record(z.string(), z.unknown()).optional(),
+    personType: z.enum(["PF", "PJ"]).optional(),
+    document: z.string().nullish(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" });
 

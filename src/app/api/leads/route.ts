@@ -30,6 +30,8 @@ const createSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   phone: z.string().min(1, "Telefone obrigatório"),
   email: z.string().optional(),
+  personType: z.enum(["PF", "PJ"]).optional(),
+  document: z.string().nullish(),
 });
 
 export async function POST(req: NextRequest) {
@@ -44,7 +46,10 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const lead = await createLead(userId, parsed.data.name, parsed.data.phone, parsed.data.email);
+    const lead = await createLead(userId, parsed.data.name, parsed.data.phone, parsed.data.email, {
+      personType: parsed.data.personType,
+      document: parsed.data.document,
+    });
     return NextResponse.json({ lead }, { status: 201 });
   } catch (e) {
     return NextResponse.json(

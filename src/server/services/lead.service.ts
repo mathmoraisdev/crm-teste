@@ -3,6 +3,7 @@ import type { AttendanceStatus, Lead, LeadStatus, Prisma } from "@prisma/client"
 import { parseLeadsCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
+import { normalizeDocument } from "@/lib/document";
 import { isAdminEmail } from "@/lib/admin";
 import { PLAN_LIMITS } from "@/lib/plans";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
@@ -103,12 +104,18 @@ export async function listLeads(
     ...(params.optOut !== undefined ? { optOut: params.optOut } : {}),
     ...(params.tagId ? { tags: { some: { id: params.tagId } } } : {}),
     ...(params.query
-      ? {
-          OR: [
-            { name: { contains: params.query, mode: "insensitive" as const } },
-            { phone: { contains: params.query } },
-          ],
-        }
+      ? (() => {
+          const q = params.query.trim();
+          // Telefone é salvo em E.164 só-dígitos (+55...). Busca por dígitos p/
+          // casar mesmo quando o usuário digita com máscara "(11) 98888-1111"
+          // ou sem o DDI. Espelha o que o AgendaView já faz no cliente.
+          const digits = q.replace(/\D/g, "");
+          const or: Prisma.LeadWhereInput[] = [
+            { name: { contains: q, mode: "insensitive" as const } },
+          ];
+          if (digits.length >= 3) or.push({ phone: { contains: digits } });
+          return { OR: or };
+        })()
       : {}),
   };
   const [rows, total] = await Promise.all([
@@ -187,6 +194,7 @@ export async function createLead(
   name: string,
   rawPhone: string,
   rawEmail?: string,
+  extra?: { personType?: "PF" | "PJ"; document?: string | null },
 ): Promise<Lead> {
   const phone = normalizePhone(rawPhone);
   if (!phone) {
@@ -194,6 +202,8 @@ export async function createLead(
   }
   const email = normalizeEmail(rawEmail);
   if (rawEmail?.trim() && !email) throw new Error(`E-mail inválido: ${rawEmail}`);
+  const personType = extra?.personType ?? "PF";
+  const document = normalizeDocument(extra?.document, personType);
   // Idempotente por (userId, phone) sem depender do unique — a identidade do
   // contato passou a ser (whatsAppNumberId, phone), então não há mais composite
   // userId_phone em Lead.
@@ -202,13 +212,13 @@ export async function createLead(
   if (existing) {
     lead = await prisma.lead.update({
       where: { id: existing.id },
-      data: { name, ...(email ? { email } : {}) },
+      data: { name, ...(email ? { email } : {}), personType, ...(document ? { document } : {}) },
     });
   } else {
     await assertContactQuota(userId); // teto de contatos do plano (só no novo)
     // consentSource só no create: preserva a origem do opt-in mesmo se reimportado (LGPD)
     lead = await prisma.lead.create({
-      data: { userId, name, phone, email, status: "NOVO", consentSource: "manual" },
+      data: { userId, name, phone, email, personType, document, status: "NOVO", consentSource: "manual" },
     });
   }
   await invalidateLeadCaches(userId); // contadores/facetas mudaram
@@ -229,11 +239,13 @@ export async function updateLead(
     status?: LeadStatus;
     optOut?: boolean;
     customFields?: Record<string, unknown>;
+    personType?: "PF" | "PJ";
+    document?: string | null;
   },
 ): Promise<Lead> {
   const exists = await prisma.lead.findFirst({
     where: { id, userId },
-    select: { id: true, customFields: true },
+    select: { id: true, customFields: true, personType: true },
   });
   if (!exists) throw new Error("Lead não encontrado");
 
@@ -256,6 +268,11 @@ export async function updateLead(
   if (data.optOut !== undefined) {
     patch.optOut = data.optOut;
     patch.optOutAt = data.optOut ? new Date() : null;
+  }
+  if (data.personType !== undefined) patch.personType = data.personType;
+  if (data.document !== undefined || data.personType !== undefined) {
+    const type = data.personType ?? exists.personType; // tipo efetivo, sem 2ª query
+    patch.document = normalizeDocument(data.document ?? null, type);
   }
   if (data.phone !== undefined) {
     const phone = normalizePhone(data.phone);

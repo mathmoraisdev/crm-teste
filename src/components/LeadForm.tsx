@@ -36,6 +36,8 @@ export function LeadForm({
   const [name, setName] = useState(lead?.name ?? "");
   const [phone, setPhone] = useState(lead?.phone ?? "");
   const [email, setEmail] = useState(lead?.email ?? "");
+  const [personType, setPersonType] = useState<"PF" | "PJ">("PF");
+  const [document, setDocument] = useState("");
   const [status, setStatus] = useState<LeadStatus>(lead?.status ?? "NOVO");
   const [optOut, setOptOut] = useState(lead?.optOut ?? false);
   const [loading, setLoading] = useState(false);
@@ -60,6 +62,8 @@ export function LeadForm({
         setCfDefs((defsData.defs as CustomFieldDefItem[]) ?? []);
         const cf = leadData.lead?.customFields;
         setCfValues(cf && typeof cf === "object" ? (cf as Record<string, unknown>) : {});
+        if (leadData.lead?.personType) setPersonType(leadData.lead.personType as "PF" | "PJ");
+        setDocument(typeof leadData.lead?.document === "string" ? leadData.lead.document : "");
       } catch {
         // mantém vazio
       }
@@ -92,9 +96,17 @@ export function LeadForm({
             email: email.trim(),
             status,
             optOut,
+            personType,
+            document: document.trim(),
             ...(cfDefs.length > 0 ? { customFields: cfValues } : {}),
           }
-        : { name: name.trim(), phone: phone.trim(), email: email.trim() };
+        : {
+            name: name.trim(),
+            phone: phone.trim(),
+            email: email.trim(),
+            personType,
+            document: document.trim(),
+          };
       const res = await fetch(editing ? `/api/leads/${lead!.id}` : "/api/leads", {
         method: editing ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -113,11 +125,13 @@ export function LeadForm({
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Nome</label>
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          {personType === "PJ" ? "Razão social" : "Nome"}
+        </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Maria Silva"
+          placeholder={personType === "PJ" ? "Empresa LTDA" : "Maria Silva"}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         />
       </div>
@@ -149,6 +163,31 @@ export function LeadForm({
         <p className="mt-1 text-xs text-slate-400">
           A IA também captura sozinha quando o lead informa na conversa.
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Tipo de pessoa</label>
+          <select
+            value={personType}
+            onChange={(e) => setPersonType(e.target.value as "PF" | "PJ")}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          >
+            <option value="PF">Pessoa física</option>
+            <option value="PJ">Empresa (PJ)</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            {personType === "PJ" ? "CNPJ" : "CPF"} <span className="text-slate-400">(opcional)</span>
+          </label>
+          <input
+            value={document}
+            onChange={(e) => setDocument(e.target.value)}
+            placeholder={personType === "PJ" ? "00.000.000/0000-00" : "000.000.000-00"}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
       </div>
 
       {editing && (
