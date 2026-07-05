@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { orderTotalCents } from "@/server/services/order.service";
 
 /**
@@ -56,69 +56,82 @@ function buildWhere(userId: string, params: ListClientesParams): Prisma.LeadWher
 /**
  * Lista clientes (= leads) com o agregado de pós-venda: última visita, total gasto
  * e nº de comandas FECHADA. Ordena por última visita (mais recente primeiro),
- * caindo p/ nome quando o cliente ainda não comprou nada.
+ * caindo p/ `updatedAt` quando o cliente ainda não comprou nada.
  *
- * Traz só as comandas FECHADA (com preço/quantidade dos itens) num único `include`
- * enxuto — evita N+1 e mantém a agregação em memória (total = Σ item.unitPrice×qty),
- * usando o mesmo `orderTotalCents` que a comanda usa, p/ não divergir a conta.
+ * A ORDENAÇÃO é feita no banco (raw) por `MAX(Order.closedAt)` das comandas
+ * FECHADA — senão a paginação sairia incoerente (fechar comanda NÃO toca
+ * `Lead.updatedAt`, então ordenar a página por updatedAt e re-sortear em memória
+ * esconderia compradores recentes fora da janela). O raw só decide QUAIS ids e em
+ * que ordem; os valores (total gasto/itens) vêm de um `findMany` tipado depois.
  */
 export async function listClientes(
   userId: string,
   params: ListClientesParams = {},
 ): Promise<ListClientesResult> {
-  const take = Math.min(params.take ?? 50, 100);
-  const skip = params.skip ?? 0;
-  const where = buildWhere(userId, params);
+  const take = Math.min(Math.max(1, params.take ?? 50), 100);
+  const skip = Math.max(0, params.skip ?? 0);
 
-  const [rows, total] = await Promise.all([
-    prisma.lead.findMany({
-      where,
-      // Ordena por atividade do lead; reordenamos por lastOrderAt abaixo (o Prisma
-      // não ordena por agregado de relação sem raw). updatedAt é bom desempate.
-      orderBy: { updatedAt: "desc" },
-      skip,
-      take,
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        orders: {
-          where: { status: "FECHADA" },
-          select: {
-            closedAt: true,
-            items: { select: { unitPriceCents: true, quantity: true } },
-          },
+  // Filtros como fragmentos parametrizados (Prisma.sql escapa os valores).
+  const conds: Prisma.Sql[] = [Prisma.sql`l."userId" = ${userId}`];
+  if (params.assignedToId) conds.push(Prisma.sql`l."assignedToId" = ${params.assignedToId}`);
+  const q = params.query?.trim();
+  if (q) {
+    const digits = q.replace(/\D/g, "");
+    if (digits.length >= 3) {
+      conds.push(
+        Prisma.sql`(l."name" ILIKE ${"%" + q + "%"} OR l."phone" LIKE ${"%" + digits + "%"})`,
+      );
+    } else {
+      conds.push(Prisma.sql`l."name" ILIKE ${"%" + q + "%"}`);
+    }
+  }
+  const whereSql = Prisma.join(conds, " AND ");
+
+  // ids ordenados por última compra (nulls por último), com desempate por atividade.
+  const ordered = await prisma.$queryRaw<{ id: string; total: bigint }[]>(Prisma.sql`
+    SELECT l."id" AS id, COUNT(*) OVER () AS total
+    FROM "Lead" l
+    LEFT JOIN LATERAL (
+      SELECT MAX(o."closedAt") AS last_order
+      FROM "Order" o
+      WHERE o."leadId" = l."id" AND o."status" = 'FECHADA'
+    ) lo ON true
+    WHERE ${whereSql}
+    ORDER BY lo.last_order DESC NULLS LAST, l."updatedAt" DESC
+    LIMIT ${take} OFFSET ${skip}
+  `);
+
+  const total = ordered.length > 0 ? Number(ordered[0].total) : await prisma.lead.count({ where: buildWhere(userId, params) });
+  const ids = ordered.map((r) => r.id);
+  if (ids.length === 0) return { items: [], total };
+
+  const rows = await prisma.lead.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      orders: {
+        where: { status: "FECHADA" },
+        select: {
+          closedAt: true,
+          items: { select: { unitPriceCents: true, quantity: true } },
         },
       },
-    }),
-    prisma.lead.count({ where }),
-  ]);
+    },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
 
-  const items: ClienteListItem[] = rows
-    .map((l) => {
-      const totalSpentCents = l.orders.reduce(
-        (sum, o) => sum + orderTotalCents(o.items),
-        0,
-      );
-      const lastOrderAt = l.orders.reduce<Date | null>((latest, o) => {
-        if (!o.closedAt) return latest;
-        return !latest || o.closedAt > latest ? o.closedAt : latest;
-      }, null);
-      return {
-        id: l.id,
-        name: l.name,
-        phone: l.phone,
-        lastOrderAt,
-        totalSpentCents,
-        orderCount: l.orders.length,
-      };
-    })
-    // Cliente com compra recente primeiro; quem nunca comprou vai ao fim.
-    .sort((a, b) => {
-      const at = a.lastOrderAt?.getTime() ?? 0;
-      const bt = b.lastOrderAt?.getTime() ?? 0;
-      return bt - at;
-    });
+  // Preserva a ordem do raw (findMany com `in` não garante ordem).
+  const items: ClienteListItem[] = ids.map((id) => {
+    const l = byId.get(id)!;
+    const totalSpentCents = l.orders.reduce((sum, o) => sum + orderTotalCents(o.items), 0);
+    const lastOrderAt = l.orders.reduce<Date | null>((latest, o) => {
+      if (!o.closedAt) return latest;
+      return !latest || o.closedAt > latest ? o.closedAt : latest;
+    }, null);
+    return { id: l.id, name: l.name, phone: l.phone, lastOrderAt, totalSpentCents, orderCount: l.orders.length };
+  });
 
   return { items, total };
 }

@@ -68,4 +68,20 @@ describe("cliente.service — agregação de pós-venda", () => {
     const { items } = await listClientes(acc, { query: "(11) 98765-4321" });
     expect(items.find((c) => c.id === leadId)).toBeTruthy();
   });
+
+  it("ordena por última compra no banco (comprador recente vem antes, mesmo com updatedAt antigo)", async () => {
+    const acc = await makeOwner();
+    // "antigo" é criado por último (updatedAt mais novo) mas NÃO compra;
+    // "recente" é criado primeiro mas fecha uma comanda → deve vir na frente.
+    const recenteId = await makeLead(acc, "Recente", "+5511900010001");
+    const o = await openOrder(acc, { openedById: acc, leadId: recenteId });
+    await addItem(acc, o.id, { name: "Serviço", unitPriceCents: 5000, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX" });
+    const semCompraId = await makeLead(acc, "SemCompra", "+5511900010002"); // updatedAt mais novo
+
+    const { items } = await listClientes(acc);
+    const idx = (id: string) => items.findIndex((c) => c.id === id);
+    expect(idx(recenteId)).toBeGreaterThanOrEqual(0);
+    expect(idx(recenteId)).toBeLessThan(idx(semCompraId)); // comprador antes de quem nunca comprou
+  });
 });
