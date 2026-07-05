@@ -18,6 +18,11 @@ import { Badge } from "@/components/ui/Badge";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { cn, formatSlot } from "@/lib/utils";
 import type { AgendaItem } from "@/server/services/meeting.service";
+import {
+  APPT_STATUS_LABEL,
+  APPT_STATUS_TONE,
+  type AppointmentDTO,
+} from "@/components/agenda/appointment-labels";
 
 const STATUS_TONE = {
   CONFIRMED: "green",
@@ -52,16 +57,25 @@ function relativeDayLabel(iso: string): "Hoje" | "Amanhã" | null {
   return null;
 }
 
+type Tab = "meetings" | "appointments";
+
 export function AgendaView() {
+  const [tab, setTab] = useState<Tab>("meetings");
   const [meetings, setMeetings] = useState<AgendaItem[] | null>(null);
+  const [appointments, setAppointments] = useState<AppointmentDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/meetings", { cache: "no-store" });
-      const data = await res.json();
-      setMeetings(data.meetings as AgendaItem[]);
+      const [mRes, aRes] = await Promise.all([
+        fetch("/api/meetings", { cache: "no-store" }),
+        fetch("/api/appointments", { cache: "no-store" }),
+      ]);
+      const mData = await mRes.json();
+      const aData = await aRes.json();
+      if (mRes.ok) setMeetings(mData.meetings as AgendaItem[]);
+      if (aRes.ok) setAppointments(aData.items as AppointmentDTO[]);
     } catch {
       /* mantém estado anterior */
     }
@@ -93,6 +107,21 @@ export function AgendaView() {
     [meetings],
   );
 
+  // Agendamentos futuros (não-terminais), filtrados pela mesma busca por nome/telefone.
+  const filteredAppts = useMemo(() => {
+    if (!appointments) return null;
+    const q = query.trim();
+    const lower = q.toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    return appointments.filter((a) => {
+      if (!q) return true;
+      return (
+        a.lead.name.toLowerCase().includes(lower) ||
+        (digits.length > 0 && a.lead.phone.replace(/\D/g, "").includes(digits))
+      );
+    });
+  }, [appointments, query]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -112,6 +141,30 @@ export function AgendaView() {
         </div>
       </div>
 
+      {/* Abas: reuniões (IA) x agendamentos de serviço */}
+      <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
+        {([
+          { value: "meetings", label: "Reuniões" },
+          { value: "appointments", label: "Agendamentos" },
+        ] as { value: Tab; label: string }[]).map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setTab(t.value)}
+            className={cn(
+              "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+              tab === t.value
+                ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
+                : "text-slate-600 hover:bg-slate-100",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "meetings" ? (
+        <>
       {/* Busca + filtro de status */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1 sm:flex-none">
@@ -177,7 +230,94 @@ export function AgendaView() {
           </ul>
         </Card>
       )}
+        </>
+      ) : (
+        <>
+          {/* Busca (nome/telefone) para agendamentos */}
+          <div className="relative min-w-[220px] max-w-[300px]">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por nome ou telefone…"
+              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-8 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {filteredAppts === null ? (
+            <Card>
+              <LoadingBlock label="Carregando agendamentos…" />
+            </Card>
+          ) : filteredAppts.length === 0 ? (
+            <Card>
+              <div className="py-10 text-center text-sm text-slate-500">
+                {appointments && appointments.length === 0
+                  ? "Nenhum agendamento ainda. Agende um serviço na ficha do cliente."
+                  : "Nenhum agendamento corresponde à busca."}
+              </div>
+            </Card>
+          ) : (
+            <Card>
+              <ul className="divide-y divide-slate-100">
+                {filteredAppts.map((a) => (
+                  <AppointmentRow key={a.id} item={a} />
+                ))}
+              </ul>
+            </Card>
+          )}
+        </>
+      )}
     </div>
+  );
+}
+
+function AppointmentRow({ item }: { item: AppointmentDTO }) {
+  const relDay = relativeDayLabel(item.scheduledAt);
+  const service = item.serviceName ?? item.catalogItem?.name ?? "Atendimento";
+  return (
+    <li
+      className={cn(
+        "flex flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 sm:flex-nowrap",
+        relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3" : "px-1",
+      )}
+    >
+      <span className="mt-0.5">
+        <CalendarClock size={18} className="text-brand-500" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/leads/${item.lead.id}`}
+            className="font-bold text-ink hover:text-brand-600 hover:underline"
+          >
+            {item.lead.name}
+          </Link>
+          <Badge tone={APPT_STATUS_TONE[item.status]}>{APPT_STATUS_LABEL[item.status]}</Badge>
+          {relDay && (
+            <span className="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-bold text-white">
+              {relDay}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-sm text-slate-600">
+          {service} · {formatSlot(item.scheduledAt)}
+        </p>
+        <p className="mt-0.5 font-mono text-xs text-slate-400">{item.lead.phone}</p>
+      </div>
+    </li>
   );
 }
 

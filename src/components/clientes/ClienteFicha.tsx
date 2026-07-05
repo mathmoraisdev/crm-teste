@@ -10,6 +10,7 @@ import { LoadingBlock } from "@/components/ui/Spinner";
 import { formatPhone } from "@/lib/phone";
 import { formatCentsBRL } from "@/lib/money";
 import { PAYMENT_LABEL, PAYMENT_TONE, type Payment } from "@/components/vendas/payment-labels";
+import { AppointmentSection } from "@/components/clientes/AppointmentSection";
 import type { ClienteHistory } from "@/server/services/cliente.service";
 
 // Datas chegam serializadas (string) do fetch, embora o tipo declare Date — o
@@ -83,6 +84,9 @@ export function ClienteFicha({ clienteId }: { clienteId: string }) {
             <p className="text-lg font-bold text-ink">{data.orderCount}</p>
           </div>
         </div>
+
+        {/* Agendamentos (próximos + histórico de status) */}
+        <AppointmentSection leadId={data.lead.id} />
 
         {/* Histórico de serviços */}
         <div>
