@@ -170,13 +170,14 @@ function NewOrderCard({
   onError: (msg: string | null) => void;
 }) {
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [leadQuery, setLeadQuery] = useState("");
   const [leadHits, setLeadHits] = useState<LeadHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showLeadSearch, setShowLeadSearch] = useState(false);
 
-  async function open(payload: { customerName?: string; leadId?: string }) {
+  async function open(payload: { customerName?: string; leadId?: string; customerPhone?: string }) {
     setSaving(true);
     onError(null);
     try {
@@ -188,6 +189,7 @@ function NewOrderCard({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Erro ao abrir comanda.");
       setCustomerName("");
+      setCustomerPhone("");
       setLeadQuery("");
       setLeadHits([]);
       setShowLeadSearch(false);
@@ -217,21 +219,37 @@ function NewOrderCard({
     <Card>
       <CardHeader title="Nova comanda" />
       <div className="space-y-3 px-4 py-4">
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <input
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && customerName.trim() && open({ customerName: customerName.trim() })}
             placeholder="Nome do cliente (avulso)"
-            className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           />
-          <Button
-            size="sm"
-            onClick={() => open({ customerName: customerName.trim() || "Sem nome" })}
-            loading={saving}
-          >
-            <Plus size={14} /> Abrir
-          </Button>
+          <div className="flex gap-2">
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              onKeyDown={(e) =>
+                e.key === "Enter" &&
+                open({ customerName: customerName.trim() || "Sem nome", customerPhone: customerPhone.trim() || undefined })
+              }
+              placeholder="Telefone (vira lead no CRM)"
+              className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+            <Button
+              size="sm"
+              onClick={() =>
+                open({ customerName: customerName.trim() || "Sem nome", customerPhone: customerPhone.trim() || undefined })
+              }
+              loading={saving}
+            >
+              <Plus size={14} /> Abrir
+            </Button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Com telefone, o cliente vira um contato no CRM (se já existir, apenas vincula).
+          </p>
         </div>
 
         {showLeadSearch ? (
