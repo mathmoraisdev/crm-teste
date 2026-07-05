@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, type LeadStatus } from "@prisma/client";
 import { orderTotalCents } from "@/server/services/order.service";
 
 /**
@@ -148,7 +148,16 @@ export interface ClienteHistoryOrder {
 }
 
 export interface ClienteHistory {
-  lead: { id: string; name: string; phone: string; email: string | null };
+  // Identidade + campos de pipeline que o formulário de edição reaproveita
+  // (a ficha edita o MESMO registro `Lead` — cliente é uma lente, não outra entidade).
+  lead: {
+    id: string;
+    name: string;
+    phone: string;
+    email: string | null;
+    status: LeadStatus;
+    optOut: boolean;
+  };
   orders: ClienteHistoryOrder[];
   totalSpentCents: number; // Σ só das FECHADA
   orderCount: number; // nº de FECHADA
@@ -170,6 +179,8 @@ export async function getClienteHistory(
       name: true,
       phone: true,
       email: true,
+      status: true,
+      optOut: true,
       orders: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -204,7 +215,14 @@ export async function getClienteHistory(
   const totalSpentCents = closed.reduce((sum, o) => sum + o.totalCents, 0);
 
   return {
-    lead: { id: lead.id, name: lead.name, phone: lead.phone, email: lead.email },
+    lead: {
+      id: lead.id,
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      status: lead.status,
+      optOut: lead.optOut,
+    },
     orders,
     totalSpentCents,
     orderCount: closed.length,

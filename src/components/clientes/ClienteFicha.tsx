@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Receipt, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Receipt, ExternalLink } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
+import { LeadForm } from "@/components/LeadForm";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { formatPhone } from "@/lib/phone";
 import { formatCentsBRL } from "@/lib/money";
@@ -26,6 +28,7 @@ function formatDate(value: string | Date): string {
 export function ClienteFicha({ clienteId }: { clienteId: string }) {
   const [data, setData] = useState<ClienteHistory | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,16 +62,22 @@ export function ClienteFicha({ clienteId }: { clienteId: string }) {
   }
 
   return (
+    <>
     <Card>
       <CardHeader
         title={data.lead.name}
         subtitle={formatPhone(data.lead.phone)}
         action={
-          <Link href={`/caixa?leadId=${data.lead.id}`}>
-            <Button size="sm">
-              <Plus size={14} /> Nova comanda
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
+              <Pencil size={14} /> Editar
             </Button>
-          </Link>
+            <Link href={`/caixa?leadId=${data.lead.id}`}>
+              <Button size="sm">
+                <Plus size={14} /> Nova comanda
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -148,5 +157,27 @@ export function ClienteFicha({ clienteId }: { clienteId: string }) {
         </Link>
       </div>
     </Card>
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title={`Editar — ${data.lead.name}`}
+      >
+        <LeadForm
+          lead={{
+            id: data.lead.id,
+            name: data.lead.name,
+            phone: data.lead.phone,
+            email: data.lead.email,
+            status: data.lead.status,
+            optOut: data.lead.optOut,
+          }}
+          onSaved={() => {
+            setEditOpen(false);
+            load(); // nome/telefone/e-mail podem ter mudado — recarrega a ficha
+          }}
+        />
+      </Modal>
+    </>
   );
 }

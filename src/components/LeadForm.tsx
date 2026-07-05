@@ -190,32 +190,37 @@ export function LeadForm({
 
       {editing && (
         <>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">
-              Status no pipeline
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as LeadStatus)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            >
-              {PIPELINE_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {statusMeta[s].label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="space-y-3 border-t border-slate-100 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Pipeline
+            </p>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Status no pipeline
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as LeadStatus)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                {PIPELINE_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {statusMeta[s].label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={optOut}
-              onChange={(e) => setOptOut(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/40"
-            />
-            Marcado como opt-out (não recebe mensagens)
-          </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={optOut}
+                onChange={(e) => setOptOut(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/40"
+              />
+              Marcado como opt-out (não recebe mensagens)
+            </label>
+          </div>
 
           {cfDefs.length > 0 && (
             <div className="space-y-3 border-t border-slate-100 pt-3">

@@ -164,7 +164,7 @@ const KanbanColumn = memo(function KanbanColumn({
       onDrop={onDropCol}
       className={cn(
         "flex max-h-[72vh] w-[78vw] max-w-[300px] flex-shrink-0 snap-start flex-col rounded-2xl p-3.5 transition-colors sm:w-[272px]",
-        positive ? "bg-brand-50" : "bg-[#EFF3F1]",
+        positive ? "bg-brand-50" : "bg-inset",
         dragOver && "ring-2 ring-brand-400",
       )}
     >
