@@ -294,10 +294,12 @@ model Order {
   customFields   Json? // valores dos CustomFieldDef scope=ORDER (chaveado por `key`)
   createdAt      DateTime        @default(now())
   closedAt       DateTime? // quando foi fechada (FECHADA)
+  number         Int? // nº sequencial do cupom POR conta; atribuído no fechamento (null = comanda antiga)
   items          OrderItem[]
   stockMovements StockMovement[]
   appointments   Appointment[]
 
+  @@unique([accountId, number]) // sequencial por conta; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, status])
   @@index([accountId, closedAt])
 }
