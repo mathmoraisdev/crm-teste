@@ -65,8 +65,8 @@ enum OrderPayment {
 
 enum StockMovementKind {
   ENTRADA // compra/reposição (+)
-  SAIDA   // venda: baixa por comanda fechada (−)
-  AJUSTE  // inventário/correção/perda (+/−)
+  SAIDA // venda: baixa por comanda fechada (−)
+  AJUSTE // inventário/correção/perda (+/−)
 }
 
 enum ExpenseCategory {
@@ -107,51 +107,51 @@ enum LeadsScope {
 }
 
 model User {
-  id              String          @id @default(cuid())
-  name            String
-  email           String          @unique // login (normalizado lowercase)
-  whatsapp        String? // telefone informado no cadastro (opcional)
-  passwordHash    String // scrypt$salt$hash
-  emailVerified   DateTime? // null = e-mail ainda não confirmado
-  sessionEpoch    Int             @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
+  id                 String          @id @default(cuid())
+  name               String
+  email              String          @unique // login (normalizado lowercase)
+  whatsapp           String? // telefone informado no cadastro (opcional)
+  passwordHash       String // scrypt$salt$hash
+  emailVerified      DateTime? // null = e-mail ainda não confirmado
+  sessionEpoch       Int             @default(0) // versão da sessão; trocar/resetar senha incrementa e invalida cookies antigos
   // Prazo de acesso (trial ou pago): a conta funciona enquanto `accessUntil` está
   // no futuro. Expira em tempo real (sem cron) — os gates comparam na hora.
   // `billingOverride` permite forçar/liberar manualmente preservando a data.
-  accessUntil     DateTime?
-  billingOverride BillingOverride @default(AUTO)
+  accessUntil        DateTime?
+  billingOverride    BillingOverride @default(AUTO)
   // Anotação financeira (NÃO afeta o acesso — só registro do admin): como o
   // cliente paga e quando vence a próxima mensalidade. Ambos opcionais.
-  paymentMethod   PaymentMethod?
-  paymentDueDate  DateTime?
+  paymentMethod      PaymentMethod?
+  paymentDueDate     DateTime?
   // Cancelamento self-service pelo DONO: null = assinatura ativa; preenchido = o
   // cliente pediu para não renovar. NÃO corta acesso nem apaga dados — o acesso
   // segue até `accessUntil` e a conta expira sozinha na validade. Sinaliza ao
   // admin no /financeiro. O dono pode reativar (volta a null) antes de expirar.
-  cancelRequestedAt DateTime?
+  cancelRequestedAt  DateTime?
   // Plano comercial do DONO (null = não definido → entitlements não aplicados).
   // O admin define no /financeiro. Só faz sentido no dono (ownerId = null).
-  plan            Plan?
+  plan               Plan?
   // Ramo do negócio da conta (id de BUSINESS_TEMPLATES, ex.: "barbearia"). Fonte
   // de verdade da vertical no NÍVEL CONTA — pré-seleciona o modelo de Atendimento
   // dos números e habilita semear o catálogo. Só faz sentido no dono (ownerId=null).
   businessTemplateId String?
   // Papel dentro da conta. Dono = ADMIN; operadores criados pelo admin = OPERADOR.
-  role            AccountRole     @default(ADMIN)
+  role               AccountRole     @default(ADMIN)
   // Limitações configuráveis do OPERADOR (o admin define no /equipe). No dono/ADMIN
   // são ignoradas — ele sempre tem acesso total. Enforced no servidor (rotas de API).
-  canCampaigns    Boolean         @default(true) // pode criar/disparar campanhas
-  canSettings     Boolean         @default(true) // pode editar Configurações/IA da conta
-  leadsScope      LeadsScope      @default(ALL) // ALL = todos os leads; ASSIGNED = só os atribuídos
+  canCampaigns       Boolean         @default(true) // pode criar/disparar campanhas
+  canSettings        Boolean         @default(true) // pode editar Configurações/IA da conta
+  leadsScope         LeadsScope      @default(ALL) // ALL = todos os leads; ASSIGNED = só os atribuídos
   // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
   // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
-  pipelineLabels  Json?
+  pipelineLabels     Json?
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
-  ownerId         String?
-  owner           User?           @relation("AccountMembers", fields: [ownerId], references: [id], onDelete: Cascade)
-  members         User[]          @relation("AccountMembers")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  ownerId            String?
+  owner              User?           @relation("AccountMembers", fields: [ownerId], references: [id], onDelete: Cascade)
+  members            User[]          @relation("AccountMembers")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   // BYOK: credencial de IA do usuário (null = usa a chave da plataforma).
   aiProvider      AiProvider? // OPENAI | ANTHROPIC | null
@@ -173,26 +173,27 @@ model User {
   offers Offer[]
   sales  Sale[]
 
-  leads                   Lead[]
-  assignedLeads           Lead[]                   @relation("AssignedLeads")
-  tags                    Tag[]
-  customFieldDefs         CustomFieldDef[]
-  campaigns               Campaign[]
-  whatsAppNumbers         WhatsAppNumber[]
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens     PasswordResetToken[]
-  payments                Payment[]                @relation("AccountPayments") // pagamentos DESTA conta (receita)
-  registeredPayments      Payment[]                @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
-  branding                AccountBranding?
-  catalogItems            CatalogItem[]
-  orders                  Order[]                  @relation("OrderAccount")
-  ordersOpened            Order[]                  @relation("OrderOpenedBy")
-  expenses                 Expense[]          @relation("ExpenseAccount")
-  expensesCreated          Expense[]          @relation("ExpenseCreatedBy")
-  recurringExpenses        RecurringExpense[] @relation("RecurringExpenseAccount")
-  recurringExpensesCreated RecurringExpense[] @relation("RecurringExpenseCreatedBy")
-  stockMovements        StockMovement[] @relation("StockMovementAccount")
-  stockMovementsCreated StockMovement[] @relation("StockMovementCreatedBy")
+  leads                    Lead[]
+  assignedLeads            Lead[]                   @relation("AssignedLeads")
+  tags                     Tag[]
+  customFieldDefs          CustomFieldDef[]
+  campaigns                Campaign[]
+  whatsAppNumbers          WhatsAppNumber[]
+  emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+  payments                 Payment[]                @relation("AccountPayments") // pagamentos DESTA conta (receita)
+  registeredPayments       Payment[]                @relation("RegisteredPayments") // pagamentos que ESTE admin lançou
+  branding                 AccountBranding?
+  catalogItems             CatalogItem[]
+  orders                   Order[]                  @relation("OrderAccount")
+  ordersOpened             Order[]                  @relation("OrderOpenedBy")
+  expenses                 Expense[]                @relation("ExpenseAccount")
+  expensesCreated          Expense[]                @relation("ExpenseCreatedBy")
+  recurringExpenses        RecurringExpense[]       @relation("RecurringExpenseAccount")
+  recurringExpensesCreated RecurringExpense[]       @relation("RecurringExpenseCreatedBy")
+  stockMovements           StockMovement[]          @relation("StockMovementAccount")
+  stockMovementsCreated    StockMovement[]          @relation("StockMovementCreatedBy")
+  createdAppointments      Appointment[]            @relation("AppointmentCreatedBy")
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -235,14 +236,14 @@ model AccountNotice {
 // Identidade visual da conta (branding multivertical). 1:1 com o DONO da conta.
 // Ausência = paleta default (verde). Só o accent `brand` é temável nesta versão.
 model AccountBranding {
-  id        String   @id @default(cuid())
-  accountId String   @unique // User.id do dono (tenantUserId)
-  account   User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String @id @default(cuid())
+  accountId String @unique // User.id do dono (tenantUserId)
+  account   User   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  presetId    String? // id do preset aplicado (ex.: "beleza-rose"); null = default/custom
-  brandScale  Json?   // BrandPalette { "50": "R G B", ... }; null = usa DEFAULT_PALETTE
-  logoUrl     String? // URL pública do logo no Storage; null = logo padrão
-  appName     String? // nome exibido no lugar de "Disparador.ai"; null = padrão
+  presetId   String? // id do preset aplicado (ex.: "beleza-rose"); null = default/custom
+  brandScale Json? // BrandPalette { "50": "R G B", ... }; null = usa DEFAULT_PALETTE
+  logoUrl    String? // URL pública do logo no Storage; null = logo padrão
+  appName    String? // nome exibido no lugar de "Disparador.ai"; null = padrão
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -252,23 +253,24 @@ model AccountBranding {
 // preço. Por DONO (tenant), não por número de WhatsApp (diferente de Offer, que
 // é do funil de Pix). Ausência de catálogo = conta ainda não cadastrou nada.
 model CatalogItem {
-  id         String          @id @default(cuid())
-  accountId  String // User.id do dono (tenantUserId)
-  account    User            @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  kind       CatalogItemKind @default(SERVICO)
-  name       String
-  priceCents Int // preço em centavos (BRL)
-  active     Boolean         @default(true)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  orderItems OrderItem[]
+  id           String          @id @default(cuid())
+  accountId    String // User.id do dono (tenantUserId)
+  account      User            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind         CatalogItemKind @default(SERVICO)
+  name         String
+  priceCents   Int // preço em centavos (BRL)
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  orderItems   OrderItem[]
+  appointments Appointment[]
 
   // --- Controle de estoque (opt-in; só faz sentido em kind = PRODUTO) ---
-  trackStock Boolean @default(false) // liga o controle p/ este item
-  sku        String? // código interno opcional
-  stockQty   Int     @default(0) // saldo atual (desnormalizado; = Σ dos movimentos)
-  minStock   Int     @default(0) // alerta quando stockQty <= minStock
-  costCents  Int? // custo unitário em centavos (opcional; p/ valor em estoque)
+  trackStock     Boolean         @default(false) // liga o controle p/ este item
+  sku            String? // código interno opcional
+  stockQty       Int             @default(0) // saldo atual (desnormalizado; = Σ dos movimentos)
+  minStock       Int             @default(0) // alerta quando stockQty <= minStock
+  costCents      Int? // custo unitário em centavos (opcional; p/ valor em estoque)
   stockMovements StockMovement[]
 
   @@index([accountId, active])
@@ -278,22 +280,23 @@ model CatalogItem {
 // Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa
 // (customerName). O total é DERIVADO dos itens (não desnormalizado).
 model Order {
-  id           String        @id @default(cuid())
-  accountId    String // User.id do dono (tenant)
-  account      User          @relation("OrderAccount", fields: [accountId], references: [id], onDelete: Cascade)
-  leadId       String? // opcional: comanda ligada a um lead
-  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  customerName String? // nome avulso quando não há lead
-  status       OrderStatus   @default(ABERTA)
-  openedById   String // User.id de quem abriu (operador) — atribuição p/ relatório futuro
-  openedBy     User          @relation("OrderOpenedBy", fields: [openedById], references: [id])
-  payment      OrderPayment? // definido no fechamento
-  note         String?
-  customFields Json? // valores dos CustomFieldDef scope=ORDER (chaveado por `key`)
-  createdAt    DateTime      @default(now())
-  closedAt     DateTime? // quando foi fechada (FECHADA)
-  items        OrderItem[]
+  id             String          @id @default(cuid())
+  accountId      String // User.id do dono (tenant)
+  account        User            @relation("OrderAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  leadId         String? // opcional: comanda ligada a um lead
+  lead           Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  customerName   String? // nome avulso quando não há lead
+  status         OrderStatus     @default(ABERTA)
+  openedById     String // User.id de quem abriu (operador) — atribuição p/ relatório futuro
+  openedBy       User            @relation("OrderOpenedBy", fields: [openedById], references: [id])
+  payment        OrderPayment? // definido no fechamento
+  note           String?
+  customFields   Json? // valores dos CustomFieldDef scope=ORDER (chaveado por `key`)
+  createdAt      DateTime        @default(now())
+  closedAt       DateTime? // quando foi fechada (FECHADA)
+  items          OrderItem[]
   stockMovements StockMovement[]
+  appointments   Appointment[]
 
   @@index([accountId, status])
   @@index([accountId, closedAt])
@@ -347,24 +350,24 @@ model StockMovement {
 // (paidAt no período), não quando vence. Snapshot imutável: editar o RecurringExpense
 // NÃO altera instâncias já geradas (igual OrderItem x CatalogItem).
 model Expense {
-  id          String          @id @default(cuid())
-  accountId   String // User.id do dono (tenant)
-  account     User            @relation("ExpenseAccount", fields: [accountId], references: [id], onDelete: Cascade)
-  description String
-  amountCents Int // valor em centavos (BRL), >= 0
-  category    ExpenseCategory @default(OUTRO)
-  status      ExpenseStatus   @default(PENDENTE)
-  dueDate     DateTime // vencimento (data da conta); base do "a vencer/vencidas"
-  paidAt      DateTime? // quando foi paga; base do saldo (regime de caixa)
-  note        String?
-  createdById String // quem lançou (operador/dono)
-  createdBy   User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  id              String            @id @default(cuid())
+  accountId       String // User.id do dono (tenant)
+  account         User              @relation("ExpenseAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  description     String
+  amountCents     Int // valor em centavos (BRL), >= 0
+  category        ExpenseCategory   @default(OUTRO)
+  status          ExpenseStatus     @default(PENDENTE)
+  dueDate         DateTime // vencimento (data da conta); base do "a vencer/vencidas"
+  paidAt          DateTime? // quando foi paga; base do saldo (regime de caixa)
+  note            String?
+  createdById     String // quem lançou (operador/dono)
+  createdBy       User              @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
   // Origem recorrente (null = avulsa). competenceMonth "YYYY-MM" garante 1 por mês.
   recurringId     String?
   recurring       RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
   competenceMonth String? // "YYYY-MM" quando veio de recorrência; null quando avulsa
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   // Idempotência da geração mensal. Avulsas têm (null, null) → Postgres trata NULLs
   // como distintos, então várias avulsas coexistem sem colidir.
@@ -488,6 +491,7 @@ model Lead {
   meeting           Meeting?
   sales             Sale[]
   orders            Order[]
+  appointments      Appointment[]
   optOut            Boolean          @default(false)
   optOutAt          DateTime?
   consentSource     String? // origem do opt-in (LGPD)
@@ -650,6 +654,44 @@ model Meeting {
   remindedDayBeforeAt  DateTime?
   remindedHourBeforeAt DateTime?
   createdAt            DateTime      @default(now())
+}
+
+// Status de um agendamento de serviço (≠ MeetingStatus, que é "reunião de venda").
+enum AppointmentStatus {
+  AGENDADO
+  CONFIRMADO
+  REALIZADO
+  FALTOU
+  CANCELADO
+}
+
+// Agendamento de serviço: N por Lead (≠ Meeting, que é 1:1). Cobre recorrência e
+// pacotes (sessões geradas antecipadamente, agrupadas por `seriesId`). Sem `userId`
+// próprio — scoping por `lead.userId`, igual Meeting. Reaproveita o motor de
+// lembretes véspera/1h (remindedDayBeforeAt/remindedHourBeforeAt).
+model Appointment {
+  id                   String            @id @default(cuid())
+  lead                 Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId               String
+  catalogItem          CatalogItem?      @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  catalogItemId        String?
+  serviceName          String? // snapshot do serviço (sobrevive à exclusão do item)
+  scheduledAt          DateTime
+  status               AppointmentStatus @default(AGENDADO)
+  note                 String?
+  seriesId             String? // agrupa sessões de um mesmo pacote
+  order                Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId              String? // comanda gerada quando REALIZADO
+  remindedDayBeforeAt  DateTime?
+  remindedHourBeforeAt DateTime?
+  createdById          String
+  createdBy            User              @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([leadId, scheduledAt])
+  @@index([seriesId])
+  @@index([status, scheduledAt])
 }
 
 model OutboundJob {
