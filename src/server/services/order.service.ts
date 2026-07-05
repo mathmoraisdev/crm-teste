@@ -4,6 +4,8 @@ import type { OrderPayment, OrderStatus } from "@prisma/client";
 import { applyOrderStockExit } from "./stock.service";
 import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
+import { getBranding } from "@/server/services/branding.service";
+import type { ReceiptOrderInput } from "@/lib/receipt/model";
 
 export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields: Record<string, unknown> | null; }
 export interface OrderDTO {
@@ -161,6 +163,34 @@ export async function listOpenOrders(accountId: string): Promise<OrderDTO[]> {
 
 export async function getOrder(accountId: string, id: string): Promise<OrderDTO> {
   return toDTO(await loadOwned(accountId, id));
+}
+
+/** Dados p/ o recibo/cupom: comanda (escopada por conta) + empresa. Faz o I/O e
+ * devolve no formato que `buildReceiptModel` espera — sem chamar o model aqui
+ * (separação I/O × pura). Lança se a comanda não é da conta. */
+export interface ReceiptData {
+  order: ReceiptOrderInput;
+  business: { name: string; subtitle: string | null };
+}
+export async function getReceiptData(accountId: string, orderId: string): Promise<ReceiptData> {
+  const o = await loadOwned(accountId, orderId); // já valida escopo por conta (throw se não achar)
+  const branding = await getBranding(accountId);
+  return {
+    order: {
+      number: o.number,
+      id: o.id,
+      // mesmo nome de exibição do DTO: avulsa usa customerName; de lead usa o nome do lead
+      customerName: o.customerName ?? o.lead?.name ?? null,
+      closedAt: o.closedAt,
+      payment: o.payment,
+      items: o.items.map((i) => ({
+        nameSnapshot: i.nameSnapshot,
+        quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+      })),
+    },
+    business: { name: branding.appName, subtitle: null },
+  };
 }
 
 /** Grava/valida os customFields (scope=ORDER) da comanda. Só comanda ABERTA. */

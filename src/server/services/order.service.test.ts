@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setOrderItemCustomFields } from "./order.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setOrderItemCustomFields, getReceiptData } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 
 async function makeOwner() {
@@ -128,6 +128,34 @@ describe("openOrder — captura de lead por telefone", () => {
     const order = await openOrder(acc, { openedById: acc, customerName: "Zé" });
     expect(order.leadId).toBeNull();
     expect(await prisma.lead.count({ where: { userId: acc } })).toBe(0);
+  });
+});
+
+describe("getReceiptData (dados do recibo, escopado)", () => {
+  it("traz itens, número e nome da empresa (default branding)", async () => {
+    const acc = await makeOwner();
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "João" });
+    await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 2 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    // number é atribuído no fechamento (N1.5); força aqui p/ testar o carry-through
+    await prisma.order.update({ where: { id: o.id }, data: { number: 7 } });
+
+    const data = await getReceiptData(acc, o.id);
+    expect(data.order.number).toBe(7);
+    expect(data.order.customerName).toBe("João");
+    expect(data.order.payment).toBe("DINHEIRO");
+    expect(data.order.items).toEqual([
+      { nameSnapshot: "Corte", quantity: 2, unitPriceCents: 4000 },
+    ]);
+    expect(data.business.name).toBeTruthy();
+  });
+
+  it("recusa comanda de outra conta", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await expect(getReceiptData(other, o.id)).rejects.toThrow();
   });
 });
 
