@@ -19,6 +19,7 @@ interface Item {
   stockQty: number;
   minStock: number;
   costCents: number | null;
+  printSector: string | null;
 }
 
 // Modelos que geram itens (ordenados por categoria) — pré-computado, é estático.
@@ -54,6 +55,7 @@ export function CatalogManager({
   const [initialQty, setInitialQty] = useState("");
   const [minStock, setMinStock] = useState("");
   const [costStr, setCostStr] = useState("");
+  const [sector, setSector] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ export function CatalogManager({
   const [editSku, setEditSku] = useState("");
   const [editMinStock, setEditMinStock] = useState("");
   const [editCost, setEditCost] = useState("");
+  const [editSector, setEditSector] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -96,6 +99,7 @@ export function CatalogManager({
     setInitialQty("");
     setMinStock("");
     setCostStr("");
+    setSector("");
   }
 
   async function addItem() {
@@ -107,7 +111,7 @@ export function CatalogManager({
     const initial = useStock ? Math.max(0, Math.floor(Number(initialQty) || 0)) : 0;
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { name: name.trim(), priceCents, kind };
+      const body: Record<string, unknown> = { name: name.trim(), priceCents, kind, printSector: sector.trim() || null };
       if (useStock) {
         body.trackStock = true;
         body.sku = sku.trim() || null;
@@ -147,6 +151,7 @@ export function CatalogManager({
     setEditSku(it.sku ?? "");
     setEditMinStock(it.trackStock ? String(it.minStock) : "");
     setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
+    setEditSector(it.printSector ?? "");
     setEditError(null);
   }
 
@@ -162,7 +167,7 @@ export function CatalogManager({
     if (priceCents == null) return setEditError("Preço inválido.");
     setEditSaving(true);
     try {
-      const patch: Record<string, unknown> = { name: editName.trim(), priceCents, kind: editKind };
+      const patch: Record<string, unknown> = { name: editName.trim(), priceCents, kind: editKind, printSector: editSector.trim() || null };
       if (editKind === "PRODUTO") {
         patch.trackStock = editTrackStock;
         if (editTrackStock) {
@@ -319,6 +324,12 @@ export function CatalogManager({
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
                     />
                   </div>
+                  <input
+                    value={editSector}
+                    onChange={(e) => setEditSector(e.target.value)}
+                    placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
                       <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -379,6 +390,11 @@ export function CatalogManager({
                     </p>
                     <p className="flex items-center gap-2 text-xs text-slate-400">
                       {it.kind === "SERVICO" ? "Serviço" : "Produto"}
+                      {it.printSector && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {it.printSector}
+                        </span>
+                      )}
                       {it.trackStock && (
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -454,6 +470,12 @@ export function CatalogManager({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
               />
             </div>
+            <input
+              value={sector}
+              onChange={(e) => setSector(e.target.value)}
+              placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-600">

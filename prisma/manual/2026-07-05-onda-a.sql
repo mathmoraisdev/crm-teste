@@ -11,3 +11,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS "Order_accountId_number_key" ON "Order"("accou
 ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "printMode" TEXT;
 ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "printerName" TEXT;
 ALTER TABLE "AccountBranding" ADD COLUMN IF NOT EXISTS "openDrawer" BOOLEAN NOT NULL DEFAULT false;
+
+-- Fase N3: setor de impressão do item (comanda de cozinha).
+ALTER TABLE "CatalogItem" ADD COLUMN IF NOT EXISTS "printSector" TEXT;

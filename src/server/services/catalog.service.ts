@@ -14,6 +14,7 @@ export interface CatalogItemDTO {
   stockQty: number;
   minStock: number;
   costCents: number | null;
+  printSector: string | null;
 }
 
 const upsertSchema = z.object({
@@ -32,10 +33,12 @@ const stockConfigSchema = z.object({
 function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
   trackStock: boolean; sku: string | null; stockQty: number; minStock: number; costCents: number | null;
+  printSector: string | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
     trackStock: o.trackStock, sku: o.sku, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
+    printSector: o.printSector,
   };
 }
 
@@ -44,6 +47,7 @@ export async function createCatalogItem(
   data: {
     name: string; priceCents: number; kind?: CatalogItemKind;
     trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+    printSector?: string | null;
   },
 ): Promise<CatalogItemDTO> {
   const parsed = upsertSchema.parse(data);
@@ -55,6 +59,7 @@ export async function createCatalogItem(
       sku: cfg.sku?.trim() || null,
       minStock: cfg.minStock ?? 0,
       costCents: cfg.costCents ?? null,
+      printSector: data.printSector?.trim().toLowerCase() || null,
     },
   });
   return toDTO(item);
@@ -74,6 +79,7 @@ export async function updateCatalogItem(
   data: {
     name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
     trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+    printSector?: string | null;
   },
 ): Promise<CatalogItemDTO> {
   const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
@@ -97,6 +103,7 @@ export async function updateCatalogItem(
     patch.minStock = data.minStock;
   }
   if (data.costCents !== undefined) patch.costCents = data.costCents === null ? null : data.costCents;
+  if (data.printSector !== undefined) patch.printSector = data.printSector?.trim().toLowerCase() || null;
   const item = await prisma.catalogItem.update({ where: { id }, data: patch });
   return toDTO(item);
 }

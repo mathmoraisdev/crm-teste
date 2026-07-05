@@ -14,6 +14,7 @@ const patchSchema = z.object({
   sku: z.string().nullish(),
   minStock: z.number().int().optional(),
   costCents: z.number().int().nullish(),
+  printSector: z.string().nullish(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

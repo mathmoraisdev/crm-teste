@@ -278,6 +278,9 @@ model CatalogItem {
   costCents      Int? // custo unitário em centavos (opcional; p/ valor em estoque)
   stockMovements StockMovement[]
 
+  // --- Comanda de cozinha (N3): roteia o item p/ a impressora do setor ---
+  printSector String? // ex.: "cozinha", "bar", "balcao"; null = não vai p/ produção
+
   @@index([accountId, active])
   @@index([accountId, trackStock])
 }
