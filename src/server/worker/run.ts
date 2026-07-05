@@ -5,6 +5,7 @@ import { processNextJob, processManualReplies } from "./dispatcher";
 import { reclaimStuckJobs } from "./reaper";
 import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
+import { dispatchDueAppointmentReminders } from "@/server/services/appointment-reminders";
 import { purgeExpiredMedia } from "@/server/services/media-retention";
 import { reconcileAiResume } from "@/server/services/conversation.service";
 import { scheduleResponse } from "./respond-queue";
@@ -183,6 +184,14 @@ async function main() {
         if (r > 0) logger.info({ sent: r }, "[worker] lembretes de reunião enviados");
       } catch (err) {
         logger.error({ err }, "[worker] dispatchDueReminders falhou");
+      }
+      // Lembretes de AGENDAMENTO de serviço (Appointment). Try/catch próprio:
+      // falha aqui não derruba o lembrete de reunião (e vice-versa).
+      try {
+        const r = await dispatchDueAppointmentReminders(new Date());
+        if (r > 0) logger.info({ sent: r }, "[worker] lembretes de agendamento enviados");
+      } catch (err) {
+        logger.error({ err }, "[worker] dispatchDueAppointmentReminders falhou");
       }
       lastReminder = Date.now();
     }
