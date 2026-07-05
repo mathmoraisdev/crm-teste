@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, UsersRound, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset, Receipt } from "lucide-react";
+import { Users, UsersRound, Contact, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
@@ -106,6 +106,7 @@ export function Sidebar({
         { href: "/painel", label: "Painel", icon: LayoutDashboard },
         { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
         { href: "/leads", label: "Leads", icon: Users },
+        { href: "/clientes", label: "Clientes", icon: Contact },
       ],
     },
     {
