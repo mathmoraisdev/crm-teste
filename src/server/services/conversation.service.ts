@@ -3,8 +3,11 @@ import { prisma } from "@/server/db/client";
 import type { AttendanceStatus } from "@prisma/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
-import { generateAttendanceReply } from "@/server/ai/conversation.agent";
+import { generateAttendanceReply, interpretAppointmentReply } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
+import type { AiClient } from "@/server/ai/provider";
+import { decideApptTransition, applyApptTransition } from "./appointment.service";
+import { formatSlot } from "@/lib/utils";
 import { consumeAiCredit, resolveAiModelForUser } from "@/server/services/entitlements";
 import { qualifyLead } from "./qualification.service";
 import { decideInboundMode } from "./inbound-mode";
@@ -441,6 +444,57 @@ export async function handleInbound(
  *  - respeita aiPaused (handoff humano ativo) → silêncio;
  *  - escolha de horário (reunião PROPOSED), qualificação e atendimento.
  */
+/**
+ * Se o lead tem UM agendamento futuro já lembrado, interpreta a última mensagem
+ * como confirmação/recusa/remarcação e aplica a transição. Retorna true se a
+ * mensagem foi "consumida" pelo agendamento (o turno encerra sem atendimento).
+ * Vários agendamentos futuros elegíveis → não adivinha: só sinaliza revisão.
+ */
+async function tryHandleAppointmentReply(
+  lead: { id: string; userId: string },
+  ai: AiClient,
+  lastInbound: string,
+): Promise<boolean> {
+  const now = new Date();
+  const appts = await prisma.appointment.findMany({
+    where: {
+      lead: { userId: lead.userId },
+      leadId: lead.id,
+      status: { in: ["AGENDADO", "CONFIRMADO"] },
+      scheduledAt: { gt: now },
+      OR: [{ remindedDayBeforeAt: { not: null } }, { remindedHourBeforeAt: { not: null } }],
+    },
+    orderBy: { scheduledAt: "asc" },
+    select: { id: true, scheduledAt: true, serviceName: true },
+  });
+  if (appts.length === 0) return false;
+
+  const reply = await interpretAppointmentReply({
+    ai,
+    serviceName: appts[0].serviceName,
+    whenLabel: formatSlot(appts[0].scheduledAt.toISOString(), env.SCHEDULING_TIMEZONE),
+    leadMessage: lastInbound,
+  });
+  const t = decideApptTransition(reply);
+  if (!t) return false; // unclear → deixa seguir p/ atendimento normal
+
+  // Mais de um agendamento futuro elegível: não dá p/ saber qual → só sinaliza,
+  // sem mudar status de nenhum. Marca todos p/ revisão manual.
+  if (appts.length > 1) {
+    for (const a of appts) {
+      await applyApptTransition(lead.userId, a.id, {
+        status: null,
+        needsReview: true,
+        reviewReason: "Cliente respondeu ao lembrete (vários agendamentos) — conferir qual",
+      });
+    }
+    return true;
+  }
+
+  await applyApptTransition(lead.userId, appts[0].id, t);
+  return true;
+}
+
 export async function respondToLead(leadId: string): Promise<void> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!lead) return;
@@ -503,6 +557,23 @@ export async function respondToLead(leadId: string): Promise<void> {
   if (status === "REUNIAO_AGENDADA") {
     // Reunião já confirmada — não reprocessa qualificação.
     return;
+  }
+
+  // 3b. Resposta a um lembrete de agendamento (confirma/recusa/remarca).
+  //     Precede a qualificação: se o cliente respondeu sobre o agendamento, o
+  //     turno é sobre isso — não roda atendimento por cima.
+  {
+    const lastInbound = await prisma.message.findFirst({
+      where: { leadId: lead.id, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      select: { content: true },
+    });
+    if (lastInbound?.content) {
+      const model = await resolveAiModelForUser(lead.userId, null);
+      if (!(await ensureAiCredit(lead, model))) return; // cota → fila humana
+      const ai = await getAiClient(lead.userId, model ?? undefined);
+      if (await tryHandleAppointmentReply(lead, ai, lastInbound.content)) return;
+    }
   }
 
   // Config da empresa (número) dona da conversa. Default seguro se faltar número.
