@@ -123,7 +123,9 @@ export function SalesHistoryPanel() {
               type="button"
               onClick={() => setPeriod(p.value)}
               className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
-                period === p.value ? "bg-brand-500 text-white" : "text-slate-600 hover:bg-slate-100"
+                period === p.value
+                  ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               {p.label}
