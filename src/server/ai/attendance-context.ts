@@ -45,6 +45,9 @@ export interface CatalogItemForContext {
   name: string;
   priceCents: number;
   kind: "SERVICO" | "PRODUTO";
+  /** Opcionais: quando ausentes, o item é sempre tratado como disponível (retrocompat). */
+  trackStock?: boolean;
+  stockQty?: number;
 }
 
 /**
@@ -56,7 +59,11 @@ export function renderCatalogForAI(items: CatalogItemForContext[], limit = 40): 
   if (!items.length) return "";
   const lines = items.slice(0, limit).map((i) => {
     const price = i.priceCents > 0 ? formatCentsBRL(i.priceCents) : "sob consulta";
-    return `- ${i.name}: ${price}`;
+    // Só marca esgotado quando o item controla estoque (opt-in) e zerou/negativou.
+    // NÃO expõe a quantidade — só disponível vs indisponível (decisão v1).
+    const soldOut = i.trackStock && (i.stockQty ?? 0) <= 0;
+    const mark = soldOut ? " — INDISPONÍVEL (sem estoque)" : "";
+    return `- ${i.name}: ${price}${mark}`;
   });
   return `SERVIÇOS E PRODUTOS (catálogo da empresa; informe preço só se listado):\n${lines.join("\n")}`;
 }

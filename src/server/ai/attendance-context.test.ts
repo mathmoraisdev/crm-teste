@@ -58,4 +58,45 @@ describe("renderCatalogForAI", () => {
     const out = renderCatalogForAI(many, 40);
     expect(out.split("\n").filter((l) => l.startsWith("- ")).length).toBe(40);
   });
+
+  it("marca INDISPONÍVEL quando trackStock e estoque <= 0", () => {
+    const out = renderCatalogForAI([
+      { name: "Camiseta P", priceCents: 5000, kind: "PRODUTO", trackStock: true, stockQty: 0 },
+    ]);
+    expect(out).toMatch(/Camiseta P.*R\$ 50,00.*INDISPON[IÍ]VEL/i);
+  });
+
+  it("marca INDISPONÍVEL também com estoque negativo", () => {
+    const out = renderCatalogForAI([
+      { name: "Camiseta M", priceCents: 5000, kind: "PRODUTO", trackStock: true, stockQty: -3 },
+    ]);
+    expect(out).toMatch(/Camiseta M.*INDISPON[IÍ]VEL/i);
+  });
+
+  it("NÃO marca quando há estoque", () => {
+    const out = renderCatalogForAI([
+      { name: "Camiseta G", priceCents: 5000, kind: "PRODUTO", trackStock: true, stockQty: 7 },
+    ]);
+    expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
+  });
+
+  it("NÃO marca quando trackStock é false (mesmo com stockQty 0)", () => {
+    const out = renderCatalogForAI([
+      { name: "Corte de Cabelo", priceCents: 4000, kind: "SERVICO", trackStock: false, stockQty: 0 },
+    ]);
+    expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
+  });
+
+  it("NÃO expõe a quantidade numérica", () => {
+    const out = renderCatalogForAI([
+      { name: "Boné", priceCents: 3000, kind: "PRODUTO", trackStock: true, stockQty: 42 },
+    ]);
+    expect(out).not.toContain("42");
+  });
+
+  it("itens sem campos de estoque continuam funcionando (retrocompat)", () => {
+    const out = renderCatalogForAI([{ name: "Combo", priceCents: 2500, kind: "PRODUTO" }]);
+    expect(out).toContain("Combo");
+    expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
+  });
 });
