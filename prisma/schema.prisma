@@ -289,6 +289,7 @@ model Order {
   openedBy     User          @relation("OrderOpenedBy", fields: [openedById], references: [id])
   payment      OrderPayment? // definido no fechamento
   note         String?
+  customFields Json? // valores dos CustomFieldDef scope=ORDER (chaveado por `key`)
   createdAt    DateTime      @default(now())
   closedAt     DateTime? // quando foi fechada (FECHADA)
   items        OrderItem[]
@@ -310,6 +311,7 @@ model OrderItem {
   nameSnapshot   String
   unitPriceCents Int
   quantity       Int          @default(1)
+  customFields   Json? // valores dos CustomFieldDef scope=ORDER_ITEM (chaveado por `key`)
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
@@ -530,20 +532,28 @@ enum CustomFieldType {
   BOOLEAN
 }
 
-// Definição de um campo customizado por conta. O valor vive em `Lead.customFields`
-// (Json), chaveado por `key`.
+enum CustomFieldScope {
+  LEAD
+  ORDER
+  ORDER_ITEM
+}
+
+// Definição de um campo customizado por conta. O valor vive em `Lead.customFields`,
+// `Order.customFields` ou `OrderItem.customFields` (Json), chaveado por `key`,
+// conforme o `scope`.
 model CustomFieldDef {
-  id        String          @id @default(cuid())
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   key       String // slug estável (chave no Json)
   label     String
-  type      CustomFieldType @default(TEXT)
+  type      CustomFieldType  @default(TEXT)
+  scope     CustomFieldScope @default(LEAD)
   options   Json? // SELECT: ["A","B"]
-  order     Int             @default(0)
-  createdAt DateTime        @default(now())
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
 
-  @@unique([userId, key])
+  @@unique([userId, scope, key])
   @@index([userId])
 }
 
