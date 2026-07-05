@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderItemCustomFields, getReceiptData } from "./order.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 
 async function makeOwner() {
@@ -96,6 +96,54 @@ describe("setItemQuantity — quantidade editável", () => {
     const withItem = await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 1 });
     await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
     await expect(setItemQuantity(acc, o.id, withItem.items[0].id, 2)).rejects.toThrow(/fechada/i);
+  });
+});
+
+describe("setOrderAdjustments — desconto/acréscimo/gorjeta", () => {
+  async function abertaCom10000(acc: string) {
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: 10000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    return o;
+  }
+
+  it("grava ajustes e recalcula o total derivado", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom10000(acc);
+    const upd = await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500, tableLabel: "Mesa 3" });
+    expect(upd.discountCents).toBe(1500);
+    expect(upd.surchargeCents).toBe(850);
+    expect(upd.tipCents).toBe(500);
+    expect(upd.tableLabel).toBe("Mesa 3");
+    expect(upd.totalCents).toBe(9850); // max(0,10000-1500)+850+500
+  });
+
+  it("rejeita desconto maior que o subtotal", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom10000(acc);
+    await expect(setOrderAdjustments(acc, o.id, { discountCents: 12000 })).rejects.toThrow(/subtotal/i);
+  });
+
+  it("rejeita valores negativos", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom10000(acc);
+    await expect(setOrderAdjustments(acc, o.id, { surchargeCents: -100 })).rejects.toThrow();
+  });
+
+  it("null limpa o ajuste", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom10000(acc);
+    await setOrderAdjustments(acc, o.id, { discountCents: 1000 });
+    const upd = await setOrderAdjustments(acc, o.id, { discountCents: null });
+    expect(upd.discountCents).toBeNull();
+    expect(upd.totalCents).toBe(10000);
+  });
+
+  it("recusa comanda FECHADA", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom10000(acc);
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(setOrderAdjustments(acc, o.id, { tipCents: 200 })).rejects.toThrow(/fechada/i);
   });
 });
 

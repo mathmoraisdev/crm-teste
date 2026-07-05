@@ -164,6 +164,47 @@ export async function setItemQuantity(
   return toDTO(await loadOwned(accountId, orderId));
 }
 
+/** Grava os ajustes financeiros da comanda (só ABERTA). Valores em centavos —
+ * a UI resolve % → centavos na borda. `null` limpa o ajuste; `undefined` (chave
+ * ausente) não mexe. Rejeita negativos e desconto maior que o subtotal atual. */
+export async function setOrderAdjustments(
+  accountId: string,
+  orderId: string,
+  patch: {
+    discountCents?: number | null;
+    surchargeCents?: number | null;
+    tipCents?: number | null;
+    tableLabel?: string | null;
+  },
+): Promise<OrderDTO> {
+  const order = await loadOwned(accountId, orderId);
+  if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
+
+  const validate = (v: number | null | undefined, label: string): number | null | undefined => {
+    if (v === undefined) return undefined; // não mexe
+    if (v === null) return null; // limpa
+    if (!Number.isInteger(v) || v < 0) throw new Error(`${label} inválido.`);
+    return v;
+  };
+  const discountCents = validate(patch.discountCents, "Desconto");
+  const surchargeCents = validate(patch.surchargeCents, "Acréscimo");
+  const tipCents = validate(patch.tipCents, "Gorjeta");
+
+  if (typeof discountCents === "number") {
+    const subtotal = order.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+    if (discountCents > subtotal) throw new Error("Desconto maior que o subtotal.");
+  }
+
+  const data: Prisma.OrderUpdateInput = {};
+  if (discountCents !== undefined) data.discountCents = discountCents;
+  if (surchargeCents !== undefined) data.surchargeCents = surchargeCents;
+  if (tipCents !== undefined) data.tipCents = tipCents;
+  if (patch.tableLabel !== undefined) data.tableLabel = patch.tableLabel?.trim() || null;
+
+  await prisma.order.update({ where: { id: orderId }, data });
+  return toDTO(await loadOwned(accountId, orderId));
+}
+
 export async function removeItem(accountId: string, orderId: string, itemId: string): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId);
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
