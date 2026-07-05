@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 import { formatCentsBRL } from "@/lib/money";
+import { printReceipt } from "@/lib/receipt/print-client";
 import { PAYMENT_LABEL, PAYMENT_TONE, type Payment } from "./payment-labels";
 
 type Period = "hoje" | "7d" | "mes" | "custom";
@@ -195,6 +196,7 @@ export function SalesHistoryPanel() {
                   <Th>Operador</Th>
                   <Th>Pagamento</Th>
                   <Th className="text-right">Total</Th>
+                  <Th className="text-right">Cupom</Th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +214,16 @@ export function SalesHistoryPanel() {
                     </Td>
                     <Td className="whitespace-nowrap text-right font-medium text-ink">
                       {formatCentsBRL(r.totalCents)}
+                    </Td>
+                    <Td className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => printReceipt(r.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-600"
+                        title="Reimprimir cupom"
+                      >
+                        <Printer size={14} /> Reimprimir
+                      </button>
                     </Td>
                   </tr>
                 ))}

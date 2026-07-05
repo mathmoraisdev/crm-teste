@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus, Trash2, Search, X, SlidersHorizontal } from "lucide-react";
+import { Loader2, Plus, Trash2, Search, X, SlidersHorizontal, Printer } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
+import { printReceipt } from "@/lib/receipt/print-client";
 import { OrderCustomFields } from "@/components/vendas/OrderCustomFields";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
@@ -50,6 +51,10 @@ export function OrderBoard() {
   const [itemDefs, setItemDefs] = useState<CustomFieldDefItem[]>([]);
   const [todayCents, setTodayCents] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Comanda recém-fechada: some da lista de abertas, então guardamos aqui p/
+  // oferecer a impressão do cupom sem forçar impressão automática (o operador
+  // escolhe 80/58 e evita imprimir sem querer).
+  const [justClosed, setJustClosed] = useState<{ id: string; name: string } | null>(null);
 
   const selected = orders?.find((o) => o.id === selectedId) ?? null;
 
@@ -196,6 +201,29 @@ export function OrderBoard() {
         {error && (
           <p className="mb-3 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
+        {justClosed && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-success-surface px-3 py-2.5">
+            <p className="text-sm font-medium text-success">
+              Comanda de {justClosed.name} fechada ✓
+            </p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => printReceipt(justClosed.id, 80)}>
+                <Printer size={14} /> Imprimir 80mm
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => printReceipt(justClosed.id, 58)}>
+                58mm
+              </Button>
+              <button
+                type="button"
+                onClick={() => setJustClosed(null)}
+                className="text-slate-400 hover:text-ink"
+                aria-label="Dispensar"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        )}
         {selected ? (
           <OrderPanel
             order={selected}
@@ -203,6 +231,7 @@ export function OrderBoard() {
             orderDefs={orderDefs}
             itemDefs={itemDefs}
             onChanged={refreshAfterAction}
+            onClosed={(id, name) => setJustClosed({ id, name })}
             onError={setError}
           />
         ) : (
@@ -368,6 +397,7 @@ function OrderPanel({
   orderDefs,
   itemDefs,
   onChanged,
+  onClosed,
   onError,
 }: {
   order: Order;
@@ -375,6 +405,7 @@ function OrderPanel({
   orderDefs: CustomFieldDefItem[];
   itemDefs: CustomFieldDefItem[];
   onChanged: () => Promise<void>;
+  onClosed: (orderId: string, name: string) => void;
   onError: (msg: string | null) => void;
 }) {
   const [catQuery, setCatQuery] = useState("");
@@ -451,12 +482,16 @@ function OrderPanel({
   const removeLine = (itemId: string) =>
     call(`/api/vendas/orders/${order.id}/items/${itemId}`, { method: "DELETE" });
 
-  const close = () =>
-    call(`/api/vendas/orders/${order.id}`, {
+  async function close() {
+    const ok = await call(`/api/vendas/orders/${order.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ payment }),
     });
+    // Sucesso: a comanda vira FECHADA e sai da lista de abertas — sinaliza p/ o
+    // board oferecer a impressão do cupom (id capturado antes do refresh).
+    if (ok) onClosed(order.id, order.customerName ?? "lead");
+  }
 
   return (
     <Card>
