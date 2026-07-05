@@ -195,6 +195,83 @@ describe("closeOrder — baixa de estoque", () => {
   });
 });
 
+describe("closeOrder — multi-pagamento e troco", () => {
+  async function abertaCom(acc: string, precoCents: number) {
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: precoCents });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    return o;
+  }
+
+  it("um tender DINHEIRO com valor recebido → troco derivado", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 9850);
+    const full = await closeOrder(acc, o.id, {
+      tenders: [{ method: "DINHEIRO", amountCents: 10000 }],
+      amountTenderedCents: 10000,
+      closedById: acc,
+    });
+    expect(full.status).toBe("FECHADA");
+    expect(full.changeCents).toBe(150); // 10000 − 9850
+    expect(full.payment).toBe("DINHEIRO");
+    const tenders = await prisma.orderTender.findMany({ where: { orderId: o.id } });
+    expect(tenders).toHaveLength(1);
+    expect(tenders[0].amountCents).toBe(10000);
+  });
+
+  it("meios mistos (PIX + DINHEIRO) somam o total → payment OUTRO, sem troco", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 9850);
+    const full = await closeOrder(acc, o.id, {
+      tenders: [{ method: "PIX", amountCents: 5000 }, { method: "DINHEIRO", amountCents: 4850 }],
+      closedById: acc,
+    });
+    expect(full.payment).toBe("OUTRO");
+    expect(full.changeCents ?? 0).toBe(0);
+    expect(await prisma.orderTender.count({ where: { orderId: o.id } })).toBe(2);
+  });
+
+  it("parcial: sem allowPartial lança; com a flag, fecha com saldo", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 9850);
+    await expect(closeOrder(acc, o.id, { tenders: [{ method: "PIX", amountCents: 5000 }], closedById: acc })).rejects.toThrow();
+    const full = await closeOrder(acc, o.id, { tenders: [{ method: "PIX", amountCents: 5000 }], allowPartial: true, closedById: acc });
+    expect(full.status).toBe("FECHADA");
+    expect(full.payment).toBe("PIX");
+  });
+
+  it("retrocompat: { payment } vira um tender do total", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 4000);
+    const full = await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    expect(full.payment).toBe("PIX");
+    const tenders = await prisma.orderTender.findMany({ where: { orderId: o.id } });
+    expect(tenders).toHaveLength(1);
+    expect(tenders[0].method).toBe("PIX");
+    expect(tenders[0].amountCents).toBe(4000);
+  });
+
+  it("guarda de duplo-fechamento continua barrando", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 4000);
+    await closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 4000 }], closedById: acc });
+    await expect(closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 4000 }], closedById: acc })).rejects.toThrow();
+    expect(await prisma.orderTender.count({ where: { orderId: o.id } })).toBe(1); // não duplicou
+  });
+
+  it("troco aplica os ajustes no total (desconto reduz o total, aumenta o troco)", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 10000);
+    await setOrderAdjustments(acc, o.id, { discountCents: 1500 }); // total 8500
+    const full = await closeOrder(acc, o.id, {
+      tenders: [{ method: "DINHEIRO", amountCents: 10000 }],
+      amountTenderedCents: 10000,
+      closedById: acc,
+    });
+    expect(full.changeCents).toBe(1500); // 10000 − 8500
+  });
+});
+
 describe("openOrder — captura de lead por telefone", () => {
   it("com telefone: cria lead e vincula na comanda", async () => {
     const acc = await makeOwner();

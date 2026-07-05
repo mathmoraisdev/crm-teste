@@ -217,14 +217,54 @@ export async function removeItem(accountId: string, orderId: string, itemId: str
 export async function closeOrder(
   accountId: string,
   orderId: string,
-  data: { payment: OrderPayment; note?: string; closedById?: string },
+  data: {
+    tenders?: { method: OrderPayment; amountCents: number }[];
+    payment?: OrderPayment; // retrocompat: vira um tender cobrindo o total
+    amountTenderedCents?: number; // valor recebido em espécie (base do troco)
+    note?: string;
+    closedById?: string;
+    allowPartial?: boolean; // soma < total só fecha com esta flag (dinheiro não trava)
+  },
 ): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId); // já inclui items
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
   const closerId = data.closedById ?? order.openedById;
+
+  // Total derivado COM os ajustes da comanda — é a base do saldo e do troco.
+  const total = orderTotalCents({
+    items: order.items,
+    discountCents: order.discountCents,
+    surchargeCents: order.surchargeCents,
+    tipCents: order.tipCents,
+  });
+
+  // Resolve os meios de pagamento. Retrocompat: o antigo { payment } vira um
+  // único tender cobrindo o total.
+  const tenders = data.tenders ?? (data.payment ? [{ method: data.payment, amountCents: total }] : []);
+  if (tenders.length === 0) throw new Error("Informe ao menos um meio de pagamento.");
+  for (const t of tenders) {
+    if (!Number.isInteger(t.amountCents) || t.amountCents < 0) throw new Error("Valor de pagamento inválido.");
+  }
+
+  const paid = tenders.reduce((s, t) => s + t.amountCents, 0);
+  if (paid < total && !data.allowPartial) {
+    throw new Error("Pagamento menor que o total. Confirme o fechamento parcial.");
+  }
+
+  // Troco só faz sentido com dinheiro: base = valor recebido em espécie; o
+  // excedente sobre o total vira troco (nunca bloqueia — [[caixa-despesas-reposicionamento]]).
+  const hasCash = tenders.some((t) => t.method === "DINHEIRO");
+  const amountTendered = data.amountTenderedCents ?? null;
+  const changeCents = hasCash && amountTendered != null ? Math.max(0, amountTendered - total) : 0;
+
+  // Order.payment é mantido espelhado (retrocompat): um único método → ele;
+  // misto → OUTRO. A verdade da receita por meio passa a ser OrderTender (Fase 4).
+  const distinctMethods = [...new Set(tenders.map((t) => t.method))];
+  const payment: OrderPayment = distinctMethods.length === 1 ? distinctMethods[0] : "OUTRO";
+
   // O nº do cupom (`number`) é sequencial POR conta e é atribuído DENTRO da mesma
-  // transação que fecha (junto de closedAt e da baixa de estoque), p/ nunca haver
-  // cupom sem número. O cálculo max+1 pode colidir sob concorrência (dois
+  // transação que fecha (junto de closedAt, tenders e da baixa de estoque), p/ nunca
+  // haver cupom sem número. O cálculo max+1 pode colidir sob concorrência (dois
   // fechamentos da mesma conta lendo o mesmo max antes de qualquer commit): o
   // @@unique([accountId, number]) barra o 2º com P2002 e a transação inteira rola
   // back — refazemos numa nova tx, onde o max já reflete o 1º. Trade-off: retry
@@ -234,15 +274,21 @@ export async function closeOrder(
       await prisma.$transaction(async (tx) => {
         // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
         // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
-        // e aborta ANTES da baixa, evitando decremento/​SAIDA em dobro.
+        // e aborta ANTES da baixa/tenders, evitando decremento/SAIDA/tender em dobro.
         const res = await tx.order.updateMany({
           where: { id: orderId, status: "ABERTA" },
-          data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() },
+          data: {
+            status: "FECHADA", payment, note: data.note?.trim() || null, closedAt: new Date(),
+            amountTenderedCents: amountTendered, changeCents,
+          },
         });
         if (res.count === 0) throw new Error("Comanda já fechada.");
         const agg = await tx.order.aggregate({ where: { accountId }, _max: { number: true } });
         const next = (agg._max.number ?? 0) + 1;
         await tx.order.update({ where: { id: orderId }, data: { number: next } });
+        await tx.orderTender.createMany({
+          data: tenders.map((t) => ({ orderId, method: t.method, amountCents: t.amountCents })),
+        });
         await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
       });
       break;
