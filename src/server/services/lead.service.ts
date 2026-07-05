@@ -257,6 +257,7 @@ export async function updateLead(
       userId,
       exists.customFields,
       data.customFields,
+      "LEAD",
     )) as Prisma.InputJsonValue;
   }
   if (data.email !== undefined) {

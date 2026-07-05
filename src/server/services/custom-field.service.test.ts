@@ -46,4 +46,17 @@ describe("mergeCustomFields", () => {
     const ok = await mergeCustomFields("dono-1", null, { plano: "A" });
     expect(ok).toEqual({ plano: "A" });
   });
+
+  it("mergeCustomFields filtra defs pelo escopo informado", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.customFieldDef.findMany as any).mockResolvedValue([
+      { key: "placa", type: "TEXT", options: null, label: "Placa" },
+    ]);
+    const { mergeCustomFields } = await import("./custom-field.service");
+    const out = await mergeCustomFields("dono-1", null, { placa: "ABC1D23" }, "ORDER_ITEM");
+    expect(out).toEqual({ placa: "ABC1D23" });
+    expect((prisma.customFieldDef.findMany as any).mock.calls[0][0]).toEqual({
+      where: { userId: "dono-1", scope: "ORDER_ITEM" },
+    });
+  });
 });

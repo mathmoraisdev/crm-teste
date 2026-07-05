@@ -1,6 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { Prisma } from "@prisma/client";
-import type { CustomFieldType } from "@prisma/client";
+import type { CustomFieldType, CustomFieldScope } from "@prisma/client";
 
 const FIELD_TYPES: CustomFieldType[] = ["TEXT", "NUMBER", "DATE", "SELECT", "BOOLEAN"];
 
@@ -21,6 +21,7 @@ export interface CustomFieldDefItem {
   key: string;
   label: string;
   type: CustomFieldType;
+  scope: CustomFieldScope;
   options: string[] | null;
   order: number;
 }
@@ -30,6 +31,7 @@ function toItem(d: {
   key: string;
   label: string;
   type: CustomFieldType;
+  scope: CustomFieldScope;
   options: Prisma.JsonValue;
   order: number;
 }): CustomFieldDefItem {
@@ -38,15 +40,19 @@ function toItem(d: {
     key: d.key,
     label: d.label,
     type: d.type,
+    scope: d.scope,
     options: Array.isArray(d.options) ? (d.options as string[]) : null,
     order: d.order,
   };
 }
 
-/** Defs da conta, ordenadas por `order` e depois `label`. */
-export async function listDefs(userId: string): Promise<CustomFieldDefItem[]> {
+/** Defs da conta no escopo informado (default LEAD), ordenadas por `order` e depois `label`. */
+export async function listDefs(
+  userId: string,
+  scope: CustomFieldScope = "LEAD",
+): Promise<CustomFieldDefItem[]> {
   const defs = await prisma.customFieldDef.findMany({
-    where: { userId },
+    where: { userId, scope },
     orderBy: [{ order: "asc" }, { label: "asc" }],
   });
   return defs.map(toItem);
@@ -61,7 +67,13 @@ function normalizeOptions(type: CustomFieldType, options?: string[] | null): str
 
 export async function createDef(
   userId: string,
-  data: { label: string; type: CustomFieldType; options?: string[] | null; order?: number },
+  data: {
+    label: string;
+    type: CustomFieldType;
+    scope?: CustomFieldScope;
+    options?: string[] | null;
+    order?: number;
+  },
 ): Promise<CustomFieldDefItem> {
   const label = data.label.trim();
   if (!label) throw new Error("Rótulo do campo obrigatório.");
@@ -76,6 +88,7 @@ export async function createDef(
         key,
         label,
         type: data.type,
+        scope: data.scope ?? "LEAD",
         options: options ?? undefined,
         order: data.order ?? 0,
       },
@@ -89,6 +102,11 @@ export async function createDef(
   }
 }
 
+/**
+ * Edita label/type/options/order de uma def. O `scope` é IMUTÁVEL após criado
+ * (não é aceito aqui): trocar de escopo mudaria a chave do unique e órfãos os
+ * valores já gravados em Lead/Order/OrderItem.
+ */
 export async function updateDef(
   userId: string,
   id: string,
@@ -134,8 +152,9 @@ export async function mergeCustomFields(
   userId: string,
   current: Prisma.JsonValue | null | undefined,
   patch: Record<string, unknown>,
+  scope: CustomFieldScope = "LEAD",
 ): Promise<Record<string, unknown>> {
-  const defs = await prisma.customFieldDef.findMany({ where: { userId } });
+  const defs = await prisma.customFieldDef.findMany({ where: { userId, scope } });
   const byKey = new Map(defs.map((d) => [d.key, d]));
 
   const base: Record<string, unknown> =
