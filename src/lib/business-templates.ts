@@ -60,6 +60,14 @@ export interface BusinessTemplate {
   customInstructions: string; // regras específicas da vertical
   suggested: TemplateSuggestedToggles;
   suggestedOffers?: TemplateSuggestedOffer[];
+  // Campos personalizados sugeridos pelo ramo (semeados na comanda do Caixa via
+  // seedCustomFieldPreset). Escopo ORDER (comanda) ou ORDER_ITEM (por item).
+  customFieldsPreset?: {
+    scope: "ORDER" | "ORDER_ITEM";
+    label: string;
+    type: "TEXT" | "NUMBER" | "DATE" | "SELECT" | "BOOLEAN";
+    options?: string[];
+  }[];
 }
 
 /** Campos do formulário de Atendimento que um modelo consegue preencher. */
@@ -621,6 +629,14 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não afirme disponibilidade ou preço de um veículo específico sem confirmar no estoque. Em financiamento, condições dependem de análise de crédito — não prometa aprovação nem parcela fechada. A avaliação do usado (troca) é sempre presencial.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Chassi", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "RENAVAM", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Ano/Modelo", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "KM", type: "NUMBER" },
+      { scope: "ORDER_ITEM", label: "Cor", type: "TEXT" },
+    ],
   },
   {
     id: "estetica-automotiva-lavarapido",

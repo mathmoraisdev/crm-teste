@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
 import type { CustomFieldType } from "@prisma/client";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
+import { getTemplate } from "@/lib/business-templates";
 
 const TYPE_LABEL: Record<CustomFieldType, string> = {
   TEXT: "Texto",
@@ -19,24 +20,48 @@ const TYPE_LABEL: Record<CustomFieldType, string> = {
 
 const TYPES = Object.keys(TYPE_LABEL) as CustomFieldType[];
 
+type Scope = "LEAD" | "ORDER" | "ORDER_ITEM";
+const SCOPES: Scope[] = ["LEAD", "ORDER", "ORDER_ITEM"];
+const SCOPE_LABEL: Record<Scope, string> = {
+  LEAD: "Lead",
+  ORDER: "Comanda",
+  ORDER_ITEM: "Item da comanda",
+};
+const SCOPE_SUBTITLE: Record<Scope, string> = {
+  LEAD: "Campos extras exibidos no cadastro e no detalhe de cada lead.",
+  ORDER: "Campos extras exibidos na comanda do Caixa.",
+  ORDER_ITEM: "Campos extras exibidos em cada item da comanda (ex.: placa, chassi).",
+};
+
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
 
 /** CRUD dos campos customizados da conta (usado em /configuracoes). */
-export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
+export function CustomFieldsManager({
+  canEdit = true,
+  businessTemplateId = null,
+}: {
+  canEdit?: boolean;
+  businessTemplateId?: string | null;
+}) {
   const [defs, setDefs] = useState<CustomFieldDefItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>("LEAD");
+  const [seeding, setSeeding] = useState(false);
 
   const [editId, setEditId] = useState<string | "new" | null>(null);
   const [label, setLabel] = useState("");
   const [type, setType] = useState<CustomFieldType>("TEXT");
   const [optionsText, setOptionsText] = useState("");
 
+  const template = businessTemplateId ? getTemplate(businessTemplateId) : undefined;
+  const hasPreset = !!template?.customFieldsPreset?.length;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/custom-fields", { cache: "no-store" });
+      const res = await fetch(`/api/custom-fields?scope=${scope}`, { cache: "no-store" });
       const data = await res.json();
       setDefs((data.defs as CustomFieldDefItem[]) ?? []);
     } catch {
@@ -44,11 +69,26 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  async function seedPreset() {
+    setSeeding(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/custom-fields/seed-preset", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Falha ao usar campos do ramo");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao usar campos do ramo");
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   function reset() {
     setEditId(null);
@@ -80,7 +120,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
       type === "SELECT"
         ? optionsText.split(",").map((s) => s.trim()).filter(Boolean)
         : undefined;
-    const body = { label: label.trim(), type, options };
+    const body = { label: label.trim(), type, options, ...(editId === "new" ? { scope } : {}) };
     const isNew = editId === "new";
     const res = await fetch(isNew ? "/api/custom-fields" : `/api/custom-fields/${editId}`, {
       method: isNew ? "POST" : "PATCH",
@@ -109,7 +149,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
     <Card>
       <CardHeader
         title="Campos customizados"
-        subtitle="Campos extras exibidos no cadastro e no detalhe de cada lead."
+        subtitle={SCOPE_SUBTITLE[scope]}
         action={
           canEdit &&
           editId === null && (
@@ -120,6 +160,33 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
         }
       />
       <div className="space-y-2 px-4 py-3">
+        {/* Filtro de escopo */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {SCOPES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                reset();
+                setScope(s);
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                scope === s
+                  ? "bg-brand-100 text-brand-700"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {SCOPE_LABEL[s]}
+            </button>
+          ))}
+        </div>
+
+        {canEdit && hasPreset && editId === null && (
+          <Button size="sm" variant="secondary" onClick={seedPreset} loading={seeding}>
+            <Plus size={14} /> Usar campos do meu ramo ({template!.label})
+          </Button>
+        )}
+
         {error && (
           <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
@@ -207,7 +274,7 @@ export function CustomFieldsManager({ canEdit = true }: { canEdit?: boolean }) {
                   message={
                     <>
                       Apagar o campo <strong>{d.label}</strong>? Os valores já preenchidos
-                      nos leads serão perdidos. Esta ação não pode ser desfeita.
+                      serão perdidos. Esta ação não pode ser desfeita.
                     </>
                   }
                   trigger={(open) => (

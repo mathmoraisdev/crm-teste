@@ -85,7 +85,7 @@ export default async function ConfiguracoesPage() {
       )}
 
       <div className="mt-6">
-        <CustomFieldsManager canEdit={canSettings} />
+        <CustomFieldsManager canEdit={canSettings} businessTemplateId={businessTemplateId} />
       </div>
 
       <div className="mt-6">
