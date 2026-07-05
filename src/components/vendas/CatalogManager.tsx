@@ -247,7 +247,7 @@ export function CatalogManager({
           </div>
         ) : items.length === 0 ? (
           canEdit ? (
-            <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50/50 px-4 py-4">
+            <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50/50 px-4 py-4 dark:border-brand-500/30 dark:bg-brand-500/10">
               <div className="flex items-start gap-2">
                 <Sparkles size={18} className="mt-0.5 shrink-0 text-brand-600" />
                 <div>

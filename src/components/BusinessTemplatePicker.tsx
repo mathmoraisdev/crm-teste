@@ -63,7 +63,7 @@ export function BusinessTemplatePicker({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-3">
+    <div className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-3 dark:border-brand-500/30 dark:bg-brand-500/10">
       <p className="text-xs font-semibold text-slate-700">
         Começar por um modelo de negócio
       </p>
