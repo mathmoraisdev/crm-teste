@@ -11,7 +11,11 @@ export async function GET() {
   return NextResponse.json({ orders: await listOpenOrders(ctx.tenantUserId) });
 }
 
-const openSchema = z.object({ leadId: z.string().nullish(), customerName: z.string().nullish() });
+const openSchema = z.object({
+  leadId: z.string().nullish(),
+  customerName: z.string().nullish(),
+  customerPhone: z.string().nullish(), // NOVO
+});
 
 export async function POST(req: NextRequest) {
   const ctx = await getTenantContext();
