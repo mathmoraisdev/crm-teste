@@ -138,17 +138,38 @@ export async function closeOrder(
   const order = await loadOwned(accountId, orderId); // já inclui items
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
   const closerId = data.closedById ?? order.openedById;
-  await prisma.$transaction(async (tx) => {
-    // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
-    // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
-    // e aborta ANTES da baixa, evitando decremento/​SAIDA em dobro.
-    const res = await tx.order.updateMany({
-      where: { id: orderId, status: "ABERTA" },
-      data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() },
-    });
-    if (res.count === 0) throw new Error("Comanda já fechada.");
-    await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
-  });
+  // O nº do cupom (`number`) é sequencial POR conta e é atribuído DENTRO da mesma
+  // transação que fecha (junto de closedAt e da baixa de estoque), p/ nunca haver
+  // cupom sem número. O cálculo max+1 pode colidir sob concorrência (dois
+  // fechamentos da mesma conta lendo o mesmo max antes de qualquer commit): o
+  // @@unique([accountId, number]) barra o 2º com P2002 e a transação inteira rola
+  // back — refazemos numa nova tx, onde o max já reflete o 1º. Trade-off: retry
+  // raro em vez de serializar todos os fechamentos da conta.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
+        // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
+        // e aborta ANTES da baixa, evitando decremento/​SAIDA em dobro.
+        const res = await tx.order.updateMany({
+          where: { id: orderId, status: "ABERTA" },
+          data: { status: "FECHADA", payment: data.payment, note: data.note?.trim() || null, closedAt: new Date() },
+        });
+        if (res.count === 0) throw new Error("Comanda já fechada.");
+        const agg = await tx.order.aggregate({ where: { accountId }, _max: { number: true } });
+        const next = (agg._max.number ?? 0) + 1;
+        await tx.order.update({ where: { id: orderId }, data: { number: next } });
+        await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
+      });
+      break;
+    } catch (e) {
+      // Só a colisão de `number` (P2002) é retentável; o resto (ex.: "já fechada") propaga.
+      if (attempt < 4 && e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        continue;
+      }
+      throw e;
+    }
+  }
   return toDTO(await loadOwned(accountId, orderId));
 }
 

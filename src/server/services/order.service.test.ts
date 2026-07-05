@@ -131,6 +131,25 @@ describe("openOrder — captura de lead por telefone", () => {
   });
 });
 
+describe("closeOrder — numeração sequencial do cupom", () => {
+  it("atribui 1, 2 na mesma conta; contas têm sequências independentes", async () => {
+    const acc = await makeOwner();
+    const o1 = await openOrder(acc, { openedById: acc, customerName: "A" });
+    await closeOrder(acc, o1.id, { payment: "DINHEIRO", closedById: acc });
+    const o2 = await openOrder(acc, { openedById: acc, customerName: "B" });
+    await closeOrder(acc, o2.id, { payment: "PIX", closedById: acc });
+
+    // number não é exposto no DTO — lê do banco
+    expect((await prisma.order.findUnique({ where: { id: o1.id } }))!.number).toBe(1);
+    expect((await prisma.order.findUnique({ where: { id: o2.id } }))!.number).toBe(2);
+
+    const acc2 = await makeOwner();
+    const p1 = await openOrder(acc2, { openedById: acc2, customerName: "C" });
+    await closeOrder(acc2, p1.id, { payment: "DINHEIRO", closedById: acc2 });
+    expect((await prisma.order.findUnique({ where: { id: p1.id } }))!.number).toBe(1);
+  });
+});
+
 describe("getReceiptData (dados do recibo, escopado)", () => {
   it("traz itens, número e nome da empresa (default branding)", async () => {
     const acc = await makeOwner();
