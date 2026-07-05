@@ -121,6 +121,23 @@ export async function addItem(
   return toDTO(await loadOwned(accountId, orderId));
 }
 
+/** Edita a quantidade de um item — só comanda ABERTA. Clampa em >=1 (inteiro). */
+export async function setItemQuantity(
+  accountId: string,
+  orderId: string,
+  itemId: string,
+  qty: number,
+): Promise<OrderDTO> {
+  const order = await loadOwned(accountId, orderId);
+  if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
+  const owned = order.items.find((i) => i.id === itemId);
+  if (!owned) throw new Error("Item não encontrado.");
+  if (!Number.isFinite(qty) || qty < 1) throw new Error("Quantidade inválida.");
+  const quantity = Math.max(1, Math.floor(qty));
+  await prisma.orderItem.update({ where: { id: itemId }, data: { quantity } });
+  return toDTO(await loadOwned(accountId, orderId));
+}
+
 export async function removeItem(accountId: string, orderId: string, itemId: string): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId);
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");

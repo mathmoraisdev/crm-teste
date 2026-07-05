@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setOrderItemCustomFields, getReceiptData } from "./order.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderItemCustomFields, getReceiptData } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 
 async function makeOwner() {
@@ -53,6 +53,36 @@ describe("order.service (ciclo)", () => {
     const other = await makeOwner();
     const o = await openOrder(acc, { openedById: acc, customerName: "X" });
     await expect(addItem(other, o.id, { name: "Y", unitPriceCents: 100, quantity: 1 })).rejects.toThrow();
+  });
+});
+
+describe("setItemQuantity — quantidade editável", () => {
+  it("altera a qtd do item e recalcula o total da comanda", async () => {
+    const acc = await makeOwner();
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 1 });
+    const itemId = withItem.items[0].id;
+    const upd = await setItemQuantity(acc, o.id, itemId, 3);
+    expect(upd.items[0].quantity).toBe(3);
+    expect(upd.totalCents).toBe(12000); // 3 × 4000
+  });
+
+  it("rejeita quantidade < 1", async () => {
+    const acc = await makeOwner();
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 1 });
+    await expect(setItemQuantity(acc, o.id, withItem.items[0].id, 0)).rejects.toThrow();
+  });
+
+  it("recusa alterar item de comanda FECHADA", async () => {
+    const acc = await makeOwner();
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(setItemQuantity(acc, o.id, withItem.items[0].id, 2)).rejects.toThrow(/fechada/i);
   });
 });
 
