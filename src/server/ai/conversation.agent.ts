@@ -3,6 +3,9 @@ import { buildAttendanceContext } from "./attendance-context";
 import {
   slotChoiceJsonSchema,
   slotChoiceSchema,
+  apptReplyJsonSchema,
+  apptReplySchema,
+  type ApptReply,
   type QualificationResult,
   type SlotChoice,
 } from "./schemas";
@@ -57,6 +60,39 @@ export async function interpretSlotChoice(opts: {
   if (input == null) return { chosenIndex: null, confident: false };
   const parsed = slotChoiceSchema.safeParse(input);
   return parsed.success ? parsed.data : { chosenIndex: null, confident: false };
+}
+
+const APPT_REPLY_SYSTEM =
+  "Você classifica a resposta de um cliente a um lembrete de agendamento de serviço. " +
+  "Responda SÓ com a tool. intent=confirm quando ele confirma presença (ex.: 'confirmo', 'pode marcar', 'estarei lá', 'ok', '👍'); " +
+  "intent=decline quando não vai / quer desmarcar (ex.: 'não vou poder', 'cancela', 'não consigo ir'); " +
+  "intent=reschedule quando quer OUTRA data/horário (ex.: 'dá pra passar pra sexta?', 'tem horário de manhã?'); " +
+  "intent=unclear quando fala de outro assunto, faz pergunta, ou não dá pra saber. Na dúvida entre confirm e unclear, escolha unclear.";
+
+/**
+ * Classifica a última mensagem do cliente em relação a um agendamento já lembrado.
+ * Mesma forma de `interpretSlotChoice`: tool-call forçado, modelo barato, degrada
+ * para "unclear" (não-confiante) em qualquer falha — nunca deixa o fluxo travar.
+ */
+export async function interpretAppointmentReply(opts: {
+  ai: AiClient;
+  serviceName: string | null;
+  whenLabel: string; // data/hora formatada do agendamento (contexto p/ a IA)
+  leadMessage: string;
+}): Promise<ApptReply> {
+  const servico = opts.serviceName?.trim() || "atendimento";
+  const input = await opts.ai.forcedToolCall({
+    tier: "cheap",
+    maxTokens: 256,
+    system: APPT_REPLY_SYSTEM,
+    user: `Agendamento: ${servico} em ${opts.whenLabel}.\n\nMensagem do cliente: "${opts.leadMessage}"`,
+    toolName: "classificar_resposta",
+    toolDescription: "Classifica a resposta do cliente ao lembrete de agendamento.",
+    jsonSchema: apptReplyJsonSchema as unknown as Record<string, unknown>,
+  });
+  if (input == null) return { intent: "unclear", confident: false };
+  const parsed = apptReplySchema.safeParse(input);
+  return parsed.success ? parsed.data : { intent: "unclear", confident: false };
 }
 
 /**
