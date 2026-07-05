@@ -620,7 +620,15 @@ export async function respondToLead(leadId: string): Promise<void> {
 /** Bloco de catálogo ativo da conta p/ o contexto da IA (vazio se não há itens). */
 async function loadCatalogBlock(accountId: string): Promise<string | undefined> {
   const items = await listCatalogItems(accountId, { activeOnly: true });
-  const block = renderCatalogForAI(items.map((i) => ({ name: i.name, priceCents: i.priceCents, kind: i.kind })));
+  const block = renderCatalogForAI(
+    items.map((i) => ({
+      name: i.name,
+      priceCents: i.priceCents,
+      kind: i.kind,
+      trackStock: i.trackStock,
+      stockQty: i.stockQty,
+    })),
+  );
   return block || undefined;
 }
 
