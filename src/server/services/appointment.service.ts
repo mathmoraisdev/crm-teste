@@ -1,6 +1,50 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/server/db/client";
 import type { AppointmentStatus, Prisma } from "@prisma/client";
+import type { ApptReply } from "@/server/ai/schemas";
+
+export interface ApptTransition {
+  status: "CONFIRMADO" | "CANCELADO" | null; // null = não mexe no status
+  needsReview: boolean;
+  reviewReason: string;
+}
+
+/**
+ * PURA: traduz a classificação da resposta do cliente numa transição de status.
+ * Só aplica CONFIRMADO/CANCELADO quando a IA está CONFIANTE. Qualquer dúvida
+ * (reschedule, não-confiante) só acende a revisão, sem mexer no status.
+ * `unclear` = a mensagem não era sobre o agendamento → nenhuma ação (null).
+ */
+export function decideApptTransition(reply: ApptReply): ApptTransition | null {
+  if (reply.intent === "unclear") return null;
+  if (!reply.confident) {
+    return { status: null, needsReview: true, reviewReason: "Resposta ambígua ao lembrete — conferir" };
+  }
+  switch (reply.intent) {
+    case "confirm":
+      return { status: "CONFIRMADO", needsReview: true, reviewReason: "Cliente confirmou pelo WhatsApp" };
+    case "decline":
+      return { status: "CANCELADO", needsReview: true, reviewReason: "Cliente recusou/desmarcou pelo WhatsApp" };
+    case "reschedule":
+      return { status: null, needsReview: true, reviewReason: "Cliente pediu para remarcar" };
+  }
+}
+
+/**
+ * Efeito: aplica a transição decidida a um agendamento (scoping por conta).
+ * Reusa a validação de posse via loadOwned.
+ */
+export async function applyApptTransition(userId: string, id: string, t: ApptTransition) {
+  await loadOwned(userId, id);
+  return prisma.appointment.update({
+    where: { id },
+    data: {
+      ...(t.status ? { status: t.status } : {}),
+      needsReview: t.needsReview,
+      reviewReason: t.reviewReason,
+    },
+  });
+}
 
 /**
  * Agendamentos de serviço (Appointment): N por Lead, ≠ Meeting (1:1, "reunião de
@@ -166,7 +210,12 @@ export async function updateAppointment(userId: string, id: string, input: Updat
   await loadOwned(userId, id);
   const data: Prisma.AppointmentUpdateInput = {};
   if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt;
-  if (input.status !== undefined) data.status = input.status;
+  if (input.status !== undefined) {
+    data.status = input.status;
+    // A equipe decidiu o status manualmente → a revisão foi feita (baixa o badge).
+    data.needsReview = false;
+    data.reviewReason = null;
+  }
   if (input.note !== undefined) data.note = input.note?.trim() || null;
   // Trocar o item do catálogo re-snapshota o nome (salvo serviceName explícito) e
   // religa/desliga o vínculo. Mandar SÓ serviceName renomeia o snapshot SEM mexer
@@ -196,7 +245,10 @@ export async function updateAppointment(userId: string, id: string, input: Updat
 /** Cancela um agendamento (mantém o registro; muda status p/ CANCELADO). */
 export async function cancelAppointment(userId: string, id: string) {
   await loadOwned(userId, id);
-  return prisma.appointment.update({ where: { id }, data: { status: "CANCELADO" } });
+  return prisma.appointment.update({
+    where: { id },
+    data: { status: "CANCELADO", needsReview: false, reviewReason: null },
+  });
 }
 
 /** Marca como REALIZADO, opcionalmente ligando a comanda gerada (orderId). */
@@ -205,6 +257,11 @@ export async function markRealized(userId: string, id: string, opts: { orderId?:
   if (opts.orderId) await assertOrderOwned(userId, opts.orderId);
   return prisma.appointment.update({
     where: { id },
-    data: { status: "REALIZADO", ...(opts.orderId ? { orderId: opts.orderId } : {}) },
+    data: {
+      status: "REALIZADO",
+      needsReview: false,
+      reviewReason: null,
+      ...(opts.orderId ? { orderId: opts.orderId } : {}),
+    },
   });
 }

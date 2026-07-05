@@ -8,6 +8,8 @@ import {
   cancelAppointment,
   markRealized,
   updateAppointment,
+  decideApptTransition,
+  applyApptTransition,
 } from "./appointment.service";
 import { openOrder } from "./order.service";
 
@@ -132,5 +134,73 @@ describe("appointment.service", () => {
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     await expect(markRealized(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
     await expect(updateAppointment(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
+  });
+
+  // A ação manual da equipe no card (Confirmar/Cancelar/Realizado/Faltou) = revisão
+  // feita → tem de zerar needsReview, senão o badge da Agenda nunca baixa.
+  it("markRealized zera needsReview", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000010");
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
+    await applyApptTransition(acc, a.id, { status: "CONFIRMADO", needsReview: true, reviewReason: "x" });
+    const updated = await markRealized(acc, a.id);
+    expect(updated.needsReview).toBe(false);
+    expect(updated.reviewReason).toBeNull();
+  });
+
+  it("cancelAppointment zera needsReview", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000011");
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
+    await applyApptTransition(acc, a.id, { status: null, needsReview: true, reviewReason: "x" });
+    const updated = await cancelAppointment(acc, a.id);
+    expect(updated.status).toBe("CANCELADO");
+    expect(updated.needsReview).toBe(false);
+    expect(updated.reviewReason).toBeNull();
+  });
+
+  it("updateAppointment com status manual zera needsReview", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000012");
+    const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
+    await applyApptTransition(acc, a.id, { status: null, needsReview: true, reviewReason: "x" });
+    const updated = await updateAppointment(acc, a.id, { status: "FALTOU" });
+    expect(updated.status).toBe("FALTOU");
+    expect(updated.needsReview).toBe(false);
+    expect(updated.reviewReason).toBeNull();
+  });
+});
+
+describe("decideApptTransition", () => {
+  it("confirm confiante → CONFIRMADO + revisão", () => {
+    expect(decideApptTransition({ intent: "confirm", confident: true })).toEqual({
+      status: "CONFIRMADO",
+      needsReview: true,
+      reviewReason: "Cliente confirmou pelo WhatsApp",
+    });
+  });
+  it("decline confiante → CANCELADO + revisão", () => {
+    expect(decideApptTransition({ intent: "decline", confident: true })).toEqual({
+      status: "CANCELADO",
+      needsReview: true,
+      reviewReason: "Cliente recusou/desmarcou pelo WhatsApp",
+    });
+  });
+  it("reschedule → sem mudar status, só sinaliza", () => {
+    expect(decideApptTransition({ intent: "reschedule", confident: true })).toEqual({
+      status: null,
+      needsReview: true,
+      reviewReason: "Cliente pediu para remarcar",
+    });
+  });
+  it("não-confiante → nunca muda status, só sinaliza revisão", () => {
+    expect(decideApptTransition({ intent: "confirm", confident: false })).toEqual({
+      status: null,
+      needsReview: true,
+      reviewReason: "Resposta ambígua ao lembrete — conferir",
+    });
+  });
+  it("unclear → nenhuma ação (null total)", () => {
+    expect(decideApptTransition({ intent: "unclear", confident: true })).toBeNull();
   });
 });
