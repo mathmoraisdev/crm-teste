@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents } from "./order.service";
+import { createDef } from "./custom-field.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setOrderItemCustomFields } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 
 async function makeOwner() {
@@ -125,5 +126,36 @@ describe("openOrder — captura de lead por telefone", () => {
     const order = await openOrder(acc, { openedById: acc, customerName: "Zé" });
     expect(order.leadId).toBeNull();
     expect(await prisma.lead.count({ where: { userId: acc } })).toBe(0);
+  });
+});
+
+describe("customFields por item da comanda", () => {
+  it("grava e valida customFields em item de comanda ABERTA", async () => {
+    const acc = await makeOwner();
+    await createDef(acc, { label: "Placa", type: "TEXT", scope: "ORDER_ITEM" }); // key => "placa"
+    const veiculo = await createCatalogItem(acc, { name: "Civic", priceCents: 7800000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: veiculo.id, quantity: 1 });
+    const itemId = withItem.items[0].id;
+    const upd = await setOrderItemCustomFields(acc, o.id, itemId, { placa: "ABC1D23" });
+    expect(upd.items[0].customFields).toEqual({ placa: "ABC1D23" });
+  });
+
+  it("rejeita key fora do escopo ORDER_ITEM", async () => {
+    const acc = await makeOwner();
+    const veiculo = await createCatalogItem(acc, { name: "Gol", priceCents: 5000000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: veiculo.id, quantity: 1 });
+    await expect(setOrderItemCustomFields(acc, o.id, withItem.items[0].id, { fantasma: "x" })).rejects.toThrow();
+  });
+
+  it("recusa gravar em comanda FECHADA", async () => {
+    const acc = await makeOwner();
+    await createDef(acc, { label: "Placa", type: "TEXT", scope: "ORDER_ITEM" });
+    const veiculo = await createCatalogItem(acc, { name: "Onix", priceCents: 6000000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const withItem = await addItem(acc, o.id, { catalogItemId: veiculo.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(setOrderItemCustomFields(acc, o.id, withItem.items[0].id, { placa: "X" })).rejects.toThrow(/fechada/i);
   });
 });
