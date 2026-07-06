@@ -40,9 +40,11 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 4 | Estorno / reabertura de comanda (reverte baixa de estoque) | B | **P1** | `2026-07-06-estorno-comanda.md` — **FEITO (PROD ✅ 2026-07-05)** |
 
 > **Ondas A e B aplicadas em PROD em 2026-07-05** (`onda-a.sql` + `onda-b.sql` rodados no Supabase; código deployado via Vercel CLI). NÃO reaplicar o SQL.
-| 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **plano escrito, pronto p/ executar** |
-| 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **plano escrito, pronto p/ executar** |
-| 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` |
+>
+> ¹ **Iniciativas 5, 6, 7 = FEITO em dev** (models no schema + `onda-c/d/e.sql` + código/testes, tudo committado). **PROD não confirmado**: falta verificar se `onda-c.sql`/`onda-d.sql`/`onda-e.sql` foram aplicados no Supabase e se o código foi deployado no Vercel. Confirmar e, quando aplicado, trocar para `PROD ✅`. (Reconciliado por verificação do repo — os chats que implementaram não atualizaram este mestre.)
+| 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
+| 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
+| 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
 | 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` |
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` |
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` |
