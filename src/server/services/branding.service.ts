@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { BRAND_STOPS, DEFAULT_PALETTE, type BrandPalette } from "@/lib/theme/palette";
+import { presetById } from "@/lib/theme/presets";
 import type { AccountBranding } from "@prisma/client";
 
 export const DEFAULT_APP_NAME = "Disparador.ai";
@@ -50,4 +51,19 @@ export async function getBranding(tenantUserId: string): Promise<ResolvedBrandin
     );
     return resolveBranding(null);
   }
+}
+
+/**
+ * Aplica um preset de tema ao branding da conta (upsert idempotente).
+ * Retorna false se o preset não existir; true se aplicado.
+ */
+export async function setBrandingPreset(accountId: string, presetId: string): Promise<boolean> {
+  const preset = presetById(presetId);
+  if (!preset) return false;
+  await prisma.accountBranding.upsert({
+    where: { accountId },
+    create: { accountId, presetId: preset.id, brandScale: preset.palette },
+    update: { presetId: preset.id, brandScale: preset.palette },
+  });
+  return true;
 }
