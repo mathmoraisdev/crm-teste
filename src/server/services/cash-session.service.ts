@@ -33,6 +33,13 @@ export async function getOpenSession(accountId: string): Promise<CashSessionDTO 
   return s ? toDTO(s) : null;
 }
 
+/** Uma sessão da conta por id (qualquer status), ou null. Usada pela rota de fechar
+ * p/ decidir permissão (fechar a de outro operador exige canSettings). */
+export async function getSession(accountId: string, id: string): Promise<CashSessionDTO | null> {
+  const s = await prisma.cashSession.findFirst({ where: { id, accountId } });
+  return s ? toDTO(s) : null;
+}
+
 /** Abre um turno com fundo de troco. Recusa se já há sessão ABERTA na conta
  * (uma por conta — v1). O fundo não pode ser negativo. */
 export async function openSession(
