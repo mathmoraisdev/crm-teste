@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
-import { recordEntry, recordAdjustment, listStock, lowStockItems, listMovements } from "./stock.service";
+import { recordEntry, recordAdjustment, listStock, lowStockItems, listMovements, applyOrderStockExit, reverseOrderStockExit } from "./stock.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({ data: { email: `stk_${Math.round(performance.now())}_${Math.random()}@t.test`, name: "T", passwordHash: "x" } });
@@ -52,5 +52,28 @@ describe("stock.service", () => {
     await expect(recordEntry(other, id, { qty: 1, createdById: other })).rejects.toThrow();
     const svc = await createCatalogItem(acc, { name: "Corte", priceCents: 4000, kind: "SERVICO" });
     await expect(recordEntry(acc, svc.id, { qty: 1, createdById: acc })).rejects.toThrow();
+  });
+
+  it("reverte a baixa de venda com ENTRADA de compensação (idempotente)", async () => {
+    const acc = await makeOwner();
+    const id = await makeProduct(acc, "Água");
+    await recordEntry(acc, id, { qty: 10, createdById: acc });
+    const order = await prisma.order.create({ data: { accountId: acc, openedById: acc, status: "FECHADA" } });
+
+    // baixa de venda: 10 → 8
+    await prisma.$transaction((tx) => applyOrderStockExit(tx, acc, [{ catalogItemId: id, quantity: 2 }], order.id, acc));
+    expect((await listStock(acc)).find((x) => x.id === id)?.stockQty).toBe(8);
+
+    // estorno: volta a 10 com um ENTRADA ligado à comanda
+    await prisma.$transaction((tx) => reverseOrderStockExit(tx, acc, order.id, acc));
+    expect((await listStock(acc)).find((x) => x.id === id)?.stockQty).toBe(10);
+    const mv = await listMovements(acc, id);
+    expect(mv[0].kind).toBe("ENTRADA");
+    expect(mv[0].delta).toBe(2);
+    expect(mv[0].orderId).toBe(order.id);
+
+    // idempotente: uma segunda reversão não mexe no saldo (líquido já zerado)
+    await prisma.$transaction((tx) => reverseOrderStockExit(tx, acc, order.id, acc));
+    expect((await listStock(acc)).find((x) => x.id === id)?.stockQty).toBe(10);
   });
 });

@@ -105,3 +105,36 @@ export async function applyOrderStockExit(
     } });
   }
 }
+
+/**
+ * Reverte a baixa de estoque de uma comanda (estorno/reabertura). Chamado DENTRO da
+ * transação de voidOrder/reopenOrder. Para cada produto rastreado, olha o SALDO LÍQUIDO
+ * dos movimentos ligados à comanda: se ainda está baixado (líquido < 0), cria um ENTRADA
+ * de compensação (delta positivo, mesmo orderId, reason "estorno de comanda") e incrementa
+ * o stockQty. Ledger append-only: nunca apaga a SAIDA, compensa. Idempotente: depois de
+ * reverter o líquido é 0, então uma segunda chamada não cria nada (guarda contra duplo estorno).
+ */
+export async function reverseOrderStockExit(
+  tx: Prisma.TransactionClient,
+  accountId: string,
+  orderId: string,
+  createdById: string,
+): Promise<void> {
+  const moves = await tx.stockMovement.findMany({
+    where: { accountId, orderId },
+    select: { catalogItemId: true, delta: true },
+  });
+  const net = new Map<string, number>();
+  for (const m of moves) net.set(m.catalogItemId, (net.get(m.catalogItemId) ?? 0) + m.delta);
+  for (const [catalogItemId, sum] of net) {
+    if (sum >= 0) continue; // nada baixado, ou já compensado (idempotência)
+    const qty = -sum;
+    const ci = await tx.catalogItem.findFirst({ where: { id: catalogItemId, accountId, trackStock: true }, select: { id: true } });
+    if (!ci) continue; // produto deixou de rastrear estoque: não mexe no saldo
+    const updated = await tx.catalogItem.update({ where: { id: ci.id }, data: { stockQty: { increment: qty } }, select: { stockQty: true } });
+    await tx.stockMovement.create({ data: {
+      accountId, catalogItemId: ci.id, kind: "ENTRADA", delta: qty, balanceAfter: updated.stockQty,
+      orderId, reason: "estorno de comanda", createdById,
+    } });
+  }
+}
