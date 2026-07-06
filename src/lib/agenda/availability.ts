@@ -204,9 +204,10 @@ export interface LocalDate {
 
 /**
  * Lista os dias-calendário DO FUSO cujo início (00:00 local) cai em
- * [fromUtc, toUtc] (inclusivo). Caminha de dia em dia normalizando cada meia-noite
- * local via `zonedWallTimeToUtc` — não confia em aritmética ingênua de +24h.
- * Cobre a janela futura do booking (`bookingHorizonDays`).
+ * [fromUtc, toUtc) — MEIO-ABERTO: inclui `fromUtc`, exclui `toUtc`. Assim, passar
+ * `[meia-noite do dia, meia-noite do dia seguinte)` rende exatamente UM dia (a
+ * meia-noite seguinte, igual a `toUtc`, fica de fora). Caminha de dia em dia
+ * normalizando cada meia-noite via `zonedWallTimeToUtc` — não confia em +24h ingênuo.
  */
 export function enumerateLocalDates(
   fromUtc: Date,
@@ -214,7 +215,7 @@ export function enumerateLocalDates(
   timeZone: string,
 ): LocalDate[] {
   const out: LocalDate[] = [];
-  if (toUtc.getTime() < fromUtc.getTime()) return out;
+  if (toUtc.getTime() <= fromUtc.getTime()) return out;
 
   // Meia-noite local do dia que contém fromUtc (pode cair antes de fromUtc).
   const first = zonedParts(fromUtc, timeZone);
@@ -222,7 +223,7 @@ export function enumerateLocalDates(
 
   // Teto de segurança: nº de dias no intervalo + folga (evita loop infinito).
   const maxDays = Math.ceil((toUtc.getTime() - fromUtc.getTime()) / 86_400_000) + 2;
-  for (let i = 0; i <= maxDays && midnight.getTime() <= toUtc.getTime(); i++) {
+  for (let i = 0; i <= maxDays && midnight.getTime() < toUtc.getTime(); i++) {
     if (midnight.getTime() >= fromUtc.getTime()) {
       const p = zonedParts(midnight, timeZone);
       out.push({ year: p.year, month: p.month, day: p.day, weekday: p.weekday });

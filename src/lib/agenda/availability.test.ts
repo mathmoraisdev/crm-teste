@@ -227,10 +227,10 @@ describe("zonedWallTimeToUtc", () => {
 });
 
 describe("enumerateLocalDates", () => {
-  it("intervalo de 3 dias corridos lista 3 dias com weekday correto (São Paulo)", () => {
-    // 00:00 de seg 06, ter 07, qua 08 (local) → instantes 03:00Z de cada.
+  it("intervalo meio-aberto [seg 06, sex 09) lista 3 dias com weekday correto (São Paulo)", () => {
+    // meio-aberto: inclui 06/07/08, exclui a meia-noite de 09 (= toUtc).
     const from = zonedWallTimeToUtc(2026, 7, 6, 0, "America/Sao_Paulo");
-    const to = zonedWallTimeToUtc(2026, 7, 8, 0, "America/Sao_Paulo");
+    const to = zonedWallTimeToUtc(2026, 7, 9, 0, "America/Sao_Paulo");
     const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
     expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual([
       "2026-7-6",
@@ -240,9 +240,16 @@ describe("enumerateLocalDates", () => {
     expect(days.map((d) => d.weekday)).toEqual([1, 2, 3]); // seg, ter, qua
   });
 
-  it("virada de mês (30/06 → 02/07)", () => {
+  it("um dia só: [meia-noite, meia-noite+1d) rende exatamente esse dia", () => {
+    const from = zonedWallTimeToUtc(2026, 7, 9, 0, "America/Sao_Paulo");
+    const to = new Date(from.getTime() + 24 * 60 * 60 * 1000); // meia-noite seguinte
+    const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
+    expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual(["2026-7-9"]);
+  });
+
+  it("virada de mês, meio-aberto [30/06, 03/07)", () => {
     const from = zonedWallTimeToUtc(2026, 6, 30, 0, "America/Sao_Paulo");
-    const to = zonedWallTimeToUtc(2026, 7, 2, 0, "America/Sao_Paulo");
+    const to = zonedWallTimeToUtc(2026, 7, 3, 0, "America/Sao_Paulo");
     const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
     expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual([
       "2026-6-30",
