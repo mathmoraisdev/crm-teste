@@ -259,6 +259,19 @@ describe("closeOrder — multi-pagamento e troco", () => {
     expect(await prisma.orderTender.count({ where: { orderId: o.id } })).toBe(1); // não duplicou
   });
 
+  it("troco no misto com dinheiro usa a parcela devida em dinheiro (não o total)", async () => {
+    const acc = await makeOwner();
+    const o = await abertaCom(acc, 9000); // total 90
+    const full = await closeOrder(acc, o.id, {
+      // PIX 40 + Dinheiro; cliente entrega R$100 em espécie
+      tenders: [{ method: "PIX", amountCents: 4000 }, { method: "DINHEIRO", amountCents: 5000 }],
+      amountTenderedCents: 10000,
+      closedById: acc,
+    });
+    // devido em dinheiro = 9000 − 4000 = 5000; troco = 10000 − 5000 = 5000 (NÃO 1000)
+    expect(full.changeCents).toBe(5000);
+  });
+
   it("troco aplica os ajustes no total (desconto reduz o total, aumenta o troco)", async () => {
     const acc = await makeOwner();
     const o = await abertaCom(acc, 10000);

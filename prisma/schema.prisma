@@ -325,7 +325,7 @@ model Order {
   surchargeCents      Int? // acréscimo / taxa de serviço
   tipCents            Int? // gorjeta estruturada
   amountTenderedCents Int? // valor recebido (dinheiro) — base do troco
-  changeCents         Int? // troco derivado no fechamento (max(0, recebido − total))
+  changeCents         Int? // troco derivado no fechamento: max(0, recebido − devido-em-dinheiro), onde devido-em-dinheiro = total − pago-em-outros-meios
   tableLabel          String? // mesa/comanda física (rótulo livre)
   // Sessão de caixa em que a comanda foi FECHADA (null = fechada fora de sessão).
   cashSessionId  String?

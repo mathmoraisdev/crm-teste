@@ -890,10 +890,14 @@ function PaymentPanel({
   // Fechamento simples: ninguém digitou valor → 1 tender do 1º método cobre o total.
   const tenders = typedSum === 0 ? [{ method: lines[0].method, amountCents: total }] : parsed.filter((t) => t.amountCents > 0);
   const paid = tenders.reduce((s, t) => s + t.amountCents, 0);
-  const saldo = total - paid; // >0 falta (parcial); <=0 integral
+  const saldo = total - paid; // >0 falta (parcial); <0 excedente; 0 integral
   const hasCash = tenders.some((t) => t.method === "DINHEIRO");
   const receivedCents = parseBRLToCents(received);
-  const troco = hasCash && receivedCents != null ? Math.max(0, receivedCents - total) : 0;
+  // Troco sobre o DEVIDO em dinheiro (total − pago em outros meios), não sobre o
+  // total — igual ao servidor (closeOrder). Mantém display == valor gravado.
+  const nonCashPaid = tenders.filter((t) => t.method !== "DINHEIRO").reduce((s, t) => s + t.amountCents, 0);
+  const cashDue = Math.max(0, total - nonCashPaid);
+  const troco = hasCash && receivedCents != null ? Math.max(0, receivedCents - cashDue) : 0;
 
   const resetConfirm = () => setConfirmPartial(false);
   function updateLine(i: number, patch: Partial<{ method: Payment; raw: string }>) {
@@ -1006,6 +1010,11 @@ function PaymentPanel({
             <span>Falta</span>
             <span>{formatCentsBRL(saldo)}</span>
           </div>
+        ) : saldo < 0 ? (
+          <div className="flex items-center justify-between font-medium text-warning">
+            <span>Excedente</span>
+            <span>{formatCentsBRL(-saldo)}</span>
+          </div>
         ) : (
           <div className="flex items-center justify-between text-slate-400">
             <span>Saldo</span>
@@ -1013,6 +1022,16 @@ function PaymentPanel({
           </div>
         )}
       </div>
+
+      {/* Nudge: soma dos meios acima do total geralmente é o recebido digitado na
+          linha errada. O troco em dinheiro vai no campo "Valor recebido", não na
+          linha do meio (senão a receita registrada infla). */}
+      {saldo < 0 && (
+        <p className="rounded-lg bg-warning-surface px-3 py-2 text-xs text-warning">
+          Os meios somam mais que o total. Se for <strong>troco em dinheiro</strong>, deixe a linha
+          com o valor devido e informe o total recebido em <strong>“Valor recebido”</strong>.
+        </p>
+      )}
 
       {confirmPartial && saldo > 0 && (
         <p className="rounded-lg bg-warning-surface px-3 py-2 text-xs text-warning">

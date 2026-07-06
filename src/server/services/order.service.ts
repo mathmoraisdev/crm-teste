@@ -251,11 +251,15 @@ export async function closeOrder(
     throw new Error("Pagamento menor que o total. Confirme o fechamento parcial.");
   }
 
-  // Troco só faz sentido com dinheiro: base = valor recebido em espécie; o
-  // excedente sobre o total vira troco (nunca bloqueia — [[caixa-despesas-reposicionamento]]).
+  // Troco só faz sentido com dinheiro. A base é o que é DEVIDO em espécie: o total
+  // menos o que já foi pago em outros meios (num misto PIX+dinheiro, o cliente só
+  // deve em dinheiro a diferença). Troco = recebido − devido-em-dinheiro, nunca < 0.
+  // (No caixa 100% dinheiro, devido-em-dinheiro == total.) Nunca bloqueia.
   const hasCash = tenders.some((t) => t.method === "DINHEIRO");
+  const nonCashPaid = tenders.filter((t) => t.method !== "DINHEIRO").reduce((s, t) => s + t.amountCents, 0);
+  const cashDue = Math.max(0, total - nonCashPaid);
   const amountTendered = data.amountTenderedCents ?? null;
-  const changeCents = hasCash && amountTendered != null ? Math.max(0, amountTendered - total) : 0;
+  const changeCents = hasCash && amountTendered != null ? Math.max(0, amountTendered - cashDue) : 0;
 
   // Order.payment é mantido espelhado (retrocompat): um único método → ele;
   // misto → OUTRO. A verdade da receita por meio passa a ser OrderTender (Fase 4).
