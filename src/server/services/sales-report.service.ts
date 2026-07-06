@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { OrderPayment } from "@prisma/client";
 import { orderTotalCents } from "./order.service";
+import { marginBps } from "@/lib/margin";
 
 export interface SalesSummary { totalCents: number; orderCount: number; avgTicketCents: number; }
 
@@ -126,4 +127,38 @@ export async function topItems(accountId: string, from: Date, to: Date, limit = 
     map.set(i.nameSnapshot, cur);
   }
   return [...map.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.totalCents - a.totalCents).slice(0, limit);
+}
+
+export interface MarginItem { name: string; quantity: number; revenueCents: number; costCents: number; marginCents: number; }
+export interface SalesMargin {
+  revenueCents: number; costCents: number; marginCents: number; marginBps: number;
+  withoutCostCount: number; byItem: MarginItem[];
+}
+
+/** Margem realizada no período: receita − custo das linhas das comandas FECHADAS,
+ * usando o SNAPSHOT `unitCostCents` (custo no fechamento — nunca live-join). Linha
+ * sem custo (avulsa/item sem custo/comanda antiga) conta como custo 0 e entra em
+ * `withoutCostCount` p/ a UI sinalizar "parcial". Ordena por margem desc. */
+export async function salesMargin(accountId: string, from: Date, to: Date): Promise<SalesMargin> {
+  const ids = await closedOrderIds(accountId, from, to);
+  if (!ids.length) return { revenueCents: 0, costCents: 0, marginCents: 0, marginBps: 0, withoutCostCount: 0, byItem: [] };
+  const items = await prisma.orderItem.findMany({
+    where: { orderId: { in: ids } },
+    select: { nameSnapshot: true, unitPriceCents: true, unitCostCents: true, quantity: true },
+  });
+  const map = new Map<string, MarginItem>();
+  let withoutCostCount = 0;
+  for (const i of items) {
+    const revenue = i.unitPriceCents * i.quantity;
+    const cost = (i.unitCostCents ?? 0) * i.quantity;
+    if (i.unitCostCents == null) withoutCostCount += i.quantity;
+    const cur = map.get(i.nameSnapshot) ?? { name: i.nameSnapshot, quantity: 0, revenueCents: 0, costCents: 0, marginCents: 0 };
+    cur.quantity += i.quantity; cur.revenueCents += revenue; cur.costCents += cost;
+    cur.marginCents = cur.revenueCents - cur.costCents;
+    map.set(i.nameSnapshot, cur);
+  }
+  const byItem = [...map.values()].sort((a, b) => b.marginCents - a.marginCents);
+  const revenueCents = byItem.reduce((s, i) => s + i.revenueCents, 0);
+  const costCents = byItem.reduce((s, i) => s + i.costCents, 0);
+  return { revenueCents, costCents, marginCents: revenueCents - costCents, marginBps: marginBps({ revenueCents, costCents }), withoutCostCount, byItem };
 }

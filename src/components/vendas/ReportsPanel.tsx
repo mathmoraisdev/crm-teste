@@ -23,6 +23,10 @@ interface ReportData {
   balanceCents?: number;
   expensesByCategory?: { category: string; totalCents: number }[];
   commissionByProfessional?: { professionalId: string; professionalName: string; baseCents: number; commissionCents: number; itemCount: number }[];
+  margin?: {
+    revenueCents: number; costCents: number; marginCents: number; marginBps: number; withoutCostCount: number;
+    byItem: { name: string; quantity: number; revenueCents: number; costCents: number; marginCents: number }[];
+  };
 }
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -361,6 +365,50 @@ function ResumoView({
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Margem realizada (só dono/gerente; payload só traz p/ canSettings) */}
+      {hasExpenses && (
+        <Card>
+          <CardHeader title="Margem" subtitle="Receita − custo das vendas do período (custo do fechamento)" />
+          <div className="px-5 py-4">
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 size={14} className="animate-spin" /> Carregando…
+              </div>
+            ) : !data?.margin || data.margin.revenueCents === 0 ? (
+              <p className="text-sm text-slate-400">Nenhuma venda no período.</p>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <p className="text-xs text-slate-500">Receita</p>
+                    <p className="mt-0.5 text-lg font-semibold text-ink">{formatCentsBRL(data.margin.revenueCents)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Custo</p>
+                    <p className="mt-0.5 text-lg font-semibold text-ink">{formatCentsBRL(data.margin.costCents)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Margem</p>
+                    <p className="mt-0.5 text-lg font-bold text-ink">
+                      {formatCentsBRL(data.margin.marginCents)}
+                      <span className="ml-1.5 text-sm font-medium text-slate-500">
+                        {(data.margin.marginBps / 100).toFixed(1)}%
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                {data.margin.withoutCostCount > 0 && (
+                  <p className="mt-3 text-xs text-slate-400">
+                    {data.margin.withoutCostCount}{" "}
+                    {data.margin.withoutCostCount === 1 ? "item vendido sem custo cadastrado" : "itens vendidos sem custo cadastrado"} — margem parcial.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </Card>

@@ -3,7 +3,7 @@ import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { openOrder, addItem, closeOrder, voidOrder } from "./order.service";
 import { setOrderAdjustments } from "./order.service";
-import { salesSummary, topItems, revenueByPayment, revenueByOperator, commissionByProfessional } from "./sales-report.service";
+import { salesSummary, topItems, revenueByPayment, revenueByOperator, commissionByProfessional, salesMargin } from "./sales-report.service";
 import { createCommissionRule } from "./commission.service";
 
 async function makeOwner() {
@@ -193,5 +193,38 @@ describe("sales-report.service", () => {
     const from = new Date(Date.now() - 3600_000);
     const to = new Date(Date.now() + 3600_000);
     expect(await commissionByProfessional(acc, from, to)).toEqual([]);
+  });
+
+  it("salesMargin agrega receita, custo e margem das comandas fechadas no período", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Bola", priceCents: 5000, kind: "PRODUTO", costCents: 2000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "A" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 2 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+    const r = await salesMargin(acc, from, to);
+    expect(r.revenueCents).toBe(10000);
+    expect(r.costCents).toBe(4000);
+    expect(r.marginCents).toBe(6000);
+    expect(r.marginBps).toBe(6000); // 60%
+    expect(r.withoutCostCount).toBe(0);
+    expect(r.byItem[0]).toMatchObject({ name: "Bola", quantity: 2, costCents: 4000 });
+  });
+
+  it("salesMargin conta item sem custo como parcial (withoutCostCount)", async () => {
+    const acc = await makeOwner();
+    const semCusto = await createCatalogItem(acc, { name: "Bala", priceCents: 1000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "B" });
+    await addItem(acc, o.id, { catalogItemId: semCusto.id, quantity: 3 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+    const r = await salesMargin(acc, from, to);
+    expect(r.revenueCents).toBe(3000);
+    expect(r.costCents).toBe(0);
+    expect(r.withoutCostCount).toBe(3); // 3 unidades sem custo cadastrado
   });
 });
