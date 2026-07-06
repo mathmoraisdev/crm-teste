@@ -47,7 +47,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
 | 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` — **plano escrito, pronto p/ executar** (depende de 5, já em dev) |
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
-| 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` |
+| 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **plano escrito, pronto p/ executar** (independe; roda no worker) |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D | **P3** | `2026-07-10-verticais-unificadas.md` |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
@@ -74,8 +74,13 @@ tocam o schema **compõem** o mesmo arquivo (como estoque×despesas já fizeram)
 - **Onda D** (iniciativas 6, 11): novo model **`QuickReply`** (snippet por conta, `title`, `body`,
   `shortcut`). Novo model **`InternalNote`** (nota de operador na conversa/lead). *SLA reusa
   `queuedAt`/`firstResponseAt` já existentes — sem coluna nova.*
-- **Onda E** (iniciativas 7, 10): sem schema novo obrigatório (tool-calling refatora serviço;
-  automação usa worker + timestamps já existentes). Eventual `Lead.lastEngagedAt` p/ reengajamento.
+- **Onda E** (iniciativas 7, 10): a iniciativa 7 (tool-calling) refatora serviço + `MediaAsset` +
+  `WhatsAppNumber.aiToolCallingEnabled` (**dona** do `prisma/manual/2026-07-08-onda-e.sql`). A iniciativa
+  10 (automação) **acrescenta** ao mesmo arquivo (append idempotente) — *desvio consciente do "sem schema
+  novo"*: além do previsto `Lead.lastEngagedAt` (throttle de reengajamento), também `Order.postSaleThankedAt`/
+  `Order.reviewRequestedAt` (marcadores de idempotência do pós-venda/NPS, padrão `remindedDayBeforeAt`) e
+  `User.lifecycleAutomationEnabled` (opt-in por conta — sem ele um flag global mandaria mensagem ao cliente
+  de toda conta no multi-tenant). Detalhe em `2026-07-08-automacao-ciclo-vida.md`.
 - **Onda F** (iniciativas 8, 9): **um** `prisma/manual/2026-07-09-onda-f.sql` idempotente e composto.
   Iniciativa 8 (agendamento online) adiciona colunas em `User`: `publicSlug String? @unique` (link
   público) + `bookingEnabled Boolean` + config de slot (`bookingLeadMinutes`/`bookingHorizonDays`/
