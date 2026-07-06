@@ -211,6 +211,23 @@ model User {
   cashSessionsOpened       CashSession[]            @relation("CashSessionOpenedBy")
   cashSessionsClosed       CashSession[]            @relation("CashSessionClosedBy")
   cashMovementsCreated     CashMovement[]           @relation("CashMovementCreatedBy")
+  quickReplies             QuickReply[]             @relation("QuickReplyAccount")
+}
+
+// Resposta rápida (snippet) da CONTA, compartilhada pela equipe. Corpo aceita
+// variáveis (ex.: {{nome}}) resolvidas na inserção. Atalho digitável após "/".
+model QuickReply {
+  id        String   @id @default(cuid())
+  userId    String // dono (tenant)
+  user      User     @relation("QuickReplyAccount", fields: [userId], references: [id], onDelete: Cascade)
+  title     String // rótulo curto ("saudação")
+  body      String // texto, aceita {{nome}}
+  shortcut  String? // atalho digitável após "/" (ex.: "oi")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, shortcut])
+  @@index([userId])
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.

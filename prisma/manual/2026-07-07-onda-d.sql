@@ -1,0 +1,22 @@
+-- Onda D — Inbox produtivo (respostas rápidas + SLA + notas internas). Idempotente.
+-- Aplicar no Supabase SQL Editor (env do DB é Sensitive, não alcança daqui).
+-- Ver [[prod-schema-drift-destravar]]: NÃO duplicar com migration versionada;
+-- mudança de schema da Onda D entra por AQUI (catch-up manual sem migration).
+-- Este arquivo é da iniciativa 6 (Inbox produtivo). ACRESCENTE, não sobrescreva.
+
+-- ── Fase 1: Respostas rápidas (QuickReply) ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS "QuickReply" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "shortcut" TEXT,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "QuickReply_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "QuickReply_userId_shortcut_key" ON "QuickReply"("userId", "shortcut");
+CREATE INDEX IF NOT EXISTS "QuickReply_userId_idx" ON "QuickReply"("userId");
+DO $$ BEGIN ALTER TABLE "QuickReply" ADD CONSTRAINT "QuickReply_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Validar: select to_regclass('public."QuickReply"');
