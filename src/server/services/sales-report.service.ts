@@ -79,6 +79,42 @@ export async function revenueByOperator(accountId: string, from: Date, to: Date)
     .sort((a, b) => b.totalCents - a.totalCents);
 }
 
+export interface ProfessionalCommission {
+  professionalId: string; professionalName: string;
+  baseCents: number; commissionCents: number; itemCount: number;
+}
+
+/** Comissão a pagar por profissional no período: soma o SNAPSHOT (commissionCents)
+ * das linhas das comandas FECHADAS, mesmo filtro dos demais relatórios (conta +
+ * range + status) → CANCELADA/estornada fica de fora sozinha. Ordena por comissão
+ * desc. `baseCents` = Σ bruto das linhas creditadas (a base de cálculo, p/ o dono
+ * ver de onde vem a comissão). Só entram linhas com profissional creditado. */
+export async function commissionByProfessional(accountId: string, from: Date, to: Date): Promise<ProfessionalCommission[]> {
+  const items = await prisma.orderItem.findMany({
+    where: {
+      order: { accountId, status: "FECHADA", closedAt: { gte: from, lte: to } },
+      professionalId: { not: null },
+      commissionCents: { not: null },
+    },
+    select: {
+      professionalId: true, commissionCents: true, unitPriceCents: true, quantity: true,
+      professional: { select: { name: true } },
+    },
+  });
+  const map = new Map<string, { name: string; baseCents: number; commissionCents: number; itemCount: number }>();
+  for (const i of items) {
+    const id = i.professionalId!;
+    const cur = map.get(id) ?? { name: i.professional?.name ?? "—", baseCents: 0, commissionCents: 0, itemCount: 0 };
+    cur.baseCents += i.unitPriceCents * i.quantity;
+    cur.commissionCents += i.commissionCents ?? 0;
+    cur.itemCount += 1;
+    map.set(id, cur);
+  }
+  return [...map.entries()]
+    .map(([professionalId, v]) => ({ professionalId, professionalName: v.name, baseCents: v.baseCents, commissionCents: v.commissionCents, itemCount: v.itemCount }))
+    .sort((a, b) => b.commissionCents - a.commissionCents);
+}
+
 export async function topItems(accountId: string, from: Date, to: Date, limit = 10): Promise<{ name: string; quantity: number; totalCents: number }[]> {
   const ids = await closedOrderIds(accountId, from, to);
   if (!ids.length) return [];
