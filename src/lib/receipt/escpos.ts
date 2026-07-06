@@ -78,9 +78,11 @@ export function buildEscposBytes(model: ReceiptModel, opts: EscposOptions = {}):
   for (const l of model.lines) b.line(l.rendered);
   b.line(divider);
 
-  // Totais + pagamento
+  // Desdobramento (subtotal/desconto/taxa/gorjeta) + TOTAL + troco + pagamento
+  for (const s of model.summary) b.line(s.rendered);
   b.bold(true).line(model.totals.rendered).bold(false);
-  if (model.payment) b.line(model.payment.rendered);
+  if (model.change) b.line(model.change.rendered);
+  for (const p of model.payments) b.line(p.rendered);
   b.line(divider);
 
   // Rodapé

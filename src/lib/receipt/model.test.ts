@@ -38,4 +38,41 @@ describe("buildReceiptModel", () => {
     const m = buildReceiptModel({ ...order, number: null }, business);
     expect(m.header.docNumber).toBe("Comanda ckxyz123".slice(0, 20));
   });
+
+  it("recibo simples: sem ajustes → summary vazio, sem troco, pagamento único", () => {
+    const m = buildReceiptModel(order, business);
+    expect(m.summary).toEqual([]);
+    expect(m.change).toBeNull();
+    expect(m.payments).toHaveLength(1);
+    expect(m.payments[0].method).toBe("DINHEIRO");
+    expect(m.payments[0].amountCents).toBeNull(); // legado: só o rótulo "Pagamento"
+  });
+
+  it("com ajustes: desdobra subtotal/desconto/taxa/gorjeta e ajusta o total", () => {
+    const m = buildReceiptModel(
+      { ...order, discountCents: 1500, surchargeCents: 850, tipCents: 500 },
+      business,
+    );
+    const labels = m.summary.map((s) => s.label);
+    expect(labels).toEqual(["Subtotal", "Desconto", "Taxa de serviço", "Gorjeta"]);
+    // subtotal 9000; 9000−1500+850+500 = 8850
+    expect(m.totals.totalCents).toBe(8850);
+  });
+
+  it("multi-pagamento + troco: uma linha por tender e a linha de troco", () => {
+    const m = buildReceiptModel(
+      {
+        ...order,
+        changeCents: 150,
+        tenders: [
+          { method: "PIX", amountCents: 5000 },
+          { method: "DINHEIRO", amountCents: 4150 },
+        ],
+      },
+      business,
+    );
+    expect(m.payments.map((p) => p.method)).toEqual(["PIX", "DINHEIRO"]);
+    expect(m.payments[0].amountCents).toBe(5000);
+    expect(m.change?.cents).toBe(150);
+  });
 });

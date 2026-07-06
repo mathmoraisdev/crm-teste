@@ -18,6 +18,8 @@ interface Row {
   leadId: string | null;
   operatorName: string;
   payment: Payment | null;
+  discountCents: number | null;
+  surchargeCents: number | null;
   totalCents: number;
 }
 interface HistoryResponse {
@@ -214,6 +216,13 @@ export function SalesHistoryPanel() {
                     </Td>
                     <Td className="whitespace-nowrap text-right font-medium text-ink">
                       {formatCentsBRL(r.totalCents)}
+                      {(!!r.discountCents || !!r.surchargeCents) && (
+                        <div className="text-xs font-normal text-slate-400">
+                          {!!r.discountCents && <span className="text-danger">− {formatCentsBRL(r.discountCents)}</span>}
+                          {!!r.discountCents && !!r.surchargeCents && " · "}
+                          {!!r.surchargeCents && <span>+ {formatCentsBRL(r.surchargeCents)}</span>}
+                        </div>
+                      )}
                     </Td>
                     <Td className="text-right">
                       <button

@@ -326,6 +326,11 @@ export interface ReceiptData {
 export async function getReceiptData(accountId: string, orderId: string): Promise<ReceiptData> {
   const o = await loadOwned(accountId, orderId); // já valida escopo por conta (throw se não achar)
   const branding = await getBranding(accountId);
+  const tenders = await prisma.orderTender.findMany({
+    where: { orderId },
+    select: { method: true, amountCents: true },
+    orderBy: { createdAt: "asc" },
+  });
   return {
     order: {
       number: o.number,
@@ -334,6 +339,11 @@ export async function getReceiptData(accountId: string, orderId: string): Promis
       customerName: o.customerName ?? o.lead?.name ?? null,
       closedAt: o.closedAt,
       payment: o.payment,
+      discountCents: o.discountCents,
+      surchargeCents: o.surchargeCents,
+      tipCents: o.tipCents,
+      changeCents: o.changeCents,
+      tenders: tenders.map((t) => ({ method: t.method, amountCents: t.amountCents })),
       items: o.items.map((i) => ({
         nameSnapshot: i.nameSnapshot,
         quantity: i.quantity,

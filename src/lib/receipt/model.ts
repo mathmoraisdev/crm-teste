@@ -23,6 +23,11 @@ export interface ReceiptOrderItem {
   unitPriceCents: number;
 }
 
+export interface ReceiptTender {
+  method: ReceiptPayment;
+  amountCents: number;
+}
+
 export interface ReceiptOrderInput {
   number: number | null;
   id: string;
@@ -30,6 +35,12 @@ export interface ReceiptOrderInput {
   closedAt: Date | null;
   payment: ReceiptPayment | null;
   items: ReceiptOrderItem[];
+  // Camada financeira (POS). Opcionais — recibos antigos/simples omitem.
+  discountCents?: number | null;
+  surchargeCents?: number | null;
+  tipCents?: number | null;
+  changeCents?: number | null;
+  tenders?: ReceiptTender[]; // meios de pagamento (multi); vazio → usa `payment`
 }
 
 export interface ReceiptLine {
@@ -49,8 +60,13 @@ export interface ReceiptModel {
     customer: string | null;
   };
   lines: ReceiptLine[];
+  // Desdobramento (subtotal/desconto/taxa/gorjeta). Vazio em recibo simples.
+  summary: { label: string; rendered: string }[];
   totals: { totalCents: number; rendered: string };
-  payment: { method: ReceiptPayment; label: string; rendered: string } | null;
+  change: { cents: number; rendered: string } | null; // troco (dinheiro)
+  // Formas de pagamento: N linhas com valor (multi) OU uma linha "Pagamento <meio>"
+  // (retrocompat quando não há tenders).
+  payments: { method: ReceiptPayment; label: string; amountCents: number | null; rendered: string }[];
   footer: string[];
 }
 
@@ -101,15 +117,43 @@ export function buildReceiptModel(order: ReceiptOrderInput, business: ReceiptBus
     };
   });
 
-  const totalCents = lines.reduce((sum, l) => sum + l.totalCents, 0);
+  const subtotalCents = lines.reduce((sum, l) => sum + l.totalCents, 0);
+  const discount = order.discountCents ?? 0;
+  const surcharge = order.surchargeCents ?? 0;
+  const tip = order.tipCents ?? 0;
+  const totalCents = Math.max(0, subtotalCents - discount) + surcharge + tip;
 
-  const payment: ReceiptModel["payment"] = order.payment
-    ? {
-        method: order.payment,
-        label: PAYMENT_LABEL[order.payment],
-        rendered: padRow("Pagamento", PAYMENT_LABEL[order.payment], width),
-      }
+  // Desdobramento só aparece quando há algum ajuste (recibo simples fica enxuto).
+  const summary: ReceiptModel["summary"] = [];
+  if (discount || surcharge || tip) {
+    summary.push({ label: "Subtotal", rendered: padRow("Subtotal", formatCentsBRL(subtotalCents), width) });
+    if (discount) summary.push({ label: "Desconto", rendered: padRow("Desconto", "-" + formatCentsBRL(discount), width) });
+    if (surcharge) summary.push({ label: "Taxa de serviço", rendered: padRow("Taxa de servico", formatCentsBRL(surcharge), width) });
+    if (tip) summary.push({ label: "Gorjeta", rendered: padRow("Gorjeta", formatCentsBRL(tip), width) });
+  }
+
+  const changeCents = order.changeCents ?? 0;
+  const change = changeCents > 0
+    ? { cents: changeCents, rendered: padRow("Troco", formatCentsBRL(changeCents), width) }
     : null;
+
+  // Formas de pagamento: tenders (com valor) OU o meio único legado (só o rótulo).
+  const payments: ReceiptModel["payments"] =
+    order.tenders && order.tenders.length > 0
+      ? order.tenders.map((t) => ({
+          method: t.method,
+          label: PAYMENT_LABEL[t.method],
+          amountCents: t.amountCents,
+          rendered: padRow(PAYMENT_LABEL[t.method], formatCentsBRL(t.amountCents), width),
+        }))
+      : order.payment
+        ? [{
+            method: order.payment,
+            label: PAYMENT_LABEL[order.payment],
+            amountCents: null,
+            rendered: padRow("Pagamento", PAYMENT_LABEL[order.payment], width),
+          }]
+        : [];
 
   return {
     width,
@@ -121,8 +165,10 @@ export function buildReceiptModel(order: ReceiptOrderInput, business: ReceiptBus
       customer: order.customerName?.trim() || null,
     },
     lines,
+    summary,
     totals: { totalCents, rendered: padRow("TOTAL", formatCentsBRL(totalCents), width) },
-    payment,
+    change,
+    payments,
     footer: ["Obrigado pela preferência!"],
   };
 }

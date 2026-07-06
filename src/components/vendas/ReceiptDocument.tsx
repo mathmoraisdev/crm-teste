@@ -22,8 +22,14 @@ export function ReceiptDocument({ model }: { model: ReceiptModel }) {
         <div key={i}>{l.rendered}</div>
       ))}
       <div>{divider}</div>
+      {model.summary.map((s, i) => (
+        <div key={i}>{s.rendered}</div>
+      ))}
       <div style={{ fontWeight: 700 }}>{model.totals.rendered}</div>
-      {model.payment && <div>{model.payment.rendered}</div>}
+      {model.change && <div>{model.change.rendered}</div>}
+      {model.payments.map((p, i) => (
+        <div key={i}>{p.rendered}</div>
+      ))}
       <div>{divider}</div>
       {model.footer.map((f, i) => (
         <div key={i} className="receipt-center">{f}</div>

@@ -9,6 +9,8 @@ export interface SalesHistoryRow {
   leadId: string | null;
   operatorName: string;
   payment: OrderPayment | null;
+  discountCents: number | null;
+  surchargeCents: number | null;
   totalCents: number;
 }
 export interface SalesHistoryPage { items: SalesHistoryRow[]; total: number; }
@@ -48,6 +50,8 @@ export async function listSalesHistory(
     leadId: o.leadId,
     operatorName: o.openedBy?.name ?? "—",
     payment: o.payment,
+    discountCents: o.discountCents,
+    surchargeCents: o.surchargeCents,
     totalCents: orderTotalCents(o),
   }));
   return { items, total };
