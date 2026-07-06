@@ -98,6 +98,22 @@ export function InboxView() {
     if (selectedRef.current) loadDetail(selectedRef.current);
   });
 
+  // Presença (anti-colisão): enquanto uma conversa está aberta, bate um heartbeat
+  // a cada 15s p/ os outros verem "fulano está aqui". Ao fechar/trocar, sai na
+  // hora (DELETE). Best-effort — falha nunca bloqueia. A lista já traz `viewers`.
+  useEffect(() => {
+    if (!selectedId) return;
+    const id = selectedId;
+    const beat = () =>
+      fetch(`/api/inbox/${id}/presence`, { method: "POST" }).catch(() => {});
+    beat();
+    const t = setInterval(beat, 15000);
+    return () => {
+      clearInterval(t);
+      fetch(`/api/inbox/${id}/presence`, { method: "DELETE", keepalive: true }).catch(() => {});
+    };
+  }, [selectedId]);
+
   // Deep-link vindo do CRM (/inbox?c=<leadId>): pré-seleciona a conversa e marca
   // como lida. Abre em "Todas" p/ maximizar a chance de a conversa estar na
   // lista; se estiver fora do filtro (ex.: resolvida), o painel central ainda
@@ -313,6 +329,7 @@ export function InboxView() {
                   canReply
                   aiPaused={detail.aiPaused}
                   hideHandoff
+                  viewers={conversations.find((c) => c.id === detail.id)?.viewers ?? []}
                 />
               </div>
             </>

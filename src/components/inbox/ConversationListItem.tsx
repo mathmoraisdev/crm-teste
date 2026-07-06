@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Check } from "lucide-react";
+import { Check, Eye } from "lucide-react";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { formatPhone } from "@/lib/phone";
@@ -94,6 +94,17 @@ export const ConversationListItem = memo(function ConversationListItem({
           >
             {conversation.name}
           </span>
+          {conversation.viewers.length > 0 && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-info-surface px-1.5 py-0.5 text-[10px] font-medium text-info"
+              title={`${conversation.viewers.map((v) => v.name).join(", ")} ${
+                conversation.viewers.length > 1 ? "estão vendo" : "está vendo"
+              }`}
+            >
+              <Eye size={10} />
+              {conversation.viewers.length > 1 ? conversation.viewers.length : conversation.viewers[0].name}
+            </span>
+          )}
         </div>
         <span className="shrink-0 text-[11px] text-slate-400">
           {conversation.lastMessageAt ? timeAgo(conversation.lastMessageAt) : ""}

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Sparkles } from "lucide-react";
+import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Sparkles, Eye } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import type { LeadDetail } from "@/server/services/lead.service";
 import type { QuickReplyDTO } from "@/server/services/quick-reply.service";
+import type { Viewer } from "@/server/services/presence.service";
 import { renderSnippet } from "@/lib/inbox/render-snippet";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
 
@@ -37,6 +38,7 @@ export function ConversationView({
   canReply,
   aiPaused,
   hideHandoff = false,
+  viewers = [],
 }: {
   leadId: string;
   /** Nome do lead — usado p/ resolver {{nome}} nas respostas rápidas. */
@@ -47,6 +49,8 @@ export function ConversationView({
   aiPaused: boolean;
   /** Oculta o toggle de handoff embutido (o inbox tem ações próprias no header). */
   hideHandoff?: boolean;
+  /** Outros operadores vendo esta conversa agora (anti-colisão). Informativo. */
+  viewers?: Viewer[];
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -257,6 +261,14 @@ export function ConversationView({
 
   return (
     <div className="flex h-[70vh] max-h-[600px] flex-col sm:h-[60vh]">
+      {/* Anti-colisão: avisa que outro(s) operador(es) já estão nesta conversa. */}
+      {viewers.length > 0 && (
+        <div className="flex items-center gap-1.5 border-b border-info/25 bg-info-surface/50 px-4 py-1.5 text-xs font-medium text-info">
+          <Eye size={13} />
+          {viewers.map((v) => v.name).join(", ")}{" "}
+          {viewers.length > 1 ? "estão nesta conversa" : "está nesta conversa"}
+        </div>
+      )}
       <div className="scroll-thin flex-1 space-y-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
