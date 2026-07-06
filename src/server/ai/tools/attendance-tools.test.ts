@@ -10,6 +10,8 @@ vi.mock("@/server/services/messaging", () => ({
 }));
 vi.mock("@/server/services/media-asset.service", () => ({ getMediaAsset: vi.fn() }));
 vi.mock("@/server/storage/media-storage", () => ({ downloadMediaBuffer: vi.fn() }));
+vi.mock("@/server/services/sales.service", () => ({ sendOffer: vi.fn() }));
+vi.mock("@/server/services/scheduling.service", () => ({ proposeSlots: vi.fn() }));
 vi.mock("@/server/services/order.service", () => ({
   listOpenOrders: vi.fn(),
   openOrder: vi.fn(),
@@ -29,6 +31,8 @@ import { setHandoff } from "@/server/services/conversation.service";
 import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
+import { sendOffer } from "@/server/services/sales.service";
+import { proposeSlots } from "@/server/services/scheduling.service";
 import { buildAttendanceTools, type AttendanceToolCtx } from "./attendance-tools";
 
 const listMock = vi.mocked(listCatalogItems);
@@ -41,6 +45,8 @@ const setHandoffMock = vi.mocked(setHandoff);
 const addNoteMock = vi.mocked(addNote);
 const getMediaAssetMock = vi.mocked(getMediaAsset);
 const downloadMock = vi.mocked(downloadMediaBuffer);
+const sendOfferMock = vi.mocked(sendOffer);
+const proposeSlotsMock = vi.mocked(proposeSlots);
 
 function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
   return {
@@ -76,6 +82,8 @@ beforeEach(() => {
   sendMediaMock.mockReset();
   getMediaAssetMock.mockReset();
   downloadMock.mockReset();
+  sendOfferMock.mockReset();
+  proposeSlotsMock.mockReset();
 });
 
 // OrderDTO mínimo p/ os stubs de comanda.
@@ -102,6 +110,29 @@ describe("buildAttendanceTools (gating)", () => {
   it("registra enviar_midia só quando hasMedia", () => {
     expect(buildAttendanceTools(ctx({ hasMedia: true })).map((t) => t.name)).toContain("enviar_midia");
     expect(buildAttendanceTools(ctx({ hasMedia: false })).map((t) => t.name)).not.toContain("enviar_midia");
+  });
+
+  it("agendar/enviar_oferta só em número SEM funil (!qualifyEnabled)", () => {
+    const semFunil = buildAttendanceTools(
+      ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true } }),
+    ).map((t) => t.name);
+    expect(semFunil).toContain("agendar");
+    expect(semFunil).toContain("enviar_oferta");
+
+    // Com o funil ligado, NENHUMA das duas (evita disparo duplo com a qualificação).
+    const comFunil = buildAttendanceTools(
+      ctx({ company: { qualifyEnabled: true, scheduleEnabled: true, salesEnabled: true } }),
+    ).map((t) => t.name);
+    expect(comFunil).not.toContain("agendar");
+    expect(comFunil).not.toContain("enviar_oferta");
+  });
+
+  it("agendar só com scheduleEnabled; enviar_oferta só com salesEnabled", () => {
+    const soAgenda = buildAttendanceTools(
+      ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: false } }),
+    ).map((t) => t.name);
+    expect(soAgenda).toContain("agendar");
+    expect(soAgenda).not.toContain("enviar_oferta");
   });
 });
 
@@ -262,5 +293,47 @@ describe("enviar_midia", () => {
     const r = await midiaTool().handler({ assetId: "ma_1" });
     expect(sendMediaMock).not.toHaveBeenCalled();
     expect(r.content).toMatch(/não consegui carregar/i);
+  });
+});
+
+// Tools do funil (Fase 6): registradas só com o company certo (sem qualifyEnabled).
+const funilCtx = ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true } });
+function funilTool(name: string) {
+  const t = buildAttendanceTools(funilCtx).find((x) => x.name === name);
+  if (!t) throw new Error(`tool ${name} não registrada`);
+  return t;
+}
+
+describe("agendar", () => {
+  it("dispara proposeSlots e encerra o turno (stop)", async () => {
+    proposeSlotsMock.mockResolvedValue(undefined);
+    const r = await funilTool("agendar").handler({});
+    expect(proposeSlotsMock).toHaveBeenCalledWith("lead_1");
+    expect(r.stop).toBe(true);
+  });
+});
+
+describe("enviar_oferta", () => {
+  it("cobrança enviada → stop com o lead correto", async () => {
+    sendOfferMock.mockResolvedValue({ sent: true, saleId: "sale_1" });
+    const r = await funilTool("enviar_oferta").handler({ offerId: "off_1" });
+    expect(sendOfferMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "lead_1", userId: "acc_1" }),
+      "off_1",
+    );
+    expect(r.stop).toBe(true);
+  });
+
+  it("sem gateway/oferta inválida → NÃO encerra e explica o motivo", async () => {
+    sendOfferMock.mockResolvedValue({ sent: false, reason: "no_gateway" });
+    const r = await funilTool("enviar_oferta").handler({ offerId: "off_x" });
+    expect(r.stop).toBeFalsy();
+    expect(r.content).toContain("no_gateway");
+  });
+
+  it("sem offerId → avisa sem chamar sendOffer", async () => {
+    const r = await funilTool("enviar_oferta").handler({});
+    expect(sendOfferMock).not.toHaveBeenCalled();
+    expect(r.content).toMatch(/nenhuma oferta/i);
   });
 });

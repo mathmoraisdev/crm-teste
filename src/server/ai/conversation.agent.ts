@@ -199,12 +199,15 @@ export async function generateAgenticReply(opts: {
   tools: ToolDef[];
   /** Bloco de mídias disponíveis (assetId + label) p/ a IA escolher em enviar_midia. */
   mediaBlock?: string;
+  /** Bloco de ofertas ativas (offerId + preço) p/ a IA escolher em enviar_oferta. */
+  offersBlock?: string;
 }): Promise<AgenticReplyResult> {
   const { system: baseSystem, contextPrefix } = buildAttendancePrompt(opts);
   const contextBlock = contextPrefix.trimEnd();
+  const offers = opts.offersBlock?.trim() ? `\n\n${opts.offersBlock.trim()}` : "";
   const media = opts.mediaBlock?.trim() ? `\n\n${opts.mediaBlock.trim()}` : "";
   const system =
-    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "") + media;
+    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "") + offers + media;
   const messages = conversationToLoopMessages(opts.conversation);
   const result = await opts.ai.runToolLoop({
     tier: "cheap",

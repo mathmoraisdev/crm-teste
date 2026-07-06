@@ -685,6 +685,13 @@ export async function respondToLead(leadId: string): Promise<void> {
       // Biblioteca de mídia da conta (habilita enviar_midia + injeta os assetIds no prompt).
       const mediaAssets = await listMediaAssets(lead.userId);
       const mediaBlock = renderMediaAssetsForAI(mediaAssets);
+      // Ofertas p/ a tool enviar_oferta — SÓ em número sem funil de qualificação
+      // (com o funil, a qualificação já dispara sendOffer antes; evita disparo duplo).
+      const offersForTools =
+        (company?.salesEnabled ?? false) && !(company?.qualifyEnabled ?? false) && lead.whatsAppNumberId
+          ? await listActiveOffers(lead.whatsAppNumberId)
+          : [];
+      const offersBlock = offersForTools.length ? renderActiveOffers(offersForTools) : undefined;
       const tools = buildAttendanceTools({
         lead: {
           id: lead.id,
@@ -698,7 +705,7 @@ export async function respondToLead(leadId: string): Promise<void> {
         hasCatalog,
         hasMedia: mediaAssets.length > 0,
       });
-      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock });
+      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock, offersBlock });
       if (!(await aiStillActive(lead.id))) return; // recheck preservado
       if (r.stopped) return; // uma tool já encerrou o turno (ex.: escalar)
       if (r.text) await sendWhatsAppMessage(lead, r.text);

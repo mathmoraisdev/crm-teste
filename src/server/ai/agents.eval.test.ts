@@ -269,3 +269,63 @@ describe.skipIf(!enabled)("eval: attendance tool-calling", () => {
     expect(r.toolsUsed).toContain("escalar_humano");
   }, EVAL_TIMEOUT);
 });
+
+describe.skipIf(!enabled)("eval: paridade funil→tools (Fase 6)", () => {
+  // Tools do funil como no-ops que registram a chamada. A via agêntica deve tomar
+  // a MESMA decisão de negócio que a qualificação determinística tomaria.
+  function funilTools() {
+    const tools = [
+      {
+        name: "agendar",
+        description: "Propõe horários de agendamento ao cliente quando ele quer marcar um horário.",
+        jsonSchema: { type: "object", additionalProperties: false, properties: {} },
+        handler: async () => ({ content: "horários propostos", stop: true }),
+      },
+      {
+        name: "enviar_oferta",
+        description: "Envia cobrança Pix de uma oferta (offerId) quando o cliente quer comprar.",
+        jsonSchema: {
+          type: "object", additionalProperties: false,
+          properties: { offerId: { type: "string" } }, required: ["offerId"],
+        },
+        handler: async () => ({ content: "cobrança enviada", stop: true }),
+      },
+    ];
+    return { tools };
+  }
+
+  it("lead quente (quer marcar/comprar) → chama agendar OU enviar_oferta", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools } = funilTools();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Estúdio X", persona: "consultivo" },
+      conversation: [
+        { direction: "OUTBOUND", content: "Oi! Posso te ajudar com um horário ou com a mentoria?" },
+        { direction: "INBOUND", content: "quero marcar um horário pra essa semana, pode ser amanhã de manhã?" },
+      ],
+      offersBlock: "OFERTAS DISPONÍVEIS (use o id):\n- id=off_1 | Mentoria | R$ 197,00",
+      tools,
+    });
+    expect(r.toolsUsed.includes("agendar") || r.toolsUsed.includes("enviar_oferta")).toBe(true);
+  }, EVAL_TIMEOUT);
+
+  it("lead sem interesse → NÃO agenda nem oferta", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools } = funilTools();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Estúdio X" },
+      conversation: [
+        { direction: "OUTBOUND", content: "Oi! Posso te apresentar a mentoria?" },
+        { direction: "INBOUND", content: "não, obrigado, só estava dando uma olhada. não quero marcar nada." },
+      ],
+      offersBlock: "OFERTAS DISPONÍVEIS (use o id):\n- id=off_1 | Mentoria | R$ 197,00",
+      tools,
+    });
+    expect(r.toolsUsed).not.toContain("agendar");
+    expect(r.toolsUsed).not.toContain("enviar_oferta");
+  }, EVAL_TIMEOUT);
+});

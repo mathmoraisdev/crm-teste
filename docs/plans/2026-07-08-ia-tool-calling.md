@@ -431,6 +431,13 @@ espelhando o padrão de `numbers/[id]` (force-dynamic, `getTenantContext`, 401, 
   `agendar`/`enviar_oferta`/estoque/comanda/mídia/escalar viram tools. Revisar após medir tokens
   ([[pricing-plans-cost]]). Commit da nota no plano.
 
+  **✅ DECISÃO CONFIRMADA (2026-07-06):** `qualificar` **NÃO** vira tool em v1. Consequência de
+  implementação: `agendar`/`enviar_oferta` só são registradas em número com **`qualifyEnabled=false`**
+  (ver o gating em `buildAttendanceTools` + o carregamento de ofertas em `respondToLead` 4d). Em número
+  com o funil ligado (`qualifyEnabled=true`), a qualificação determinística roda ANTES do branch 4d e é
+  a única a chamar `proposeSlots`/`sendOffer` — as tools não são registradas ali, então não há disparo
+  duplo. Reavaliar migrar `qualificar` p/ tool só depois de medir tokens em beta.
+
 ---
 
 # FASE 7 — (esboço) RAG do knowledgeBase (7.6)

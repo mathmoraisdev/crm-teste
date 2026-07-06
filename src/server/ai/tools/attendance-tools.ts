@@ -5,6 +5,8 @@ import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { sendWhatsAppMessage, sendWhatsAppMedia } from "@/server/services/messaging";
+import { sendOffer } from "@/server/services/sales.service";
+import { proposeSlots } from "@/server/services/scheduling.service";
 import { renderCatalogForTools } from "../attendance-context";
 import type { ToolDef, ToolResult } from "../provider";
 
@@ -294,15 +296,90 @@ function enviarMidia(ctx: AttendanceToolCtx): ToolDef {
   };
 }
 
+/** Lê `{ offerId?: string }` de um args cru. */
+function readOfferId(args: unknown): string | undefined {
+  if (args && typeof args === "object" && "offerId" in args) {
+    const o = (args as { offerId?: unknown }).offerId;
+    if (typeof o === "string" && o.trim()) return o.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Handler `agendar` (Fase 6): a IA decide propor horários. `proposeSlots` monta e
+ * envia os slots (o subfluxo PROPOSED assume a partir daí), então o turno encerra
+ * (`stop:true`). Só registrada em número SEM funil de qualificação — ver o gating.
+ */
+function agendar(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "agendar",
+    description:
+      "Propõe horários de agendamento ao cliente. Use quando ele quiser marcar um horário/atendimento. " +
+      "Você não escolhe o horário — apenas dispara a oferta de horários disponíveis.",
+    jsonSchema: { type: "object", additionalProperties: false, properties: {} },
+    handler: async (): Promise<ToolResult> => {
+      await proposeSlots(ctx.lead.id);
+      return { content: "horários propostos ao cliente", stop: true };
+    },
+  };
+}
+
+/**
+ * Handler `enviar_oferta` (Fase 6): a IA decide cobrar via Pix a oferta escolhida
+ * (offerId da lista OFERTAS DISPONÍVEIS injetada no prompt). `sendOffer` valida a
+ * oferta e o gateway; o preço vem SEMPRE do banco (a IA nunca informa valor).
+ * `stop:true` só quando a cobrança saiu; senão devolve o motivo e o loop segue.
+ */
+function enviarOferta(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "enviar_oferta",
+    description:
+      "Envia ao cliente uma cobrança Pix de uma oferta (offerId da lista OFERTAS DISPONÍVEIS). " +
+      "Use quando ele demonstrar intenção de compra de um item ofertado.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { offerId: { type: "string", description: "id da oferta (de OFERTAS DISPONÍVEIS)." } },
+      required: ["offerId"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const offerId = readOfferId(args);
+      if (!offerId) return { content: "Nenhuma oferta informada." };
+      const r = await sendOffer(
+        {
+          id: ctx.lead.id,
+          phone: ctx.lead.phone,
+          userId: ctx.lead.userId,
+          name: ctx.lead.name,
+          whatsAppNumberId: ctx.lead.whatsAppNumberId,
+        },
+        offerId,
+      );
+      if (r.sent) return { content: "cobrança Pix enviada ao cliente", stop: true };
+      // Sem gateway / oferta inválida / conta suspensa → não encerra; a IA explica.
+      return { content: `Não consegui enviar a cobrança (motivo: ${r.reason}).` };
+    },
+  };
+}
+
 /**
  * Fábrica das tools de atendimento. Decide INTERNAMENTE quais registrar a partir
  * do `ctx`. Read-only (consultar/enviar catálogo) e `escalar_humano` sempre
  * entram; `criar_comanda` só quando a conta usa o módulo de comanda (`hasCatalog`);
  * `enviar_midia` só quando a conta tem biblioteca de mídia (`hasMedia`).
+ *
+ * `agendar`/`enviar_oferta` (Fase 6) só entram em número SEM o funil de
+ * qualificação (`!qualifyEnabled`): com o funil ligado, a qualificação
+ * determinística já dispara `proposeSlots`/`sendOffer` ANTES do branch agêntico —
+ * registrar as tools aqui faria a MESMA ação sair pelos dois caminhos (disparo duplo).
  */
 export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
   const tools = [consultarEstoque(ctx), enviarCatalogo(ctx), escalarHumano(ctx)];
   if (ctx.hasCatalog) tools.push(criarComanda(ctx));
   if (ctx.hasMedia) tools.push(enviarMidia(ctx));
+
+  const noFunnel = !(ctx.company?.qualifyEnabled ?? false);
+  if (noFunnel && ctx.company?.scheduleEnabled) tools.push(agendar(ctx));
+  if (noFunnel && ctx.company?.salesEnabled) tools.push(enviarOferta(ctx));
   return tools;
 }
