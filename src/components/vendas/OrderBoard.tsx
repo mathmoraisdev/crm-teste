@@ -890,6 +890,24 @@ function PaymentPanel({
   const [lines, setLines] = useState<{ method: Payment; raw: string }[]>([{ method: "DINHEIRO", raw: "" }]);
   const [received, setReceived] = useState("");
   const [confirmPartial, setConfirmPartial] = useState(false);
+  // Comissão: profissional creditado (opcional). Só aparece se a conta tem
+  // profissional ativo; a comanda ligada a um agendamento já credita sozinha no
+  // backend — este seletor é p/ a comanda avulsa (POS) ou p/ corrigir.
+  const [professionals, setProfessionals] = useState<{ id: string; name: string }[]>([]);
+  const [professionalId, setProfessionalId] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/professionals?activeOnly=true", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        setProfessionals((((data.professionals as { id: string; name: string }[]) ?? []).map((p) => ({ id: p.id, name: p.name }))));
+      } catch {
+        // sem seletor de profissional
+      }
+    })();
+  }, []);
 
   const parsed = lines.map((l) => ({ method: l.method, amountCents: parseBRLToCents(l.raw) ?? 0 }));
   const typedSum = parsed.reduce((s, t) => s + t.amountCents, 0);
@@ -927,11 +945,13 @@ function PaymentPanel({
     }
     const payload: Record<string, unknown> = { tenders, allowPartial: saldo > 0 };
     if (receivedCents != null) payload.amountTenderedCents = receivedCents;
+    if (professionalId) payload.professionalId = professionalId;
     const ok = await onSubmit(payload);
     if (ok) {
       setLines([{ method: "DINHEIRO", raw: "" }]);
       setReceived("");
       setConfirmPartial(false);
+      setProfessionalId("");
     }
   }
 
@@ -939,6 +959,24 @@ function PaymentPanel({
 
   return (
     <div className="space-y-3 border-t border-slate-100 pt-3">
+      {/* Profissional creditado (comissão) — só quando a conta tem profissional ativo */}
+      {professionals.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="w-28 shrink-0 text-sm text-slate-600">Profissional</span>
+          <select
+            value={professionalId}
+            onChange={(e) => setProfessionalId(e.target.value)}
+            disabled={disabled}
+            className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+          >
+            <option value="">Automático (do agendamento)</option>
+            {professionals.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <p className="text-xs font-semibold text-slate-600">Pagamento</p>
 
       {/* Linhas de pagamento (método + valor) */}
