@@ -14,6 +14,7 @@ import { PosPrintSettings } from "@/components/app/PosPrintSettings";
 import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
 import { getBusinessTemplateId } from "@/server/services/account.service";
+import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,10 @@ export default async function ConfiguracoesPage() {
 
       <div className="mt-6">
         <PipelineLabelsManager canEdit={canSettings} />
+      </div>
+
+      <div className="mt-6">
+        <QuickRepliesSettings canEdit={canSettings} />
       </div>
     </div>
   );
