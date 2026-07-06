@@ -2,7 +2,9 @@ import { formatCentsBRL } from "@/lib/money";
 import { listCatalogItems } from "@/server/services/catalog.service";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
 import { addNote } from "@/server/services/internal-note.service";
-import { sendWhatsAppMessage } from "@/server/services/messaging";
+import { getMediaAsset } from "@/server/services/media-asset.service";
+import { downloadMediaBuffer } from "@/server/storage/media-storage";
+import { sendWhatsAppMessage, sendWhatsAppMedia } from "@/server/services/messaging";
 import { renderCatalogForTools } from "../attendance-context";
 import type { ToolDef, ToolResult } from "../provider";
 
@@ -245,14 +247,62 @@ function escalarHumano(ctx: AttendanceToolCtx): ToolDef {
   };
 }
 
+/** Lê `{ assetId?: string }` de um args cru. */
+function readAssetId(args: unknown): string | undefined {
+  if (args && typeof args === "object" && "assetId" in args) {
+    const a = (args as { assetId?: unknown }).assetId;
+    if (typeof a === "string" && a.trim()) return a.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Handler `enviar_midia` (Fase 5): envia ao cliente um arquivo da biblioteca da
+ * conta (assetId da lista injetada no prompt). Baixa o binário do Storage e manda
+ * por `sendWhatsAppMedia`. Asset de outra conta / download falho → erro amigável.
+ */
+function enviarMidia(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "enviar_midia",
+    description:
+      "Envia ao cliente um arquivo da biblioteca (foto, cardápio em PDF, tabela de preços). " +
+      "Use o assetId da lista de MÍDIAS DISPONÍVEIS. Só envie o que ele pedir ou que ajude a resposta.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        assetId: { type: "string", description: "id da mídia (de MÍDIAS DISPONÍVEIS)." },
+      },
+      required: ["assetId"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const assetId = readAssetId(args);
+      if (!assetId) return { content: "Nenhuma mídia informada." };
+      const asset = await getMediaAsset(ctx.accountId, assetId);
+      if (!asset) return { content: "Não encontrei essa mídia na biblioteca." };
+      const buffer = await downloadMediaBuffer(asset.mediaPath);
+      if (!buffer) return { content: "Não consegui carregar o arquivo dessa mídia." };
+      await sendWhatsAppMedia(ctx.lead, {
+        mediaPath: asset.mediaPath,
+        mediaType: asset.mediaType,
+        mediaMime: asset.mediaMime,
+        fileName: asset.fileName,
+        buffer,
+      });
+      return { content: "mídia enviada" };
+    },
+  };
+}
+
 /**
  * Fábrica das tools de atendimento. Decide INTERNAMENTE quais registrar a partir
  * do `ctx`. Read-only (consultar/enviar catálogo) e `escalar_humano` sempre
- * entram; `criar_comanda` só quando a conta usa o módulo de comanda (tem
- * CatalogItem — `hasCatalog`). A Fase 5 adiciona `enviar_midia`.
+ * entram; `criar_comanda` só quando a conta usa o módulo de comanda (`hasCatalog`);
+ * `enviar_midia` só quando a conta tem biblioteca de mídia (`hasMedia`).
  */
 export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
   const tools = [consultarEstoque(ctx), enviarCatalogo(ctx), escalarHumano(ctx)];
   if (ctx.hasCatalog) tools.push(criarComanda(ctx));
+  if (ctx.hasMedia) tools.push(enviarMidia(ctx));
   return tools;
 }

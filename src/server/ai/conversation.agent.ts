@@ -197,11 +197,14 @@ export async function generateAgenticReply(opts: {
   catalogBlock?: string;
   conversation: ConversationTurn[];
   tools: ToolDef[];
+  /** Bloco de mídias disponíveis (assetId + label) p/ a IA escolher em enviar_midia. */
+  mediaBlock?: string;
 }): Promise<AgenticReplyResult> {
   const { system: baseSystem, contextPrefix } = buildAttendancePrompt(opts);
   const contextBlock = contextPrefix.trimEnd();
+  const media = opts.mediaBlock?.trim() ? `\n\n${opts.mediaBlock.trim()}` : "";
   const system =
-    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "");
+    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "") + media;
   const messages = conversationToLoopMessages(opts.conversation);
   const result = await opts.ai.runToolLoop({
     tier: "cheap",

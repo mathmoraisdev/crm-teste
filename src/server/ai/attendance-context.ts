@@ -68,6 +68,16 @@ export function renderCatalogForAI(items: CatalogItemForContext[], limit = 40): 
   return `SERVIÇOS E PRODUTOS (catálogo da empresa; informe preço só se listado):\n${lines.join("\n")}`;
 }
 
+/**
+ * Renderiza (PURA) a biblioteca de mídia da conta p/ o prompt do loop — a IA
+ * escolhe o `assetId` ao chamar `enviar_midia` (igual às ofertas). Vazio → "".
+ */
+export function renderMediaAssetsForAI(assets: { id: string; label: string }[]): string {
+  if (!assets.length) return "";
+  const linhas = assets.map((a) => `- assetId=${a.id} | ${a.label}`);
+  return `MÍDIAS DISPONÍVEIS (envie com enviar_midia usando o assetId):\n${linhas.join("\n")}`;
+}
+
 export interface CatalogItemForTools {
   id: string;
   name: string;

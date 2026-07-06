@@ -90,6 +90,8 @@ vi.mock("@/server/services/catalog.service", () => ({
 }));
 // escalar_humano registra o motivo como nota interna (best-effort).
 vi.mock("@/server/services/internal-note.service", () => ({ addNote: vi.fn() }));
+// biblioteca de mídia da conta (habilita enviar_midia). Vazia por padrão.
+vi.mock("@/server/services/media-asset.service", () => ({ listMediaAssets: vi.fn(() => Promise.resolve([])) }));
 
 import { sendWhatsAppMessage } from "@/server/services/messaging";
 import { prisma } from "@/server/db/client";

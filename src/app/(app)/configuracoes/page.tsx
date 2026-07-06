@@ -17,6 +17,7 @@ import { getBusinessTemplateId, getInboxSlaMinutes } from "@/server/services/acc
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
 import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
+import { MediaLibrarySettings } from "@/components/app/MediaLibrarySettings";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,12 @@ export default async function ConfiguracoesPage() {
       <div className="mt-6">
         <QuickRepliesSettings canEdit={canSettings} />
       </div>
+
+      {(isOwner || canSettings) && (
+        <div className="mt-6">
+          <MediaLibrarySettings canEdit={canSettings} />
+        </div>
+      )}
 
       {isOwner && (
         <div className="mt-6">

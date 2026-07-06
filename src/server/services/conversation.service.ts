@@ -15,8 +15,9 @@ import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { listActiveOffers } from "./offer.service";
 import { sendOffer } from "./sales.service";
-import { renderActiveOffers, renderCatalogForAI } from "@/server/ai/attendance-context";
+import { renderActiveOffers, renderCatalogForAI, renderMediaAssetsForAI } from "@/server/ai/attendance-context";
 import { listCatalogItems } from "./catalog.service";
+import { listMediaAssets } from "./media-asset.service";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import {
   sendWhatsAppMessage,
@@ -681,6 +682,9 @@ export async function respondToLead(leadId: string): Promise<void> {
     // podem encerrar o turno (r.stopped) — nesse caso não enviamos texto.
     const toolsOn = !env.AI_TOOLCALLING_DISABLED && (company?.aiToolCallingEnabled ?? false);
     if (toolsOn) {
+      // Biblioteca de mídia da conta (habilita enviar_midia + injeta os assetIds no prompt).
+      const mediaAssets = await listMediaAssets(lead.userId);
+      const mediaBlock = renderMediaAssetsForAI(mediaAssets);
       const tools = buildAttendanceTools({
         lead: {
           id: lead.id,
@@ -692,9 +696,9 @@ export async function respondToLead(leadId: string): Promise<void> {
         accountId: lead.userId,
         company,
         hasCatalog,
-        hasMedia: false, // liga na Fase 5
+        hasMedia: mediaAssets.length > 0,
       });
-      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools });
+      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock });
       if (!(await aiStillActive(lead.id))) return; // recheck preservado
       if (r.stopped) return; // uma tool já encerrou o turno (ex.: escalar)
       if (r.text) await sendWhatsAppMessage(lead, r.text);

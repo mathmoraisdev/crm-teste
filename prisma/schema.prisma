@@ -220,6 +220,25 @@ model User {
   professionalMemberships  Professional[]           @relation("ProfessionalMember")
   workingHours             WorkingHours[]           @relation("WorkingHoursAccount")
   walkInAppointments       Appointment[]            @relation("AppointmentAccount")
+  mediaAssets              MediaAsset[]
+}
+
+// Biblioteca de mídia da CONTA (Onda E, iniciativa 7) — arquivos que o operador
+// sobe (cardápio em PDF, tabela de preços, fotos) p/ a IA poder ENVIAR pelo chat
+// via a tool `enviar_midia`. O binário vive no Supabase Storage (mediaPath); o
+// banco guarda só o metadado. Opcional: sem assets, a tool não é registrada.
+model MediaAsset {
+  id         String   @id @default(cuid())
+  account    User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId  String
+  label      String // nome pesquisável ("cardápio", "tabela de preços")
+  mediaPath  String // caminho no Supabase Storage (assinado sob demanda)
+  mediaType  String // "image" | "document"
+  mediaMime  String
+  fileName   String?
+  createdAt  DateTime @default(now())
+
+  @@index([accountId])
 }
 
 // Resposta rápida (snippet) da CONTA, compartilhada pela equipe. Corpo aceita

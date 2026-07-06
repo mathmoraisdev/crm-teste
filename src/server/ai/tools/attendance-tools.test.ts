@@ -6,7 +6,10 @@ vi.mock("@/server/services/catalog.service", () => ({
 }));
 vi.mock("@/server/services/messaging", () => ({
   sendWhatsAppMessage: vi.fn(),
+  sendWhatsAppMedia: vi.fn(),
 }));
+vi.mock("@/server/services/media-asset.service", () => ({ getMediaAsset: vi.fn() }));
+vi.mock("@/server/storage/media-storage", () => ({ downloadMediaBuffer: vi.fn() }));
 vi.mock("@/server/services/order.service", () => ({
   listOpenOrders: vi.fn(),
   openOrder: vi.fn(),
@@ -20,19 +23,24 @@ vi.mock("@/server/services/internal-note.service", () => ({
 }));
 
 import { listCatalogItems } from "@/server/services/catalog.service";
-import { sendWhatsAppMessage } from "@/server/services/messaging";
+import { sendWhatsAppMessage, sendWhatsAppMedia } from "@/server/services/messaging";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
 import { setHandoff } from "@/server/services/conversation.service";
 import { addNote } from "@/server/services/internal-note.service";
+import { getMediaAsset } from "@/server/services/media-asset.service";
+import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { buildAttendanceTools, type AttendanceToolCtx } from "./attendance-tools";
 
 const listMock = vi.mocked(listCatalogItems);
 const sendMock = vi.mocked(sendWhatsAppMessage);
+const sendMediaMock = vi.mocked(sendWhatsAppMedia);
 const listOpenMock = vi.mocked(listOpenOrders);
 const openOrderMock = vi.mocked(openOrder);
 const addItemMock = vi.mocked(addItem);
 const setHandoffMock = vi.mocked(setHandoff);
 const addNoteMock = vi.mocked(addNote);
+const getMediaAssetMock = vi.mocked(getMediaAsset);
+const downloadMock = vi.mocked(downloadMediaBuffer);
 
 function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
   return {
@@ -65,6 +73,9 @@ beforeEach(() => {
   addItemMock.mockReset();
   setHandoffMock.mockReset();
   addNoteMock.mockReset();
+  sendMediaMock.mockReset();
+  getMediaAssetMock.mockReset();
+  downloadMock.mockReset();
 });
 
 // OrderDTO mínimo p/ os stubs de comanda.
@@ -86,6 +97,11 @@ describe("buildAttendanceTools (gating)", () => {
   it("registra criar_comanda só quando hasCatalog", () => {
     expect(buildAttendanceTools(ctx({ hasCatalog: true })).map((t) => t.name)).toContain("criar_comanda");
     expect(buildAttendanceTools(ctx({ hasCatalog: false })).map((t) => t.name)).not.toContain("criar_comanda");
+  });
+
+  it("registra enviar_midia só quando hasMedia", () => {
+    expect(buildAttendanceTools(ctx({ hasMedia: true })).map((t) => t.name)).toContain("enviar_midia");
+    expect(buildAttendanceTools(ctx({ hasMedia: false })).map((t) => t.name)).not.toContain("enviar_midia");
   });
 });
 
@@ -207,5 +223,44 @@ describe("escalar_humano", () => {
     const r = await tool("escalar_humano").handler({ motivo: "quer humano" });
     expect(setHandoffMock).toHaveBeenCalledTimes(1);
     expect(r.stop).toBe(true);
+  });
+});
+
+describe("enviar_midia", () => {
+  const midiaTool = () => {
+    const t = buildAttendanceTools(ctx({ hasMedia: true })).find((x) => x.name === "enviar_midia");
+    if (!t) throw new Error("enviar_midia não registrada");
+    return t;
+  };
+  const asset = {
+    id: "ma_1", label: "cardápio", mediaPath: "acc_1/x.pdf", mediaType: "document" as const,
+    mediaMime: "application/pdf", fileName: "cardapio.pdf", createdAt: new Date(),
+  };
+
+  it("baixa o buffer e envia a mídia ao cliente", async () => {
+    getMediaAssetMock.mockResolvedValue(asset);
+    downloadMock.mockResolvedValue(Buffer.from("pdf"));
+    sendMediaMock.mockResolvedValue();
+    const r = await midiaTool().handler({ assetId: "ma_1" });
+    expect(getMediaAssetMock).toHaveBeenCalledWith("acc_1", "ma_1");
+    expect(sendMediaMock).toHaveBeenCalledTimes(1);
+    const [, media] = sendMediaMock.mock.calls[0];
+    expect(media).toMatchObject({ mediaPath: "acc_1/x.pdf", mediaType: "document" });
+    expect(r.content).toBe("mídia enviada");
+  });
+
+  it("asset de outra conta / inexistente → erro amigável, sem enviar", async () => {
+    getMediaAssetMock.mockResolvedValue(null);
+    const r = await midiaTool().handler({ assetId: "xxx" });
+    expect(sendMediaMock).not.toHaveBeenCalled();
+    expect(r.content).toMatch(/não encontrei/i);
+  });
+
+  it("download falho (storage) → erro amigável, sem enviar", async () => {
+    getMediaAssetMock.mockResolvedValue(asset);
+    downloadMock.mockResolvedValue(null);
+    const r = await midiaTool().handler({ assetId: "ma_1" });
+    expect(sendMediaMock).not.toHaveBeenCalled();
+    expect(r.content).toMatch(/não consegui carregar/i);
   });
 });

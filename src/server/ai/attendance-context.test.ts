@@ -4,6 +4,7 @@ import {
   renderActiveOffers,
   renderCatalogForAI,
   renderCatalogForTools,
+  renderMediaAssetsForAI,
 } from "./attendance-context";
 
 describe("buildAttendanceContext", () => {
@@ -150,5 +151,20 @@ describe("renderCatalogForTools", () => {
 
   it("vazio → string vazia", () => {
     expect(renderCatalogForTools([])).toBe("");
+  });
+});
+
+describe("renderMediaAssetsForAI", () => {
+  it("lista assetId + label", () => {
+    const out = renderMediaAssetsForAI([
+      { id: "ma_1", label: "cardápio" },
+      { id: "ma_2", label: "tabela de preços" },
+    ]);
+    expect(out).toContain("MÍDIAS DISPONÍVEIS");
+    expect(out).toContain("assetId=ma_1 | cardápio");
+    expect(out).toContain("assetId=ma_2 | tabela de preços");
+  });
+  it("vazio → string vazia", () => {
+    expect(renderMediaAssetsForAI([])).toBe("");
   });
 });
