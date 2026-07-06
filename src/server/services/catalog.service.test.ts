@@ -65,6 +65,20 @@ describe("catalog.service", () => {
     await expect(seedCatalogFromTemplate(a, "advocacia")).rejects.toThrow(); // só placeholder
   });
 
+  it("usa priceCents do catalogPreset quando informado", async () => {
+    const acc = await makeOwner();
+    // A ótica tem preset com itens precificados (Lentes de grau/contato).
+    const items = await seedCatalogFromTemplate(acc, "otica");
+    expect(items.some((i) => i.priceCents > 0)).toBe(true);
+  });
+
+  it("ramo só-heurística continua nascendo com preço 0", async () => {
+    const acc = await makeOwner();
+    // Salão de beleza não tem catalogPreset — só heurística.
+    const items = await seedCatalogFromTemplate(acc, "salao-beleza");
+    expect(items.every((i) => i.priceCents === 0)).toBe(true);
+  });
+
   it("cria produto com controle de estoque e expõe os campos", async () => {
     const a = await makeOwner();
     const item = await createCatalogItem(a, {

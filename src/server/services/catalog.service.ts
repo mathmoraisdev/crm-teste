@@ -141,8 +141,11 @@ export async function seedCatalogFromTemplate(accountId: string, templateId: str
   if (!seeds.length) throw new Error("Este modelo não tem itens sugeridos.");
   const existing = await prisma.catalogItem.count({ where: { accountId } });
   if (existing > 0) throw new Error("O catálogo já tem itens — o modelo só entra num catálogo vazio.");
+  // Mapa nome→preço vindo do preset do ramo (quando houver). Sem preset, o mapa é
+  // vazio e todo item nasce com preço 0 (o dono precifica depois).
+  const priceByName = new Map((tpl.catalogPreset ?? []).map((p) => [p.name, p.priceCents ?? 0]));
   await prisma.catalogItem.createMany({
-    data: seeds.map((s) => ({ accountId, name: s.name, priceCents: 0, kind: s.kind })),
+    data: seeds.map((s) => ({ accountId, name: s.name, priceCents: priceByName.get(s.name) ?? 0, kind: s.kind })),
   });
   return listCatalogItems(accountId);
 }
