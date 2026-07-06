@@ -315,6 +315,23 @@ export async function closeOrder(
         });
         await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
 
+        // ── Snapshot de custo por linha (margem realizada) ─────────────────────
+        // Independe da comissão: toda linha com item de catálogo carimba o custo
+        // atual (histórico imutável — o custo do catálogo pode mudar depois). Avulso
+        // ou item sem custo cadastrado → fica null (conta como parcial no relatório).
+        const catIds = [...new Set(order.items.map((i) => i.catalogItemId).filter(Boolean))] as string[];
+        if (catIds.length) {
+          const costs = await tx.catalogItem.findMany({
+            where: { id: { in: catIds }, accountId }, select: { id: true, costCents: true },
+          });
+          const costById = new Map(costs.map((c) => [c.id, c.costCents]));
+          for (const it of order.items) {
+            if (!it.catalogItemId) continue;
+            const unitCostCents = costById.get(it.catalogItemId) ?? null;
+            if (unitCostCents != null) await tx.orderItem.update({ where: { id: it.id }, data: { unitCostCents } });
+          }
+        }
+
         // ── Comissão: snapshot por linha ──────────────────────────────────────
         // Credita UM profissional por comanda: o explícito do fechamento OU, na
         // falta, o único do agendamento ligado (0 ou >1 distinto = ambíguo → sem
@@ -406,7 +423,7 @@ export async function reopenOrder(accountId: string, orderId: string, byId: stri
     await tx.orderTender.deleteMany({ where: { orderId } });
     // Limpa o snapshot de comissão — será recalculado no próximo fechamento (a
     // regra/preço/agendamento podem ter mudado). Sem isso o snapshot fica velho.
-    await tx.orderItem.updateMany({ where: { orderId }, data: { professionalId: null, commissionCents: null } });
+    await tx.orderItem.updateMany({ where: { orderId }, data: { professionalId: null, commissionCents: null, unitCostCents: null } });
     await reverseOrderStockExit(tx, accountId, orderId, byId);
   });
   return toDTO(await loadOwned(accountId, orderId));

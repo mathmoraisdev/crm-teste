@@ -195,6 +195,29 @@ describe("closeOrder — baixa de estoque", () => {
     expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(6); // 10 − 4, uma vez só
     expect(await listMovements(acc, prod.id)).toHaveLength(2); // ENTRADA + 1 SAIDA (não 2)
   });
+
+  it("closeOrder snapshota unitCostCents = custo do catálogo no fechamento", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Bola", priceCents: 5000, kind: "PRODUTO", costCents: 2000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 2 });
+    // reajustar o custo DEPOIS do fechamento não muda a comanda (snapshot histórico)
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await prisma.catalogItem.update({ where: { id: prod.id }, data: { costCents: 9999 } });
+    const line = await prisma.orderItem.findFirst({ where: { orderId: o.id }, select: { unitCostCents: true } });
+    expect(line!.unitCostCents).toBe(2000);
+  });
+
+  it("linha avulsa e item sem custo ficam com unitCostCents null", async () => {
+    const acc = await makeOwner();
+    const semCusto = await createCatalogItem(acc, { name: "Bala", priceCents: 100, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "Y" });
+    await addItem(acc, o.id, { catalogItemId: semCusto.id, quantity: 1 });
+    await addItem(acc, o.id, { name: "Gorjeta", unitPriceCents: 500, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    const lines = await prisma.orderItem.findMany({ where: { orderId: o.id }, select: { unitCostCents: true } });
+    expect(lines.every((l) => l.unitCostCents === null)).toBe(true);
+  });
 });
 
 describe("closeOrder — multi-pagamento e troco", () => {

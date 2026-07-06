@@ -442,6 +442,7 @@ model OrderItem {
   professionalId  String?
   professional    Professional? @relation("OrderItemProfessional", fields: [professionalId], references: [id], onDelete: SetNull)
   commissionCents Int?
+  unitCostCents   Int? // custo unitário do item no fechamento (snapshot p/ margem realizada). null = avulso/sem custo
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
