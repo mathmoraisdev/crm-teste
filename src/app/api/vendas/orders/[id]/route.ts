@@ -17,7 +17,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-const closeSchema = z.object({ payment: z.enum(["DINHEIRO", "PIX", "CARTAO", "OUTRO"]), note: z.string().optional() });
+const PAYMENT = z.enum(["DINHEIRO", "PIX", "CARTAO", "OUTRO"]);
+// Fechamento: multi-pagamento (tenders) OU o `payment` único legado (retrocompat).
+const closeSchema = z.object({
+  tenders: z.array(z.object({ method: PAYMENT, amountCents: z.number().int().min(0) })).optional(),
+  payment: PAYMENT.optional(),
+  amountTenderedCents: z.number().int().min(0).optional(),
+  allowPartial: z.boolean().optional(),
+  note: z.string().optional(),
+});
 const adjustmentsSchema = z.object({
   discountCents: z.number().int().min(0).nullish(),
   surchargeCents: z.number().int().min(0).nullish(),
@@ -26,8 +34,8 @@ const adjustmentsSchema = z.object({
 });
 
 // PATCH tem dois modos na mesma comanda ABERTA:
-//  - com `payment` → FECHA a comanda (fluxo de fechamento);
-//  - sem `payment` → grava os ajustes financeiros (desconto/taxa/gorjeta/mesa)
+//  - com `tenders` (ou o `payment` legado) → FECHA a comanda;
+//  - sem eles → grava os ajustes financeiros (desconto/taxa/gorjeta/mesa)
 //    ao vivo, enquanto o operador edita.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
@@ -35,7 +43,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json().catch(() => null);
 
-  if (body && typeof body === "object" && "payment" in body) {
+  const isClose = body && typeof body === "object" && ("payment" in body || "tenders" in body);
+  if (isClose) {
     const parsed = closeSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
     try {
