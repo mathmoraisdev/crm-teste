@@ -161,6 +161,13 @@ model User {
   // Meta de SLA do inbox (minutos até a 1ª resposta humana). null = sem meta →
   // nunca marca estouro. Aplica-se à conta toda; só faz sentido no dono (ownerId=null).
   inboxSlaMinutes    Int?
+  // Agendamento online (Onda F): identidade pública + config do auto-agendamento.
+  // Só faz sentido no dono (ownerId=null). Sem publicSlug ⇒ link não existe (404).
+  publicSlug         String?         @unique // link público de agendamento; null = sem link
+  bookingEnabled     Boolean         @default(false) // opt-in do auto-agendamento online
+  bookingLeadMinutes Int             @default(120) // antecedência mínima p/ marcar (min)
+  bookingHorizonDays Int             @default(30) // janela futura ofertada (dias)
+  bookingSlotStep    Int             @default(15) // granularidade da grade de horários (min)
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId            String?
