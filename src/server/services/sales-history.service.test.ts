@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
-import { openOrder, addItem, closeOrder } from "./order.service";
+import { openOrder, addItem, closeOrder, voidOrder } from "./order.service";
 import { listSalesHistory, listSalesOperators } from "./sales-history.service";
 
 describe("sales-history.service", () => {
@@ -42,5 +42,28 @@ describe("sales-history.service", () => {
     // operadores distintos p/ o filtro
     const ops = await listSalesOperators(acc);
     expect(ops.map((o) => o.name).sort()).toEqual(["Ana Operadora", "Dono"]);
+  });
+
+  it("estornada some do extrato por padrão; includeCanceled a traz marcada", async () => {
+    const acc = (await prisma.user.create({ data: { email: `h_est_${Math.random()}@t.test`, name: "Dono", passwordHash: "x" } })).id;
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "Cancelado" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO" });
+    await voidOrder(acc, o.id, "valor errado", acc);
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+
+    // padrão: não aparece
+    const def = await listSalesHistory(acc, { from, to });
+    expect(def.total).toBe(0);
+    expect(def.items).toHaveLength(0);
+
+    // includeCanceled: aparece marcada com o motivo
+    const withCanceled = await listSalesHistory(acc, { from, to, includeCanceled: true });
+    expect(withCanceled.total).toBe(1);
+    expect(withCanceled.items[0].status).toBe("CANCELADA");
+    expect(withCanceled.items[0].canceledReason).toBe("valor errado");
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
-import { openOrder, addItem, closeOrder } from "./order.service";
+import { openOrder, addItem, closeOrder, voidOrder } from "./order.service";
 import {
   openSession, addMovement, closeSession, getOpenSession,
   expectedCashCents, sessionSummary, listClosedSessions,
@@ -137,6 +137,31 @@ describe("sessionSummary — conferência derivada", () => {
     expect(sum.expected).toBe(14000);
     expect(sum.counted).toBe(13900);
     expect(sum.diff).toBe(-100); // falta
+  });
+
+  it("comanda estornada no turno sai do esperado em dinheiro", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: 5000 });
+    const s = await openSession(acc, acc, 10000); // fundo R$100
+
+    // duas vendas em dinheiro na sessão; uma será estornada
+    const o1 = await openOrder(acc, { openedById: acc, customerName: "Fica" });
+    await addItem(acc, o1.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o1.id, { tenders: [{ method: "DINHEIRO", amountCents: 5000 }], closedById: acc });
+    const o2 = await openOrder(acc, { openedById: acc, customerName: "Estornada" });
+    await addItem(acc, o2.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o2.id, { tenders: [{ method: "DINHEIRO", amountCents: 5000 }], closedById: acc });
+
+    // ambas carimbam a sessão (a estornada mantém tenders + cashSessionId no ledger)
+    const before = await sessionSummary(acc, s.id);
+    expect(before.cashSalesCents).toBe(10000);
+    expect(before.expected).toBe(20000); // 10000 fundo + 10000 vendas
+
+    await voidOrder(acc, o2.id, "valor errado", acc);
+
+    const after = await sessionSummary(acc, s.id);
+    expect(after.cashSalesCents).toBe(5000); // só a que ficou
+    expect(after.expected).toBe(15000); // 10000 + 5000
   });
 
   it("comanda fora de sessão não entra na conferência", async () => {

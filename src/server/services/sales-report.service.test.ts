@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
-import { openOrder, addItem, closeOrder } from "./order.service";
+import { openOrder, addItem, closeOrder, voidOrder } from "./order.service";
 import { setOrderAdjustments } from "./order.service";
 import { salesSummary, topItems, revenueByPayment, revenueByOperator } from "./sales-report.service";
 
@@ -91,6 +91,37 @@ describe("sales-report.service", () => {
     const to = new Date(Date.now() + 3600_000);
     const byPay = await revenueByPayment(acc, from, to);
     expect(byPay.find((p) => p.payment === "CARTAO")?.totalCents).toBe(4000);
+  });
+
+  it("comanda estornada (CANCELADA) sai de todos os agregados", async () => {
+    const acc = await makeOwner();
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
+    // fechada que conta
+    const keep = await openOrder(acc, { openedById: acc, customerName: "Fica" });
+    await addItem(acc, keep.id, { catalogItemId: corte.id, quantity: 1 }); // 4000
+    await closeOrder(acc, keep.id, { payment: "DINHEIRO", closedById: acc });
+    // fechada e depois estornada — não pode contar em lugar nenhum
+    const gone = await openOrder(acc, { openedById: acc, customerName: "Estornada" });
+    await addItem(acc, gone.id, { catalogItemId: corte.id, quantity: 5 }); // 20000
+    await closeOrder(acc, gone.id, { payment: "PIX", closedById: acc });
+    await voidOrder(acc, gone.id, "valor errado", acc);
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+
+    const s = await salesSummary(acc, from, to);
+    expect(s.totalCents).toBe(4000); // só a que ficou
+    expect(s.orderCount).toBe(1);
+
+    const byPay = await revenueByPayment(acc, from, to);
+    expect(byPay.find((p) => p.payment === "DINHEIRO")?.totalCents).toBe(4000);
+    expect(byPay.find((p) => p.payment === "PIX")).toBeUndefined(); // a estornada era PIX
+
+    const byOp = await revenueByOperator(acc, from, to);
+    expect(byOp[0].totalCents).toBe(4000);
+
+    const top = await topItems(acc, from, to, 5);
+    expect(top[0].quantity).toBe(1); // não conta as 5 unidades da estornada
   });
 
   it("revenueByOperator soma por quem lançou e ordena por receita", async () => {

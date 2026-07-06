@@ -1,9 +1,10 @@
 import { prisma } from "@/server/db/client";
-import type { OrderPayment } from "@prisma/client";
+import type { OrderPayment, OrderStatus } from "@prisma/client";
 import { orderTotalCents } from "./order.service";
 
 export interface SalesHistoryRow {
   id: string;
+  status: OrderStatus;
   closedAt: string;
   customerName: string | null;
   leadId: string | null;
@@ -12,16 +13,20 @@ export interface SalesHistoryRow {
   discountCents: number | null;
   surchargeCents: number | null;
   totalCents: number;
+  canceledReason: string | null;
 }
 export interface SalesHistoryPage { items: SalesHistoryRow[]; total: number; }
 
 export async function listSalesHistory(
   accountId: string,
-  opts: { from: Date; to: Date; operatorId?: string; query?: string; skip?: number; take?: number },
+  opts: { from: Date; to: Date; operatorId?: string; query?: string; skip?: number; take?: number; includeCanceled?: boolean },
 ): Promise<SalesHistoryPage> {
   const where = {
     accountId,
-    status: "FECHADA" as const,
+    // Extrato = comandas FECHADA. Canceladas ficam fora por padrão; `includeCanceled`
+    // as traz (view-only, marcadas/riscadas na UI). Canceladas mantêm `closedAt`, então
+    // o filtro por período continua valendo.
+    status: opts.includeCanceled ? { in: ["FECHADA", "CANCELADA"] as const } : ("FECHADA" as const),
     closedAt: { gte: opts.from, lte: opts.to },
     ...(opts.operatorId ? { openedById: opts.operatorId } : {}),
     ...(opts.query?.trim()
@@ -35,8 +40,8 @@ export async function listSalesHistory(
       skip: opts.skip ?? 0,
       take: opts.take ?? 50,
       select: {
-        id: true, closedAt: true, customerName: true, leadId: true, payment: true,
-        discountCents: true, surchargeCents: true, tipCents: true,
+        id: true, status: true, closedAt: true, customerName: true, leadId: true, payment: true,
+        discountCents: true, surchargeCents: true, tipCents: true, canceledReason: true,
         openedBy: { select: { name: true } },
         items: { select: { unitPriceCents: true, quantity: true } },
       },
@@ -45,6 +50,7 @@ export async function listSalesHistory(
   ]);
   const items: SalesHistoryRow[] = rows.map((o) => ({
     id: o.id,
+    status: o.status,
     closedAt: (o.closedAt ?? new Date(0)).toISOString(),
     customerName: o.customerName,
     leadId: o.leadId,
@@ -53,6 +59,7 @@ export async function listSalesHistory(
     discountCents: o.discountCents,
     surchargeCents: o.surchargeCents,
     totalCents: orderTotalCents(o),
+    canceledReason: o.canceledReason,
   }));
   return { items, total };
 }

@@ -133,9 +133,12 @@ export async function sessionSummary(accountId: string, sessionId: string): Prom
   if (!s) throw new Error("Sessão não encontrada.");
 
   // Vendas por meio: soma OrderTender das comandas desta sessão (escopadas por conta).
+  // Filtra status=FECHADA: uma comanda ESTORNADA (CANCELADA) mantém tenders e
+  // cashSessionId (o ledger é append-only), mas a venda foi anulada — não pode
+  // contar no esperado em dinheiro do turno ([[sessao-de-caixa-feito]]).
   const tenders = await prisma.orderTender.groupBy({
     by: ["method"],
-    where: { order: { cashSessionId: sessionId, accountId } },
+    where: { order: { cashSessionId: sessionId, accountId, status: "FECHADA" } },
     _sum: { amountCents: true },
   });
   const salesByMethod: SalesByMethod = { DINHEIRO: 0, PIX: 0, CARTAO: 0, OUTRO: 0 };
