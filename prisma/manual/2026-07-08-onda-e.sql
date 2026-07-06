@@ -24,3 +24,13 @@ DO $$ BEGIN
     FOREIGN KEY ("accountId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Onda E · Iniciativa 10 (automação de ciclo de vida) — ACRESCENTADO ao arquivo
+-- compartilhado com a iniciativa 7 (IA tool-calling). NÃO sobrescreva; compõe.
+-- Tudo IF NOT EXISTS → ordem de aplicação não importa. [[prod-schema-drift-destravar]]
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE "Lead"  ADD COLUMN IF NOT EXISTS "lastEngagedAt"     TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "postSaleThankedAt" TIMESTAMP(3);
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "reviewRequestedAt" TIMESTAMP(3);
+ALTER TABLE "User"  ADD COLUMN IF NOT EXISTS "lifecycleAutomationEnabled" BOOLEAN NOT NULL DEFAULT false;

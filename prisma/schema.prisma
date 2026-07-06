@@ -168,6 +168,11 @@ model User {
   bookingLeadMinutes Int             @default(120) // antecedência mínima p/ marcar (min)
   bookingHorizonDays Int             @default(30) // janela futura ofertada (dias)
   bookingSlotStep    Int             @default(15) // granularidade da grade de horários (min)
+  // Opt-in por conta das automações de ciclo de vida (pós-venda, avaliação,
+  // reengajamento). default false: nada dispara para o cliente do dono sem ele
+  // ligar. Combinado com o kill-switch global de ambiente (LIFECYCLE_AUTOMATION).
+  // Só faz sentido no dono (ownerId=null).
+  lifecycleAutomationEnabled Boolean @default(false)
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId            String?
@@ -387,6 +392,11 @@ model Order {
   customFields   Json? // valores dos CustomFieldDef scope=ORDER (chaveado por `key`)
   createdAt      DateTime        @default(now())
   closedAt       DateTime? // quando foi fechada (FECHADA)
+  // Automação de ciclo de vida (marcadores de janela idempotente, gravados só APÓS
+  // o envio — igual remindedDayBeforeAt/HourBeforeAt do lembrete). null = ainda não
+  // enviado. Pós-venda e pedido de avaliação (NPS) ancoram nesta comanda FECHADA.
+  postSaleThankedAt DateTime?
+  reviewRequestedAt DateTime?
   number         Int? // nº sequencial do cupom POR conta; atribuído no fechamento (null = comanda antiga)
   // Estorno (CANCELADA): auditoria de quem anulou a venda e por quê. canceledById é
   // só o id (sem relação — espelha o mínimo do padrão de auditoria, sem back-relation).
@@ -667,6 +677,9 @@ model Lead {
   optOut            Boolean          @default(false)
   optOutAt          DateTime?
   consentSource     String? // origem do opt-in (LGPD)
+  // Reengajamento (ciclo de vida): última vez que uma automação de win-back tocou
+  // este lead. Evita re-tocar o mesmo frio toda semana. null = nunca tocado.
+  lastEngagedAt     DateTime?
   tags              Tag[]            @relation("LeadTags")
   customFields      Json? // valores dos CustomFieldDef da conta (chaveado por `key`)
   // IA pausada manualmente p/ este lead (handover humano)
