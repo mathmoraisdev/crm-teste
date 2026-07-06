@@ -22,6 +22,7 @@ interface ReportData {
   expensesTotalCents?: number;
   balanceCents?: number;
   expensesByCategory?: { category: string; totalCents: number }[];
+  commissionByProfessional?: { professionalId: string; professionalName: string; baseCents: number; commissionCents: number; itemCount: number }[];
 }
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -359,6 +360,40 @@ function ResumoView({
                     <span className="text-slate-600">{formatCentsBRL(c.totalCents)}</span>
                   </li>
                 ))}
+              </ul>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Comissões por profissional (só dono/gerente; payload só traz p/ canSettings) */}
+      {hasExpenses && (
+        <Card>
+          <CardHeader title="Comissões por profissional" subtitle="Quanto pagar a cada profissional no período (base × comissão)" />
+          <div className="px-5 py-4">
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 size={14} className="animate-spin" /> Carregando…
+              </div>
+            ) : !data || (data.commissionByProfessional?.length ?? 0) === 0 ? (
+              <p className="text-sm text-slate-400">Nenhuma comissão no período.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {data.commissionByProfessional!.map((c) => (
+                  <li key={c.professionalId} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate text-ink">
+                      {c.professionalName}
+                      <span className="text-slate-400"> · base {formatCentsBRL(c.baseCents)}</span>
+                    </span>
+                    <span className="whitespace-nowrap font-semibold text-ink">{formatCentsBRL(c.commissionCents)}</span>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between gap-3 border-t border-line-default pt-1.5 text-sm">
+                  <span className="text-slate-500">Total</span>
+                  <span className="whitespace-nowrap font-bold text-ink">
+                    {formatCentsBRL(data.commissionByProfessional!.reduce((s, c) => s + c.commissionCents, 0))}
+                  </span>
+                </li>
               </ul>
             )}
           </div>
