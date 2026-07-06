@@ -12,10 +12,18 @@ vi.mock("@/server/services/order.service", () => ({
   openOrder: vi.fn(),
   addItem: vi.fn(),
 }));
+vi.mock("@/server/services/conversation.service", () => ({
+  setHandoff: vi.fn(),
+}));
+vi.mock("@/server/services/internal-note.service", () => ({
+  addNote: vi.fn(),
+}));
 
 import { listCatalogItems } from "@/server/services/catalog.service";
 import { sendWhatsAppMessage } from "@/server/services/messaging";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
+import { setHandoff } from "@/server/services/conversation.service";
+import { addNote } from "@/server/services/internal-note.service";
 import { buildAttendanceTools, type AttendanceToolCtx } from "./attendance-tools";
 
 const listMock = vi.mocked(listCatalogItems);
@@ -23,6 +31,8 @@ const sendMock = vi.mocked(sendWhatsAppMessage);
 const listOpenMock = vi.mocked(listOpenOrders);
 const openOrderMock = vi.mocked(openOrder);
 const addItemMock = vi.mocked(addItem);
+const setHandoffMock = vi.mocked(setHandoff);
+const addNoteMock = vi.mocked(addNote);
 
 function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
   return {
@@ -53,6 +63,8 @@ beforeEach(() => {
   listOpenMock.mockReset();
   openOrderMock.mockReset();
   addItemMock.mockReset();
+  setHandoffMock.mockReset();
+  addNoteMock.mockReset();
 });
 
 // OrderDTO mínimo p/ os stubs de comanda.
@@ -64,9 +76,11 @@ const orderDto = (over: Partial<Record<string, unknown>> = {}) => ({
 }) as never;
 
 describe("buildAttendanceTools (gating)", () => {
-  it("registra sempre consultar_estoque e enviar_catalogo", () => {
+  it("registra sempre consultar_estoque, enviar_catalogo e escalar_humano", () => {
     const names = buildAttendanceTools(ctx({ hasCatalog: false })).map((t) => t.name);
-    expect(names).toEqual(["consultar_estoque", "enviar_catalogo"]);
+    expect(names).toContain("consultar_estoque");
+    expect(names).toContain("enviar_catalogo");
+    expect(names).toContain("escalar_humano");
   });
 
   it("registra criar_comanda só quando hasCatalog", () => {
@@ -171,5 +185,27 @@ describe("criar_comanda", () => {
     const r = await tool("criar_comanda").handler({ itens: [] });
     expect(listOpenMock).not.toHaveBeenCalled();
     expect(r.content).toMatch(/nenhum item/i);
+  });
+});
+
+describe("escalar_humano", () => {
+  it("chama setHandoff(paused=true), registra o motivo e encerra o turno (stop)", async () => {
+    setHandoffMock.mockResolvedValue({} as never);
+    addNoteMock.mockResolvedValue({} as never);
+    const r = await tool("escalar_humano").handler({ motivo: "reclamação séria" });
+    expect(setHandoffMock).toHaveBeenCalledWith("lead_1", "acc_1", true);
+    expect(addNoteMock).toHaveBeenCalledTimes(1);
+    expect(addNoteMock.mock.calls[0][3]).toContain("reclamação séria");
+    expect(r.stop).toBe(true);
+    expect(r.content).toBe("escalado");
+    expect(sendMock).not.toHaveBeenCalled(); // sem mensagem automática ao cliente
+  });
+
+  it("falha ao registrar a nota NÃO desfaz a escalação", async () => {
+    setHandoffMock.mockResolvedValue({} as never);
+    addNoteMock.mockRejectedValue(new Error("nota falhou"));
+    const r = await tool("escalar_humano").handler({ motivo: "quer humano" });
+    expect(setHandoffMock).toHaveBeenCalledTimes(1);
+    expect(r.stop).toBe(true);
   });
 });

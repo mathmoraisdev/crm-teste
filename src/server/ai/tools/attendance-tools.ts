@@ -1,6 +1,7 @@
 import { formatCentsBRL } from "@/lib/money";
 import { listCatalogItems } from "@/server/services/catalog.service";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
+import { addNote } from "@/server/services/internal-note.service";
 import { sendWhatsAppMessage } from "@/server/services/messaging";
 import { renderCatalogForTools } from "../attendance-context";
 import type { ToolDef, ToolResult } from "../provider";
@@ -197,14 +198,61 @@ function criarComanda(ctx: AttendanceToolCtx): ToolDef {
   };
 }
 
+/** Lê `{ motivo?: string }` de um args cru. */
+function readMotivo(args: unknown): string {
+  if (args && typeof args === "object" && "motivo" in args) {
+    const m = (args as { motivo?: unknown }).motivo;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+  return "sem motivo informado";
+}
+
+/**
+ * Handler `escalar_humano` (Fase 4): a IA decide passar o atendimento para uma
+ * pessoa. Move o lead p/ a FILA (setHandoff pausa a IA + inicia o SLA) e registra
+ * o motivo como nota interna (best-effort). Encerra o turno (`stop:true`): o
+ * humano assume e a IA não manda mais nada. NÃO envia mensagem automática ao
+ * cliente (evita "vou te transferir" fantasma — a IA pode avisar ANTES de chamar).
+ */
+function escalarHumano(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "escalar_humano",
+    description:
+      "Transfere a conversa para um atendente humano. Use quando o cliente pedir uma pessoa, " +
+      "fizer uma reclamação séria, ou o caso fugir do que você pode resolver. Informe o motivo.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        motivo: { type: "string", description: "Por que está escalando (curto)." },
+      },
+      required: ["motivo"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const motivo = readMotivo(args);
+      // setHandoff mora em conversation.service, que importa esta fábrica — import
+      // dinâmico evita o ciclo estático (resolve no runtime, dentro do handler).
+      const { setHandoff } = await import("@/server/services/conversation.service");
+      await setHandoff(ctx.lead.id, ctx.accountId, true);
+      // Nota interna com o motivo (best-effort: falha aqui não desfaz a escalação).
+      try {
+        await addNote(ctx.accountId, ctx.lead.id, ctx.accountId, `🤖 IA escalou para humano: ${motivo}`);
+      } catch {
+        // ignora — a escalação (setHandoff) é o que importa
+      }
+      return { content: "escalado", stop: true };
+    },
+  };
+}
+
 /**
  * Fábrica das tools de atendimento. Decide INTERNAMENTE quais registrar a partir
- * do `ctx`. Read-only (consultar/enviar catálogo) sempre entram; `criar_comanda`
- * só quando a conta usa o módulo de comanda (tem CatalogItem — `hasCatalog`).
- * Fases seguintes adicionam `escalar_humano`/`enviar_midia`.
+ * do `ctx`. Read-only (consultar/enviar catálogo) e `escalar_humano` sempre
+ * entram; `criar_comanda` só quando a conta usa o módulo de comanda (tem
+ * CatalogItem — `hasCatalog`). A Fase 5 adiciona `enviar_midia`.
  */
 export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
-  const tools = [consultarEstoque(ctx), enviarCatalogo(ctx)];
+  const tools = [consultarEstoque(ctx), enviarCatalogo(ctx), escalarHumano(ctx)];
   if (ctx.hasCatalog) tools.push(criarComanda(ctx));
   return tools;
 }

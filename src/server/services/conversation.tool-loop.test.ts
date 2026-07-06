@@ -34,6 +34,8 @@ vi.mock("@/server/db/client", () => {
               : fullLead(),
           ),
         ),
+        // setHandoff (escalar_humano) usa findFirst por (id,userId).
+        findFirst: vi.fn(() => Promise.resolve({ id: "lead_1", queuedAt: null })),
         update: vi.fn(() => Promise.resolve({})),
       },
       meeting: { findUnique: vi.fn(() => Promise.resolve(null)) },
@@ -86,9 +88,13 @@ vi.mock("@/server/services/catalog.service", () => ({
     ]),
   ),
 }));
+// escalar_humano registra o motivo como nota interna (best-effort).
+vi.mock("@/server/services/internal-note.service", () => ({ addNote: vi.fn() }));
 
 import { sendWhatsAppMessage } from "@/server/services/messaging";
+import { prisma } from "@/server/db/client";
 const sendMock = vi.mocked(sendWhatsAppMessage);
+const leadUpdateMock = vi.mocked(prisma.lead.update);
 
 async function run(steps: ScriptedStep[], finalText: string) {
   state.client = makeScriptedToolLoopClient(steps, { finalText });
@@ -131,5 +137,16 @@ describe("respondToLead — caminho agêntico (gated)", () => {
     await respondToLead("lead_1");
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][1]).toContain("Como posso ajudar");
+  });
+
+  it("script chama escalar_humano → não envia texto e pausa a IA (FILA)", async () => {
+    await run([{ call: "escalar_humano", args: { motivo: "quer atendente" } }], "texto que não deve sair");
+    // stop encerrou o turno: nenhuma resposta ao cliente por cima do handoff.
+    expect(sendMock).not.toHaveBeenCalled();
+    // setHandoff (real, via prisma mockado) pausou a IA e mandou p/ a FILA.
+    const paused = leadUpdateMock.mock.calls.some(
+      ([arg]) => (arg as { data?: { aiPaused?: boolean; attendanceStatus?: string } }).data?.aiPaused === true,
+    );
+    expect(paused).toBe(true);
   });
 });

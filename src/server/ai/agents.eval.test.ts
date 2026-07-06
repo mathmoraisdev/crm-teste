@@ -219,4 +219,53 @@ describe.skipIf(!enabled)("eval: attendance tool-calling", () => {
     expect(ids).toContain("ci_burger");
     expect(ids).toContain("ci_coca");
   }, EVAL_TIMEOUT);
+
+  function escalarTool() {
+    const motivos: string[] = [];
+    const tools = [
+      {
+        name: "escalar_humano",
+        description:
+          "Transfere a conversa para um atendente humano (cliente pediu uma pessoa, reclamação séria, ou caso fora do seu alcance). Informe o motivo.",
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { motivo: { type: "string" } },
+          required: ["motivo"],
+        },
+        handler: async (args: unknown) => {
+          motivos.push((args as { motivo?: string }).motivo ?? "");
+          return { content: "escalado", stop: true };
+        },
+      },
+    ];
+    return { tools, motivos };
+  }
+
+  it("'quero falar com um atendente de verdade' → escala p/ humano", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools } = escalarTool();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Loja X" },
+      conversation: [{ direction: "INBOUND", content: "quero falar com um atendente de verdade, não um robô" }],
+      tools,
+    });
+    expect(r.toolsUsed).toContain("escalar_humano");
+    expect(r.stopped).toBe(true);
+  }, EVAL_TIMEOUT);
+
+  it("reclamação séria → escala p/ humano", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools } = escalarTool();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Loja X" },
+      conversation: [{ direction: "INBOUND", content: "isso é um absurdo, recebi o produto quebrado e quero reclamar formalmente!" }],
+      tools,
+    });
+    expect(r.toolsUsed).toContain("escalar_humano");
+  }, EVAL_TIMEOUT);
 });
