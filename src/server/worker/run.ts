@@ -7,6 +7,7 @@ import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
 import { dispatchDueAppointmentReminders } from "@/server/services/appointment-reminders";
 import { purgeExpiredMedia } from "@/server/services/media-retention";
+import { dispatchLifecycleAutomations } from "@/server/services/lifecycle-automation";
 import { reconcileAiResume } from "@/server/services/conversation.service";
 import { scheduleResponse } from "./respond-queue";
 import { sleep } from "@/lib/humanize";
@@ -145,6 +146,7 @@ async function main() {
   let lastReminder = 0;
   let lastAiResume = 0;
   let lastRetention = 0;
+  let lastLifecycle = 0;
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
@@ -211,6 +213,21 @@ async function main() {
         logger.error({ err }, "[worker] purgeExpiredMedia falhou");
       }
       lastRetention = Date.now();
+    }
+
+    // Automação de ciclo de vida (pós-venda / NPS / reengajamento de frio). O
+    // serviço é no-op se LIFECYCLE_AUTOMATION=false (kill-switch) ou fora da janela
+    // comercial. Throttle próprio (default 15 min): a granularidade é hora/dia, não
+    // precisa rodar a cada poll. Roda nos dois modos (envio por chip no baileys,
+    // Graph no cloud).
+    if (Date.now() - lastLifecycle >= env.LIFECYCLE_EVERY_MS) {
+      try {
+        const n = await dispatchLifecycleAutomations(new Date());
+        if (n > 0) logger.info({ sent: n }, "[worker] automações de ciclo de vida enviadas");
+      } catch (err) {
+        logger.error({ err }, "[worker] dispatchLifecycleAutomations falhou");
+      }
+      lastLifecycle = Date.now();
     }
 
     // Devolve a IA à conversa quando o operador retoma (handback/resolve) ou o
