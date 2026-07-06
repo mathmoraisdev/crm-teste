@@ -67,14 +67,20 @@ describe("booking-settings.service", () => {
     await expect(setBookingSettings(acc, { bookingLeadMinutes: -1 })).rejects.toThrow();
   });
 
+  // Token único por execução: o slug é @unique global e o DB de teste acumula entre
+  // rodadas — bases fixas colidiriam e o sufixo de ensureSlug faria a asserção derivar.
+  const token = () => `t${Math.round(performance.now())}${Math.floor(Math.random() * 1e6)}`;
+
   it("setBookingSettings normaliza o slug e barra duplicado", async () => {
     const a = await makeOwner();
     const b = await makeOwner();
-    const sa = await setBookingSettings(a, { publicSlug: "Salão da Ana!" });
-    expect(sa.publicSlug).toBe("salao-da-ana");
+    const base = `Salão ${token()}!`;
+    const expected = slugify(base);
+    const sa = await setBookingSettings(a, { publicSlug: base });
+    expect(sa.publicSlug).toBe(expected);
 
     // outra conta não pode pegar o mesmo slug
-    await expect(setBookingSettings(b, { publicSlug: "salao-da-ana" })).rejects.toThrow(
+    await expect(setBookingSettings(b, { publicSlug: expected })).rejects.toThrow(
       /já está em uso/,
     );
 
@@ -82,29 +88,28 @@ describe("booking-settings.service", () => {
     await expect(setBookingSettings(b, { publicSlug: "!!!" })).rejects.toThrow();
 
     // a própria conta pode re-setar o seu slug atual
-    const again = await setBookingSettings(a, { publicSlug: "salao-da-ana" });
-    expect(again.publicSlug).toBe("salao-da-ana");
+    const again = await setBookingSettings(a, { publicSlug: expected });
+    expect(again.publicSlug).toBe(expected);
   });
 
   it("ensureSlug gera do nome, é idempotente e resolve colisão com sufixo", async () => {
-    const a = await makeOwner("Barbearia do Zé");
-    const slugA = await ensureSlug(a);
-    expect(slugA).toBe("barbearia-do-ze");
+    const name = `Barbearia ${token()}`;
+    const base = slugify(name);
+    const a = await makeOwner(name);
+    expect(await ensureSlug(a)).toBe(base);
 
     // idempotente: chamar de novo devolve o mesmo, não sobrescreve
-    expect(await ensureSlug(a)).toBe("barbearia-do-ze");
+    expect(await ensureSlug(a)).toBe(base);
 
     // colisão: outra conta com o mesmo nome ganha sufixo
-    const b = await makeOwner("Barbearia do Zé");
-    const slugB = await ensureSlug(b);
-    expect(slugB).toBe("barbearia-do-ze-2");
+    const b = await makeOwner(name);
+    expect(await ensureSlug(b)).toBe(`${base}-2`);
   });
 
   it("ensureSlug prefere o appName do branding quando existe", async () => {
-    const acc = await makeOwner("Nome Fiscal LTDA");
-    await prisma.accountBranding.create({
-      data: { accountId: acc, appName: "Espaço Zen" },
-    });
-    expect(await ensureSlug(acc)).toBe("espaco-zen");
+    const acc = await makeOwner(`Nome Fiscal ${token()}`);
+    const appName = `Espaço ${token()}`;
+    await prisma.accountBranding.create({ data: { accountId: acc, appName } });
+    expect(await ensureSlug(acc)).toBe(slugify(appName));
   });
 });
