@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Check, X, Sparkles } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,7 @@ interface Item {
   trackStock: boolean;
   sku: string | null;
   barcode: string | null;
+  variantGroup: string | null;
   stockQty: number;
   minStock: number;
   costCents: number | null;
@@ -55,6 +56,7 @@ export function CatalogManager({
   const [trackStock, setTrackStock] = useState(false);
   const [sku, setSku] = useState("");
   const [barcode, setBarcode] = useState("");
+  const [variantGroup, setVariantGroup] = useState("");
   const [initialQty, setInitialQty] = useState("");
   const [minStock, setMinStock] = useState("");
   const [costStr, setCostStr] = useState("");
@@ -75,6 +77,7 @@ export function CatalogManager({
   const [editTrackStock, setEditTrackStock] = useState(false);
   const [editSku, setEditSku] = useState("");
   const [editBarcode, setEditBarcode] = useState("");
+  const [editVariantGroup, setEditVariantGroup] = useState("");
   const [editMinStock, setEditMinStock] = useState("");
   const [editCost, setEditCost] = useState("");
   const [editSector, setEditSector] = useState("");
@@ -96,6 +99,23 @@ export function CatalogManager({
     load();
   }, [load]);
 
+  // Grade (SKU flat): agrupa itens com o mesmo variantGroup sob um subcabeçalho. A
+  // ordenação é estável e no-op quando ninguém usa grade (null ordena por último →
+  // ordem original preservada). Só apresentação: cada linha continua editável isolada.
+  const orderedItems = useMemo(() => {
+    if (!items) return [];
+    return [...items].sort((a, b) => (a.variantGroup ?? "￿").localeCompare(b.variantGroup ?? "￿"));
+  }, [items]);
+  const groupHeaders = useMemo(() => {
+    const m = new Map<string, string>();
+    let prev: string | null = null;
+    for (const it of orderedItems) {
+      if (it.variantGroup && it.variantGroup !== prev) m.set(it.id, it.variantGroup);
+      prev = it.variantGroup ?? null;
+    }
+    return m;
+  }, [orderedItems]);
+
   function resetAddForm() {
     setName("");
     setPrice("");
@@ -103,6 +123,7 @@ export function CatalogManager({
     setTrackStock(false);
     setSku("");
     setBarcode("");
+    setVariantGroup("");
     setInitialQty("");
     setMinStock("");
     setCostStr("");
@@ -125,8 +146,11 @@ export function CatalogManager({
         const d = Math.floor(Number(duration));
         body.durationMinutes = duration.trim() && Number.isFinite(d) && d > 0 ? d : null;
       }
-      // Código de barras: faz sentido em qualquer PRODUTO (bipar), independe de estoque.
-      if (kind === "PRODUTO") body.barcode = barcode.trim() || null;
+      // Código de barras e grupo de grade: fazem sentido em qualquer PRODUTO, independem de estoque.
+      if (kind === "PRODUTO") {
+        body.barcode = barcode.trim() || null;
+        body.variantGroup = variantGroup.trim() || null;
+      }
       if (useStock) {
         body.trackStock = true;
         body.sku = sku.trim() || null;
@@ -165,6 +189,7 @@ export function CatalogManager({
     setEditTrackStock(it.trackStock);
     setEditSku(it.sku ?? "");
     setEditBarcode(it.barcode ?? "");
+    setEditVariantGroup(it.variantGroup ?? "");
     setEditMinStock(it.trackStock ? String(it.minStock) : "");
     setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
     setEditSector(it.printSector ?? "");
@@ -195,6 +220,7 @@ export function CatalogManager({
       if (editKind === "PRODUTO") {
         patch.trackStock = editTrackStock;
         patch.barcode = editBarcode.trim() || null;
+        patch.variantGroup = editVariantGroup.trim() || null;
         if (editTrackStock) {
           patch.sku = editSku.trim() || null;
           patch.minStock = Math.max(0, Math.floor(Number(editMinStock) || 0));
@@ -203,6 +229,7 @@ export function CatalogManager({
       } else {
         patch.trackStock = false;
         patch.barcode = null;
+        patch.variantGroup = null;
       }
       const res = await fetch(`/api/vendas/catalog/${id}`, {
         method: "PATCH",
@@ -324,10 +351,16 @@ export function CatalogManager({
           )
         ) : (
           <ul className="space-y-1.5">
-            {items.map((it) =>
-              editingId === it.id ? (
+            {orderedItems.map((it) => (
+              <Fragment key={it.id}>
+                {groupHeaders.has(it.id) && (
+                  <li className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {groupHeaders.get(it.id)}
+                  </li>
+                )}
+                {editingId === it.id ? (
                 // ── Modo edição ──────────────────────────────────────────
-                <li key={it.id} className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
+                <li className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       value={editName}
@@ -367,12 +400,20 @@ export function CatalogManager({
                   )}
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
-                      <input
-                        value={editBarcode}
-                        onChange={(e) => setEditBarcode(e.target.value)}
-                        placeholder="Código de barras (EAN) — opcional"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                      />
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          value={editBarcode}
+                          onChange={(e) => setEditBarcode(e.target.value)}
+                          placeholder="Código de barras (EAN) — opcional"
+                          className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                        <input
+                          value={editVariantGroup}
+                          onChange={(e) => setEditVariantGroup(e.target.value)}
+                          placeholder="Grupo/grade (ex.: Camiseta) — opcional"
+                          className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                      </div>
                       <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                         <input
                           type="checkbox"
@@ -421,7 +462,6 @@ export function CatalogManager({
               ) : (
                 // ── Modo leitura ─────────────────────────────────────────
                 <li
-                  key={it.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line-default bg-card px-3 py-2"
                 >
                   <div className="min-w-0">
@@ -485,8 +525,9 @@ export function CatalogManager({
                     </div>
                   )}
                 </li>
-              ),
-            )}
+                )}
+              </Fragment>
+            ))}
           </ul>
         )}
 
@@ -532,12 +573,20 @@ export function CatalogManager({
             )}
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
-                <input
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Código de barras (EAN) — opcional"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    placeholder="Código de barras (EAN) — opcional"
+                    className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                  <input
+                    value={variantGroup}
+                    onChange={(e) => setVariantGroup(e.target.value)}
+                    placeholder="Grupo/grade (ex.: Camiseta) — opcional"
+                    className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                   <input
                     type="checkbox"

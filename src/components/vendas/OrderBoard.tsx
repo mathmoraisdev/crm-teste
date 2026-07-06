@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Plus, Minus, Trash2, Search, X, SlidersHorizontal, Printer, ChefHat } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -41,7 +41,7 @@ interface Order {
   subtotalCents: number;
   totalCents: number;
 }
-interface CatalogItem { id: string; kind: "SERVICO" | "PRODUTO"; name: string; priceCents: number; active: boolean; }
+interface CatalogItem { id: string; kind: "SERVICO" | "PRODUTO"; name: string; priceCents: number; active: boolean; variantGroup?: string | null; }
 interface LeadHit { id: string; name: string; phone: string; }
 
 const PAYMENTS: { value: Payment; label: string }[] = [
@@ -454,6 +454,16 @@ function OrderPanel({
     ? catalog.filter((c) => c.name.toLowerCase().includes(catQuery.trim().toLowerCase()))
     : catalog;
 
+  // Grade: agrupa opções do mesmo variantGroup sob um subcabeçalho no picker. Ordenação
+  // estável e no-op quando ninguém usa grade (null ordena por último → ordem preservada).
+  const filteredOrdered = [...filtered].sort((a, b) => (a.variantGroup ?? "￿").localeCompare(b.variantGroup ?? "￿"));
+  const pickerGroupHeaders = new Map<string, string>();
+  let prevGroup: string | null = null;
+  for (const c of filteredOrdered) {
+    if (c.variantGroup && c.variantGroup !== prevGroup) pickerGroupHeaders.set(c.id, c.variantGroup);
+    prevGroup = c.variantGroup ?? null;
+  }
+
   async function call(url: string, init: RequestInit) {
     setBusy(true);
     onError(null);
@@ -719,18 +729,25 @@ function OrderPanel({
             <p className="text-xs text-slate-400">Nenhum item ativo no catálogo.</p>
           ) : (
             <ul className="max-h-44 space-y-1 overflow-y-auto">
-              {filtered.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => addFromCatalog(c.id)}
-                    disabled={busy}
-                    className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
-                  >
-                    <span className="truncate text-ink">{c.name}</span>
-                    <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>
-                  </button>
-                </li>
+              {filteredOrdered.map((c) => (
+                <Fragment key={c.id}>
+                  {pickerGroupHeaders.has(c.id) && (
+                    <li className="px-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      {pickerGroupHeaders.get(c.id)}
+                    </li>
+                  )}
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => addFromCatalog(c.id)}
+                      disabled={busy}
+                      className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
+                    >
+                      <span className="truncate text-ink">{c.name}</span>
+                      <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>
+                    </button>
+                  </li>
+                </Fragment>
               ))}
             </ul>
           )}
