@@ -951,6 +951,7 @@ model WhatsAppNumber {
   qualifyEnabled             Boolean @default(false) // roda qualificação/score (funil de vendas)
   scheduleEnabled            Boolean @default(false) // permite propor/agendar reunião
   salesEnabled               Boolean @default(false) // "Modo vendas": IA pode apresentar oferta e cobrar Pix (send_offer)
+  aiToolCallingEnabled       Boolean @default(false) // "IA com ações" (beta): habilita o loop de tools (consultar estoque, catálogo, comanda…)
   // Texto dos lembretes de reunião ao lead (placeholders {{nome}} {{quando}} {{link}});
   // null/vazio = usa o texto padrão. Véspera (~24h) e em cima da hora (~1h).
   reminderDayBeforeTemplate  String?

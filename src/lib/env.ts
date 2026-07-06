@@ -15,6 +15,10 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   AI_MODEL_CHEAP: z.string().default("gpt-4o-mini"), // classificação / próxima pergunta (barato)
   AI_MODEL_STRONG: z.string().default("gpt-4o"), // qualificação estruturada / decisões
+  // Kill-switch global do loop de tools (IA com ações). true desliga o caminho
+  // agêntico em TODOS os números, independente da flag por número — p/ apagar
+  // incêndio em prod sem tocar no banco. Default false = respeita a flag do número.
+  AI_TOOLCALLING_DISABLED: z.coerce.boolean().default(false),
 
   // Chave mestra p/ cifrar credenciais de IA dos usuários (BYOK). 64 hex = 32 bytes.
   // Opcional p/ não quebrar build/avaliador; o factory de crypto exige em runtime.

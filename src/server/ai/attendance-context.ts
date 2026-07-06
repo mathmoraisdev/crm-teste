@@ -67,3 +67,34 @@ export function renderCatalogForAI(items: CatalogItemForContext[], limit = 40): 
   });
   return `SERVIÇOS E PRODUTOS (catálogo da empresa; informe preço só se listado):\n${lines.join("\n")}`;
 }
+
+export interface CatalogItemForTools {
+  id: string;
+  name: string;
+  priceCents: number;
+  kind: "SERVICO" | "PRODUTO";
+  /** Opcionais: quando ausentes, o item é sempre tratado como disponível (retrocompat). */
+  trackStock?: boolean;
+  stockQty?: number;
+}
+
+/**
+ * Renderiza (PURA) o catálogo para as TOOLS do agente — diferente de
+ * `renderCatalogForAI`: EXPÕE o `id` (a IA referencia o item p/ abrir comanda) e
+ * o SALDO de estoque (leitura ao vivo, 7.3), e NÃO tem cap de 40 (a tool é
+ * chamada sob demanda, não vive no prompt). Uma linha por item:
+ *   `id=<id> | <nome> | <preço|sob consulta> | estoque=<n|—>[ — INDISPONÍVEL]`.
+ * Vazio → "" (o handler responde "catálogo vazio").
+ */
+export function renderCatalogForTools(items: CatalogItemForTools[]): string {
+  if (!items.length) return "";
+  const lines = items.map((i) => {
+    const price = i.priceCents > 0 ? formatCentsBRL(i.priceCents) : "sob consulta";
+    const tracks = i.trackStock === true;
+    const stock = tracks ? String(i.stockQty ?? 0) : "—";
+    const soldOut = tracks && (i.stockQty ?? 0) <= 0;
+    const mark = soldOut ? " — INDISPONÍVEL" : "";
+    return `id=${i.id} | ${i.name} | ${price} | estoque=${stock}${mark}`;
+  });
+  return lines.join("\n");
+}

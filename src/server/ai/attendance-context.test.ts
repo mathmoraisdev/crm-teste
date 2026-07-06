@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildAttendanceContext, renderActiveOffers, renderCatalogForAI } from "./attendance-context";
+import {
+  buildAttendanceContext,
+  renderActiveOffers,
+  renderCatalogForAI,
+  renderCatalogForTools,
+} from "./attendance-context";
 
 describe("buildAttendanceContext", () => {
   it("inclui persona, base e horário quando presentes", () => {
@@ -98,5 +103,52 @@ describe("renderCatalogForAI", () => {
     const out = renderCatalogForAI([{ name: "Combo", priceCents: 2500, kind: "PRODUTO" }]);
     expect(out).toContain("Combo");
     expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
+  });
+});
+
+describe("renderCatalogForTools", () => {
+  it("expõe id, nome, preço e saldo de estoque", () => {
+    const out = renderCatalogForTools([
+      { id: "ci_1", name: "X-Burguer", priceCents: 2500, kind: "PRODUTO", trackStock: true, stockQty: 12 },
+    ]);
+    expect(out).toContain("id=ci_1");
+    expect(out).toContain("X-Burguer");
+    expect(out).toContain("R$ 25,00");
+    expect(out).toContain("estoque=12");
+  });
+
+  it("item sem preço = 'sob consulta'", () => {
+    const out = renderCatalogForTools([{ id: "ci_2", name: "Corte", priceCents: 0, kind: "SERVICO" }]);
+    expect(out).toMatch(/id=ci_2.*sob consulta/);
+  });
+
+  it("sem controle de estoque → estoque=— e nunca INDISPONÍVEL", () => {
+    const out = renderCatalogForTools([
+      { id: "ci_3", name: "Consultoria", priceCents: 9700, kind: "SERVICO", trackStock: false, stockQty: 0 },
+    ]);
+    expect(out).toContain("estoque=—");
+    expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
+  });
+
+  it("estoque <= 0 com trackStock → INDISPONÍVEL", () => {
+    const out = renderCatalogForTools([
+      { id: "ci_4", name: "Boné", priceCents: 3000, kind: "PRODUTO", trackStock: true, stockQty: 0 },
+    ]);
+    expect(out).toMatch(/id=ci_4.*estoque=0.*INDISPON[IÍ]VEL/);
+  });
+
+  it("NÃO trunca em 40 (lista de 60 itens sai inteira)", () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      id: `ci_${i}`,
+      name: `Item ${i}`,
+      priceCents: 100,
+      kind: "PRODUTO" as const,
+    }));
+    const out = renderCatalogForTools(many);
+    expect(out.split("\n").length).toBe(60);
+  });
+
+  it("vazio → string vazia", () => {
+    expect(renderCatalogForTools([])).toBe("");
   });
 });
