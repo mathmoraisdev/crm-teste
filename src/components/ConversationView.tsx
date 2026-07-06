@@ -8,6 +8,7 @@ import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import type { LeadDetail } from "@/server/services/lead.service";
 import type { QuickReplyDTO } from "@/server/services/quick-reply.service";
 import { renderSnippet } from "@/lib/inbox/render-snippet";
+import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
 
 type Message = LeadDetail["messages"][number];
 
@@ -268,6 +269,9 @@ export function ConversationView({
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {/* Notas internas (só a equipe vê) — fluxo separado, nunca vai ao cliente. */}
+      <InternalNotesPanel leadId={leadId} />
 
       <div className="border-t border-slate-100 p-3">
         {!canReply ? (
