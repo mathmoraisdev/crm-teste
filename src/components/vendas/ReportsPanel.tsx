@@ -9,7 +9,7 @@ import { CATEGORY_LABEL } from "./expense-labels";
 import { SalesHistoryPanel } from "./SalesHistoryPanel";
 
 type Period = "hoje" | "7d" | "mes";
-type View = "resumo" | "extrato";
+type View = "resumo" | "extrato" | "sessoes";
 
 interface Summary { totalCents: number; orderCount: number; avgTicketCents: number; }
 interface OperatorRevenue { operatorId: string; operatorName: string; totalCents: number; orderCount: number; }
@@ -33,6 +33,7 @@ const PERIODS: { value: Period; label: string }[] = [
 const VIEWS: { value: View; label: string }[] = [
   { value: "resumo", label: "Resumo" },
   { value: "extrato", label: "Extrato" },
+  { value: "sessoes", label: "Sessões" },
 ];
 
 export function ReportsPanel() {
@@ -80,9 +81,132 @@ export function ReportsPanel() {
 
       {view === "extrato" ? (
         <SalesHistoryPanel />
+      ) : view === "sessoes" ? (
+        <SessionsView />
       ) : (
         <ResumoView period={period} setPeriod={setPeriod} data={data} loading={loading} />
       )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Sessões de caixa: conferência por turno (esperado × contado × diferença)
+// ───────────────────────────────────────────────────────────────────────
+interface SessionRow {
+  session: {
+    id: string;
+    openingFloatCents: number;
+    openedAt: string;
+    closedAt: string | null;
+  };
+  cashSalesCents: number;
+  salesByMethod: Record<Payment, number>;
+  suprimentosCents: number;
+  sangriasCents: number;
+  expected: number;
+  counted: number | null;
+  diff: number | null;
+  openedByName: string;
+  closedByName: string | null;
+}
+
+function fmtDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function SessionsView() {
+  const [rows, setRows] = useState<SessionRow[] | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/vendas/cash-session/report", { cache: "no-store" });
+        const d = await res.json();
+        if (res.ok) setRows(d.sessions as SessionRow[]);
+        else setRows([]);
+      } catch {
+        setRows([]);
+      }
+    })();
+  }, []);
+
+  if (rows === null) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        <Loader2 size={14} className="animate-spin" /> Carregando sessões…
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <Card className="px-5 py-10">
+        <p className="text-center text-sm text-slate-400">Nenhuma sessão de caixa fechada ainda.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => (
+        <SessionCard key={r.session.id} row={r} />
+      ))}
+    </div>
+  );
+}
+
+function SessionCard({ row }: { row: SessionRow }) {
+  const diff = row.diff ?? 0;
+  const tone =
+    diff === 0
+      ? { box: "bg-success-surface text-success", label: "Bateu certo" }
+      : diff < 0
+        ? { box: "bg-danger-surface text-danger", label: `Falta ${formatCentsBRL(-diff)}` }
+        : { box: "bg-warning-surface text-warning", label: `Sobra ${formatCentsBRL(diff)}` };
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-default px-5 py-3">
+        <div>
+          <p className="text-sm font-semibold text-ink">
+            {row.session.closedAt ? fmtDateTime(row.session.closedAt) : "—"}
+          </p>
+          <p className="text-xs text-slate-500">
+            Aberto {fmtDateTime(row.session.openedAt)} por {row.openedByName}
+            {row.closedByName ? ` · fechado por ${row.closedByName}` : ""}
+          </p>
+        </div>
+        <span className={`rounded-lg px-3 py-1 text-sm font-bold ${tone.box}`}>{tone.label}</span>
+      </div>
+      <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
+        {/* Conferência em dinheiro */}
+        <div className="space-y-1 text-sm">
+          <p className="text-xs font-semibold text-slate-500">Conferência (dinheiro)</p>
+          <Line label="Fundo de troco" value={formatCentsBRL(row.session.openingFloatCents)} />
+          <Line label="Vendas em dinheiro" value={`+ ${formatCentsBRL(row.cashSalesCents)}`} />
+          <Line label="Suprimentos" value={`+ ${formatCentsBRL(row.suprimentosCents)}`} />
+          <Line label="Sangrias" value={`− ${formatCentsBRL(row.sangriasCents)}`} />
+          <div className="mt-1 border-t border-line-default pt-1">
+            <Line label="Esperado" value={formatCentsBRL(row.expected)} strong />
+            <Line label="Contado" value={formatCentsBRL(row.counted ?? 0)} strong />
+          </div>
+        </div>
+        {/* Vendas por meio (informativo) */}
+        <div className="space-y-1 text-sm">
+          <p className="text-xs font-semibold text-slate-500">Vendas por meio</p>
+          {(Object.keys(row.salesByMethod) as Payment[]).map((m) => (
+            <Line key={m} label={PAYMENT_LABEL[m]} value={formatCentsBRL(row.salesByMethod[m])} />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-slate-500">{label}</span>
+      <span className={strong ? "font-semibold text-ink" : "text-slate-600"}>{value}</span>
     </div>
   );
 }

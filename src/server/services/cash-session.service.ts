@@ -179,3 +179,26 @@ export async function listClosedSessions(accountId: string, limit = 30): Promise
   });
   return rows.map(toDTO);
 }
+
+/** Relatório de sessões: cada sessão FECHADA com a conferência completa (fundo,
+ * vendas por meio, sangrias/suprimentos, esperado × contado × diff) + o nome de
+ * quem abriu/fechou p/ exibir. */
+export interface SessionReportRow extends SessionSummary {
+  openedByName: string;
+  closedByName: string | null;
+}
+
+export async function listSessionReport(accountId: string, limit = 30): Promise<SessionReportRow[]> {
+  const sessions = await listClosedSessions(accountId, limit);
+  const rows = await Promise.all(
+    sessions.map(async (s) => {
+      const summary = await sessionSummary(accountId, s.id);
+      const opener = await prisma.user.findUnique({ where: { id: s.openedById }, select: { name: true } });
+      const closer = s.closedById
+        ? await prisma.user.findUnique({ where: { id: s.closedById }, select: { name: true } })
+        : null;
+      return { ...summary, openedByName: opener?.name ?? "—", closedByName: closer?.name ?? null };
+    }),
+  );
+  return rows;
+}
