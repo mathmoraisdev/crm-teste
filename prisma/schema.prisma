@@ -364,6 +364,7 @@ model CatalogItem {
   trackStock     Boolean         @default(false) // liga o controle p/ este item
   sku            String? // código interno opcional
   barcode        String? // código de barras/EAN (bipar no caixa); único por conta, NULLs coexistem
+  variantGroup   String? // rótulo de grade (SKU flat): agrupa variações (tamanho/cor) no catálogo e no caixa
   stockQty       Int             @default(0) // saldo atual (desnormalizado; = Σ dos movimentos)
   minStock       Int             @default(0) // alerta quando stockQty <= minStock
   costCents      Int? // custo unitário em centavos (opcional; p/ valor em estoque)
@@ -375,6 +376,7 @@ model CatalogItem {
   @@unique([accountId, barcode]) // bipar resolve p/ um item; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, active])
   @@index([accountId, trackStock])
+  @@index([accountId, variantGroup])
 }
 
 // Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa

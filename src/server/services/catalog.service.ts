@@ -13,6 +13,7 @@ export interface CatalogItemDTO {
   trackStock: boolean;
   sku: string | null;
   barcode: string | null;
+  variantGroup: string | null;
   stockQty: number;
   minStock: number;
   costCents: number | null;
@@ -35,6 +36,7 @@ const stockConfigSchema = z.object({
   trackStock: z.boolean().optional(),
   sku: z.string().trim().max(60).nullish(),
   barcode: z.string().trim().max(64).nullish(),
+  variantGroup: z.string().trim().max(60).nullish(),
   minStock: z.number().int().min(0).optional(),
   costCents: z.number().int().min(0).nullish(),
 });
@@ -49,12 +51,12 @@ function rethrowCatalog(e: unknown): never {
 
 function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
-  trackStock: boolean; sku: string | null; barcode: string | null; stockQty: number; minStock: number; costCents: number | null;
+  trackStock: boolean; sku: string | null; barcode: string | null; variantGroup: string | null; stockQty: number; minStock: number; costCents: number | null;
   printSector: string | null; durationMinutes: number | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
-    trackStock: o.trackStock, sku: o.sku, barcode: o.barcode, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
+    trackStock: o.trackStock, sku: o.sku, barcode: o.barcode, variantGroup: o.variantGroup, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
     printSector: o.printSector, durationMinutes: o.durationMinutes,
   };
 }
@@ -63,7 +65,7 @@ export async function createCatalogItem(
   accountId: string,
   data: {
     name: string; priceCents: number; kind?: CatalogItemKind;
-    trackStock?: boolean; sku?: string | null; barcode?: string | null; minStock?: number; costCents?: number | null;
+    trackStock?: boolean; sku?: string | null; barcode?: string | null; variantGroup?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
@@ -77,6 +79,7 @@ export async function createCatalogItem(
         trackStock: cfg.trackStock ?? false,
         sku: cfg.sku?.trim() || null,
         barcode: cfg.barcode?.trim() || null,
+        variantGroup: cfg.variantGroup?.trim() || null,
         minStock: cfg.minStock ?? 0,
         costCents: cfg.costCents ?? null,
         printSector: data.printSector?.trim().toLowerCase() || null,
@@ -102,7 +105,7 @@ export async function updateCatalogItem(
   id: string,
   data: {
     name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
-    trackStock?: boolean; sku?: string | null; barcode?: string | null; minStock?: number; costCents?: number | null;
+    trackStock?: boolean; sku?: string | null; barcode?: string | null; variantGroup?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
@@ -123,6 +126,7 @@ export async function updateCatalogItem(
   if (data.trackStock !== undefined) patch.trackStock = data.trackStock;
   if (data.sku !== undefined) patch.sku = data.sku?.trim() || null;
   if (data.barcode !== undefined) patch.barcode = data.barcode?.trim() || null;
+  if (data.variantGroup !== undefined) patch.variantGroup = data.variantGroup?.trim() || null;
   if (data.minStock !== undefined) {
     if (!Number.isInteger(data.minStock) || data.minStock < 0) throw new Error("Mínimo inválido.");
     patch.minStock = data.minStock;

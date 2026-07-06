@@ -9,3 +9,8 @@ ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "unitCostCents" INTEGER;
 ALTER TABLE "CatalogItem" ADD COLUMN IF NOT EXISTS "barcode" TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS "CatalogItem_accountId_barcode_key"
   ON "CatalogItem"("accountId", "barcode");
+
+-- ── 12.3: agrupamento de grade (SKU flat; ItemVariant relacional adiado) ──────
+ALTER TABLE "CatalogItem" ADD COLUMN IF NOT EXISTS "variantGroup" TEXT;
+CREATE INDEX IF NOT EXISTS "CatalogItem_accountId_variantGroup_idx"
+  ON "CatalogItem"("accountId", "variantGroup");

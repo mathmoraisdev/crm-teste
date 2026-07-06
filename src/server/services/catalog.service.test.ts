@@ -138,4 +138,12 @@ describe("catalog.service", () => {
     expect(await findByBarcode(acc, "000")).toBeNull(); // inexistente
     expect(await findByBarcode(acc, "  ")).toBeNull(); // vazio
   });
+
+  it("persiste variantGroup (grade) e devolve no DTO; update limpa com null", async () => {
+    const acc = await makeOwner();
+    const p = await createCatalogItem(acc, { name: "Camiseta P", priceCents: 3000, kind: "PRODUTO", variantGroup: "Camiseta" });
+    expect(p.variantGroup).toBe("Camiseta");
+    const cleared = await updateCatalogItem(acc, p.id, { variantGroup: null });
+    expect(cleared.variantGroup).toBeNull();
+  });
 });

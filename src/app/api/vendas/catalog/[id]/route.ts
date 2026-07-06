@@ -12,6 +12,8 @@ const patchSchema = z.object({
   active: z.boolean().optional(),
   trackStock: z.boolean().optional(),
   sku: z.string().nullish(),
+  barcode: z.string().nullish(),
+  variantGroup: z.string().nullish(),
   minStock: z.number().int().optional(),
   costCents: z.number().int().nullish(),
   printSector: z.string().nullish(),
