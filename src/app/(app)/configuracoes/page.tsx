@@ -17,6 +17,7 @@ import { getBusinessTemplateId, getInboxSlaMinutes } from "@/server/services/acc
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
 import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
+import { CommissionSettings } from "@/components/app/CommissionSettings";
 import { MediaLibrarySettings } from "@/components/app/MediaLibrarySettings";
 import { BookingSettings } from "@/components/app/BookingSettings";
 import { getBookingSettings, getBookingReadiness } from "@/server/services/booking-settings.service";
@@ -117,6 +118,13 @@ export default async function ConfiguracoesPage() {
       {(isOwner || canSettings) && (
         <div className="mt-6">
           <ProfessionalsSettings canEdit={canSettings} />
+        </div>
+      )}
+
+      {/* Comissão é dado de dono (gate canSettings na API); só aparece pra quem edita. */}
+      {canSettings && (
+        <div className="mt-6">
+          <CommissionSettings canEdit={canSettings} />
         </div>
       )}
 
