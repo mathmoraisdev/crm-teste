@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 import { printReceipt, printKitchenTickets } from "@/lib/receipt/print-client";
 import { OrderCustomFields } from "@/components/vendas/OrderCustomFields";
+import { CashSessionBar } from "@/components/vendas/CashSessionBar";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
 type Payment = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
@@ -158,7 +159,11 @@ export function OrderBoard() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+    <div>
+      {/* Barra de estado do turno (abrir/fechar caixa, sangria/suprimento) */}
+      <CashSessionBar />
+
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
       {/* ── Coluna: comandas abertas ─────────────────────────────────── */}
       <div className="space-y-4">
         <NewOrderCard onOpened={async (id) => { await loadOrders(); setSelectedId(id); }} onError={setError} />
@@ -246,6 +251,7 @@ export function OrderBoard() {
             <p className="text-sm text-slate-400">Selecione ou abra uma comanda para começar.</p>
           </Card>
         )}
+      </div>
       </div>
     </div>
   );
