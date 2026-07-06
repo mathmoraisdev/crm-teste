@@ -29,6 +29,10 @@ const PUBLIC_PREFIXES = [
   "/redefinir-senha",
   "/verificar-email",
   "/api/consultant",
+  // Auto-agendamento online: link público sem login (/agendar/<slug>) + sua API
+  // (/api/agendar/<slug>/...). A regra startsWith(p + "/") cobre slug e subcaminhos.
+  "/agendar",
+  "/api/agendar",
 ];
 
 function isPublic(pathname: string): boolean {
