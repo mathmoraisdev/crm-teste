@@ -7,6 +7,7 @@ import {
   deactivateProfessional,
   listWorkingHours,
   setWorkingHours,
+  resolveWorkingWindows,
 } from "./professional.service";
 
 async function makeOwner() {
@@ -146,5 +147,36 @@ describe("professional.service — working hours", () => {
     const acc = await makeOwner();
     await expect(setWorkingHours(acc, null, [{ weekday: 1, startMinute: 800, endMinute: 800 }])).rejects.toThrow();
     await expect(setWorkingHours(acc, null, [{ weekday: 1, startMinute: 540, endMinute: 2000 }])).rejects.toThrow();
+  });
+});
+
+describe("resolveWorkingWindows", () => {
+  it("usa a grade própria do profissional quando existe", async () => {
+    const acc = await makeOwner();
+    const p = await createProfessional(acc, { name: "Ana" });
+    await setWorkingHours(acc, null, [{ weekday: 1, startMinute: 540, endMinute: 1080 }]); // padrão 09–18
+    await setWorkingHours(acc, p.id, [
+      { weekday: 1, startMinute: 600, endMinute: 720, breakStart: 630, breakEnd: 645 }, // própria 10–12
+    ]);
+    const win = await resolveWorkingWindows(acc, p.id, 1);
+    expect(win).toEqual([{ startMinute: 600, endMinute: 720, breakStart: 630, breakEnd: 645 }]);
+  });
+
+  it("cai no expediente padrão da conta quando o profissional não tem grade no dia", async () => {
+    const acc = await makeOwner();
+    const p = await createProfessional(acc, { name: "Ana" });
+    await setWorkingHours(acc, null, [{ weekday: 2, startMinute: 540, endMinute: 1080 }]); // padrão terça
+    await setWorkingHours(acc, p.id, [{ weekday: 1, startMinute: 600, endMinute: 720 }]); // própria só segunda
+    // terça (weekday 2): profissional não tem → usa o padrão
+    const win = await resolveWorkingWindows(acc, p.id, 2);
+    expect(win).toEqual([{ startMinute: 540, endMinute: 1080, breakStart: null, breakEnd: null }]);
+  });
+
+  it("dia sem expediente (nem próprio nem padrão) → []", async () => {
+    const acc = await makeOwner();
+    const p = await createProfessional(acc, { name: "Ana" });
+    await setWorkingHours(acc, null, [{ weekday: 1, startMinute: 540, endMinute: 1080 }]);
+    // domingo (weekday 0): ninguém tem grade
+    expect(await resolveWorkingWindows(acc, p.id, 0)).toEqual([]);
   });
 });

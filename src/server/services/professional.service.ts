@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import type { Prisma } from "@prisma/client";
+import type { DayWindow } from "@/lib/agenda/availability";
 
 /**
  * Profissionais (equipe que atende): cada Appointment pode ser atribuído a um.
@@ -170,6 +171,37 @@ export async function listWorkingHours(
     orderBy: { weekday: "asc" },
   });
   return rows.map(toHoursDTO);
+}
+
+/**
+ * Janelas de expediente aplicáveis a um profissional num `weekday` (0=Dom..6=Sáb).
+ * Prioriza a grade PRÓPRIA do profissional; se ele não tem linha nesse dia, cai no
+ * expediente PADRÃO da conta (professionalId null); vazio = sem expediente no dia.
+ * Mesma regra que o `loadWorkingWindows` (privado) do appointment.service, mas
+ * exportada e recebendo o `weekday` pronto — dono único que a borda pública reusa.
+ */
+export async function resolveWorkingWindows(
+  accountId: string,
+  professionalId: string,
+  weekday: number,
+): Promise<DayWindow[]> {
+  const own = await prisma.workingHours.findMany({
+    where: { accountId, professionalId, weekday },
+    select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
+  });
+  const rows =
+    own.length > 0
+      ? own
+      : await prisma.workingHours.findMany({
+          where: { accountId, professionalId: null, weekday },
+          select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
+        });
+  return rows.map((r) => ({
+    startMinute: r.startMinute,
+    endMinute: r.endMinute,
+    breakStart: r.breakStart,
+    breakEnd: r.breakEnd,
+  }));
 }
 
 /**
