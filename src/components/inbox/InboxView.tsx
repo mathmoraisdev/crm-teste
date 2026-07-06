@@ -304,6 +304,7 @@ export function InboxView() {
               <div className="min-h-0 flex-1">
                 <ConversationView
                   leadId={detail.id}
+                  leadName={detail.name}
                   messages={detail.messages}
                   onReplied={() => {
                     loadDetail(detail.id);

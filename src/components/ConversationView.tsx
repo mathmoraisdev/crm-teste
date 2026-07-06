@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import type { LeadDetail } from "@/server/services/lead.service";
+import type { QuickReplyDTO } from "@/server/services/quick-reply.service";
+import { renderSnippet } from "@/lib/inbox/render-snippet";
 
 type Message = LeadDetail["messages"][number];
 
@@ -28,6 +30,7 @@ const SUGGEST_COOLDOWN_MS = 4000;
  */
 export function ConversationView({
   leadId,
+  leadName,
   messages,
   onReplied,
   canReply,
@@ -35,6 +38,8 @@ export function ConversationView({
   hideHandoff = false,
 }: {
   leadId: string;
+  /** Nome do lead — usado p/ resolver {{nome}} nas respostas rápidas. */
+  leadName?: string;
   messages: Message[];
   onReplied: () => void;
   canReply: boolean;
@@ -63,6 +68,9 @@ export function ConversationView({
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [suggestCount, setSuggestCount] = useState(0);
   const [suggestCoolingDown, setSuggestCoolingDown] = useState(false);
+  // Respostas rápidas (snippets): carregadas sob demanda na 1ª vez que o "/" abre
+  // o seletor. Compartilhadas pela conta, então cacheia no estado do componente.
+  const [quickReplies, setQuickReplies] = useState<QuickReplyDTO[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -216,6 +224,36 @@ export function ConversationView({
     }
   }
 
+  // Respostas rápidas: carrega uma vez (sob demanda) e cacheia no estado.
+  async function loadQuickReplies() {
+    if (quickReplies !== null) return;
+    try {
+      const res = await fetch("/api/quick-replies", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      setQuickReplies((data.quickReplies as QuickReplyDTO[]) ?? []);
+    } catch {
+      setQuickReplies([]); // falha silenciosa: só não mostra o seletor
+    }
+  }
+
+  // O seletor de "/" abre quando o operador começa a resposta com "/". O texto
+  // após a barra filtra por título/atalho. Selecionar troca o texto pelo snippet
+  // com {{nome}} resolvido (não envia — o operador revisa).
+  const snippetOpen = aiPaused && reply.startsWith("/");
+  const snippetQuery = snippetOpen ? reply.slice(1).trim().toLowerCase() : "";
+  const filteredSnippets = (quickReplies ?? []).filter((q) => {
+    if (!snippetQuery) return true;
+    return (
+      q.title.toLowerCase().includes(snippetQuery) ||
+      (q.shortcut ?? "").toLowerCase().includes(snippetQuery)
+    );
+  });
+
+  function insertSnippet(q: QuickReplyDTO) {
+    setReply(renderSnippet(q.body, { nome: leadName }));
+    replyInputRef.current?.focus();
+  }
+
   return (
     <div className="flex h-[70vh] max-h-[600px] flex-col sm:h-[60vh]">
       <div className="scroll-thin flex-1 space-y-2 overflow-y-auto p-4">
@@ -341,7 +379,40 @@ export function ConversationView({
                     <span className="text-[11px] text-danger">{suggestError}</span>
                   )}
                 </div>
-                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                <div className="relative flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                  {/* Seletor de respostas rápidas (abre ao digitar "/" no início). */}
+                  {snippetOpen && (
+                    <div className="absolute bottom-full left-0 z-10 mb-2 max-h-60 w-full overflow-y-auto rounded-xl border border-line-default bg-card p-1 shadow-lg sm:w-80">
+                      {filteredSnippets.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-slate-400">
+                          {quickReplies === null
+                            ? "Carregando…"
+                            : (quickReplies.length === 0
+                                ? "Nenhuma resposta rápida cadastrada."
+                                : "Nenhuma resposta encontrada.")}
+                        </p>
+                      ) : (
+                        filteredSnippets.map((q) => (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => insertSnippet(q)}
+                            className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left hover:bg-slate-100"
+                          >
+                            <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                              {q.title}
+                              {q.shortcut && (
+                                <span className="text-[11px] font-normal text-slate-400">
+                                  /{q.shortcut}
+                                </span>
+                              )}
+                            </span>
+                            <span className="line-clamp-1 text-xs text-slate-500">{q.body}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                   {/* Input de arquivo oculto + botão de anexo (clip). */}
                   <input
                     ref={fileInputRef}
@@ -363,8 +434,24 @@ export function ConversationView({
                   <textarea
                     ref={replyInputRef}
                     value={reply}
-                    onChange={(e) => setReply(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setReply(v);
+                      // Abriu o "/" no início → garante que os snippets estão carregados.
+                      if (v.startsWith("/")) loadQuickReplies();
+                    }}
                     onKeyDown={(e) => {
+                      // Com o seletor aberto, Enter escolhe a 1ª resposta em vez de enviar "/...".
+                      if (snippetOpen && e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (filteredSnippets[0]) insertSnippet(filteredSnippets[0]);
+                        return;
+                      }
+                      if (snippetOpen && e.key === "Escape") {
+                        e.preventDefault();
+                        setReply("");
+                        return;
+                      }
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         submitReply();
@@ -372,7 +459,7 @@ export function ConversationView({
                     }}
                     rows={1}
                     placeholder={
-                      file ? "Legenda (opcional)…" : "Responder manualmente ao lead…"
+                      file ? "Legenda (opcional)…" : "Responder ao lead… (digite “/” para respostas rápidas)"
                     }
                     className="max-h-40 w-full flex-1 resize-none overflow-y-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                   />

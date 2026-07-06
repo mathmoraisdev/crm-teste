@@ -146,6 +146,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <CardHeader title="Conversa" subtitle="WhatsApp (mock)" />
             <ConversationView
               leadId={lead.id}
+              leadName={lead.name}
               messages={lead.messages}
               onReplied={load}
               canReply={canReply}
