@@ -228,6 +228,7 @@ model User {
   workingHours             WorkingHours[]           @relation("WorkingHoursAccount")
   walkInAppointments       Appointment[]            @relation("AppointmentAccount")
   mediaAssets              MediaAsset[]
+  commissionRules          CommissionRule[]         @relation("CommissionRuleAccount")
 }
 
 // Biblioteca de mídia da CONTA (Onda E, iniciativa 7) — arquivos que o operador
@@ -352,6 +353,7 @@ model CatalogItem {
   updatedAt    DateTime        @updatedAt
   orderItems   OrderItem[]
   appointments Appointment[]
+  commissionRules CommissionRule[]
 
   // --- Controle de estoque (opt-in; só faz sentido em kind = PRODUTO) ---
   trackStock     Boolean         @default(false) // liga o controle p/ este item
@@ -425,9 +427,15 @@ model OrderItem {
   unitPriceCents Int
   quantity       Int          @default(1)
   customFields   Json? // valores dos CustomFieldDef scope=ORDER_ITEM (chaveado por `key`)
+  // Comissão (snapshot no fechamento): profissional creditado + valor calculado.
+  // professionalId é snapshot via FK SetNull (profissional é soft-delete, não some).
+  professionalId  String?
+  professional    Professional? @relation("OrderItemProfessional", fields: [professionalId], references: [id], onDelete: SetNull)
+  commissionCents Int?
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
+  @@index([professionalId])
 }
 
 // Pagamento da comanda: N linhas (multi-meio / parcial). Um meio único = 1 tender.
@@ -890,6 +898,8 @@ model Professional {
   member       User?          @relation("ProfessionalMember", fields: [userId], references: [id], onDelete: SetNull)
   appointments Appointment[]
   workingHours WorkingHours[]
+  commissionRules CommissionRule[]
+  orderItems      OrderItem[]      @relation("OrderItemProfessional")
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -914,6 +924,31 @@ model WorkingHours {
   updatedAt      DateTime      @updatedAt
 
   @@index([accountId, professionalId, weekday])
+}
+
+// Regra de comissão de um profissional. percentBps (pontos-base, 4000 = 40,00%)
+// OU fixedCents (por unidade) — exatamente um, validado no serviço. catalogItemId
+// null = regra PADRÃO do profissional (vale p/ qualquer item sem regra específica);
+// a específica do serviço vence a padrão. Soft via `active`.
+model CommissionRule {
+  id             String       @id @default(cuid())
+  accountId      String // User.id do dono (tenant)
+  account        User         @relation("CommissionRuleAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  catalogItemId  String? // null = regra padrão do profissional
+  catalogItem    CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  percentBps     Int? // pontos-base sobre o bruto da linha (4000 = 40,00%)
+  fixedCents     Int? // comissão fixa POR UNIDADE (× quantidade)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // NOTA: nulos são distintos no Postgres — o @@unique NÃO impede duas regras-padrão
+  // (catalogItemId null) por profissional; a unicidade da PADRÃO é garantida no serviço
+  // (findFirst antes de criar), igual publicSlug/Order.number fazem.
+  @@unique([professionalId, catalogItemId])
+  @@index([accountId, active])
 }
 
 model OutboundJob {
