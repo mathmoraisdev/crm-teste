@@ -13,7 +13,7 @@ import { getBranding } from "@/server/services/branding.service";
 import { PosPrintSettings } from "@/components/app/PosPrintSettings";
 import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
-import { getBusinessTemplateId, getInboxSlaMinutes } from "@/server/services/account.service";
+import { getBusinessTemplateId, getInboxSlaMinutes, getLifecycleAutomationEnabled } from "@/server/services/account.service";
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
 import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
@@ -21,6 +21,7 @@ import { CommissionSettings } from "@/components/app/CommissionSettings";
 import { MediaLibrarySettings } from "@/components/app/MediaLibrarySettings";
 import { BookingSettings } from "@/components/app/BookingSettings";
 import { getBookingSettings, getBookingReadiness } from "@/server/services/booking-settings.service";
+import { LifecycleSettings } from "@/components/app/LifecycleSettings";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness] = await Promise.all([
+  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness, lifecycleEnabled] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
@@ -53,6 +54,7 @@ export default async function ConfiguracoesPage() {
     getInboxSlaMinutes(ownerId), // meta de SLA do inbox (só o dono edita)
     getBookingSettings(ownerId), // agendamento online (só o dono edita)
     getBookingReadiness(ownerId), // se há profissional c/ expediente + serviço c/ duração
+    getLifecycleAutomationEnabled(ownerId), // opt-in das automações de ciclo de vida (só o dono edita)
   ]);
   const bookingPublicUrl = bookingSettings.publicSlug
     ? `${env.APP_URL}/agendar/${bookingSettings.publicSlug}`
@@ -151,6 +153,12 @@ export default async function ConfiguracoesPage() {
       {isOwner && (
         <div className="mt-6">
           <InboxSlaSettings initial={inboxSla} canEdit={canSettings} />
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="mt-6">
+          <LifecycleSettings initial={lifecycleEnabled} canEdit={canSettings} />
         </div>
       )}
     </div>
