@@ -16,6 +16,7 @@ interface Item {
   active: boolean;
   trackStock: boolean;
   sku: string | null;
+  barcode: string | null;
   stockQty: number;
   minStock: number;
   costCents: number | null;
@@ -53,6 +54,7 @@ export function CatalogManager({
   const [kind, setKind] = useState<"SERVICO" | "PRODUTO">("SERVICO");
   const [trackStock, setTrackStock] = useState(false);
   const [sku, setSku] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [initialQty, setInitialQty] = useState("");
   const [minStock, setMinStock] = useState("");
   const [costStr, setCostStr] = useState("");
@@ -72,6 +74,7 @@ export function CatalogManager({
   const [editKind, setEditKind] = useState<"SERVICO" | "PRODUTO">("SERVICO");
   const [editTrackStock, setEditTrackStock] = useState(false);
   const [editSku, setEditSku] = useState("");
+  const [editBarcode, setEditBarcode] = useState("");
   const [editMinStock, setEditMinStock] = useState("");
   const [editCost, setEditCost] = useState("");
   const [editSector, setEditSector] = useState("");
@@ -99,6 +102,7 @@ export function CatalogManager({
     setKind("SERVICO");
     setTrackStock(false);
     setSku("");
+    setBarcode("");
     setInitialQty("");
     setMinStock("");
     setCostStr("");
@@ -121,6 +125,8 @@ export function CatalogManager({
         const d = Math.floor(Number(duration));
         body.durationMinutes = duration.trim() && Number.isFinite(d) && d > 0 ? d : null;
       }
+      // Código de barras: faz sentido em qualquer PRODUTO (bipar), independe de estoque.
+      if (kind === "PRODUTO") body.barcode = barcode.trim() || null;
       if (useStock) {
         body.trackStock = true;
         body.sku = sku.trim() || null;
@@ -158,6 +164,7 @@ export function CatalogManager({
     setEditKind(it.kind);
     setEditTrackStock(it.trackStock);
     setEditSku(it.sku ?? "");
+    setEditBarcode(it.barcode ?? "");
     setEditMinStock(it.trackStock ? String(it.minStock) : "");
     setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
     setEditSector(it.printSector ?? "");
@@ -187,6 +194,7 @@ export function CatalogManager({
       }
       if (editKind === "PRODUTO") {
         patch.trackStock = editTrackStock;
+        patch.barcode = editBarcode.trim() || null;
         if (editTrackStock) {
           patch.sku = editSku.trim() || null;
           patch.minStock = Math.max(0, Math.floor(Number(editMinStock) || 0));
@@ -194,6 +202,7 @@ export function CatalogManager({
         }
       } else {
         patch.trackStock = false;
+        patch.barcode = null;
       }
       const res = await fetch(`/api/vendas/catalog/${id}`, {
         method: "PATCH",
@@ -358,6 +367,12 @@ export function CatalogManager({
                   )}
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
+                      <input
+                        value={editBarcode}
+                        onChange={(e) => setEditBarcode(e.target.value)}
+                        placeholder="Código de barras (EAN) — opcional"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
                       <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                         <input
                           type="checkbox"
@@ -433,6 +448,7 @@ export function CatalogManager({
                           Estoque: {it.stockQty}
                         </span>
                       )}
+                      {it.barcode && <span className="text-[11px] text-slate-400">#{it.barcode}</span>}
                     </p>
                   </div>
                   {canEdit && (
@@ -516,6 +532,12 @@ export function CatalogManager({
             )}
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
+                <input
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="Código de barras (EAN) — opcional"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                   <input
                     type="checkbox"

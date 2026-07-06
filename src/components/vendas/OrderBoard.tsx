@@ -422,6 +422,8 @@ function OrderPanel({
   onError: (msg: string | null) => void;
 }) {
   const [catQuery, setCatQuery] = useState("");
+  const [bipar, setBipar] = useState("");
+  const [biparBusy, setBiparBusy] = useState(false);
   const [avulsoName, setAvulsoName] = useState("");
   const [avulsoPrice, setAvulsoPrice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -487,6 +489,26 @@ function OrderPanel({
       body: JSON.stringify({ catalogItemId: id, quantity: 1 }),
     });
   };
+
+  // Bipar: resolve o código de barras → item da conta → addFromCatalog (reusa o
+  // incremento de linha). Leitor USB "digita" o EAN + Enter num input focado.
+  async function scanBarcode() {
+    const code = bipar.trim();
+    if (!code) return;
+    setBiparBusy(true);
+    onError(null);
+    try {
+      const res = await fetch(`/api/vendas/catalog/lookup?barcode=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Código não encontrado.");
+      setBipar("");
+      await addFromCatalog(data.item.id);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Código não encontrado.");
+    } finally {
+      setBiparBusy(false);
+    }
+  }
 
   async function addAvulso() {
     const cents = parseBRLToCents(avulsoPrice);
@@ -674,6 +696,19 @@ function OrderPanel({
         {/* Adicionar do catálogo */}
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
           <p className="text-xs font-semibold text-slate-600">Adicionar do catálogo</p>
+          <input
+            value={bipar}
+            onChange={(e) => setBipar(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void scanBarcode();
+              }
+            }}
+            disabled={busy || biparBusy}
+            placeholder="Bipar código de barras…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+          />
           <input
             value={catQuery}
             onChange={(e) => setCatQuery(e.target.value)}
