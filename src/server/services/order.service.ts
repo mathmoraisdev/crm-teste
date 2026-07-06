@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { Prisma } from "@prisma/client";
 import type { OrderPayment, OrderStatus } from "@prisma/client";
-import { applyOrderStockExit } from "./stock.service";
+import { applyOrderStockExit, reverseOrderStockExit } from "./stock.service";
 import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { getBranding } from "@/server/services/branding.service";
@@ -313,6 +313,55 @@ export async function closeOrder(
       throw e;
     }
   }
+  return toDTO(await loadOwned(accountId, orderId));
+}
+
+/**
+ * Estorno: anula uma comanda FECHADA (vira CANCELADA), reverte a baixa de estoque e
+ * grava a auditoria (motivo obrigatório + quem/quando). Transacional; a guarda atômica
+ * `updateMany where status=FECHADA` garante UMA reversão só (barra duplo estorno/corrida).
+ * O ledger nunca apaga — reverseOrderStockExit compensa com ENTRADA.
+ */
+export async function voidOrder(accountId: string, orderId: string, reason: string, byId: string): Promise<OrderDTO> {
+  const trimmed = reason?.trim();
+  if (!trimmed) throw new Error("Informe o motivo do estorno.");
+  const order = await loadOwned(accountId, orderId); // valida escopo por conta (throw se não achar)
+  if (order.status !== "FECHADA") throw new Error("Só é possível estornar uma comanda fechada.");
+
+  await prisma.$transaction(async (tx) => {
+    const res = await tx.order.updateMany({
+      where: { id: orderId, accountId, status: "FECHADA" },
+      data: { status: "CANCELADA", canceledAt: new Date(), canceledReason: trimmed, canceledById: byId },
+    });
+    if (res.count === 0) throw new Error("Comanda já estornada.");
+    await reverseOrderStockExit(tx, accountId, orderId, byId);
+  });
+  return toDTO(await loadOwned(accountId, orderId));
+}
+
+/**
+ * Reabertura: volta uma comanda FECHADA para ABERTA p/ correção. Limpa o fechamento
+ * (closedAt/payment/number/tenders/troco/sessão) e reverte a baixa de estoque — será
+ * re-baixada no próximo fechamento. Deixa BURACO na sequência de `number` (o cupom já
+ * foi impresso; reabrir é reedição de exceção — documentado no plano). Transacional +
+ * guarda atômica em status=FECHADA.
+ */
+export async function reopenOrder(accountId: string, orderId: string, byId: string): Promise<OrderDTO> {
+  const order = await loadOwned(accountId, orderId); // valida escopo por conta
+  if (order.status !== "FECHADA") throw new Error("Só é possível reabrir uma comanda fechada.");
+
+  await prisma.$transaction(async (tx) => {
+    const res = await tx.order.updateMany({
+      where: { id: orderId, accountId, status: "FECHADA" },
+      data: {
+        status: "ABERTA", closedAt: null, payment: null, number: null,
+        amountTenderedCents: null, changeCents: null, cashSessionId: null,
+      },
+    });
+    if (res.count === 0) throw new Error("Comanda não pôde ser reaberta.");
+    await tx.orderTender.deleteMany({ where: { orderId } });
+    await reverseOrderStockExit(tx, accountId, orderId, byId);
+  });
   return toDTO(await loadOwned(accountId, orderId));
 }
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import { Prisma, type LeadStatus } from "@prisma/client";
+import { Prisma, type LeadStatus, type OrderStatus } from "@prisma/client";
 import { orderTotalCents } from "@/server/services/order.service";
 
 /**
@@ -139,7 +139,7 @@ export async function listClientes(
 
 export interface ClienteHistoryOrder {
   id: string;
-  status: "ABERTA" | "FECHADA";
+  status: OrderStatus;
   payment: string | null;
   note: string | null;
   createdAt: Date;

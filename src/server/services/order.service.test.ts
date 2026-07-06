@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData } from "./order.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, voidOrder, reopenOrder } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 import { openSession } from "./cash-session.service";
 
@@ -283,6 +283,102 @@ describe("closeOrder — multi-pagamento e troco", () => {
       closedById: acc,
     });
     expect(full.changeCents).toBe(1500); // 10000 − 8500
+  });
+});
+
+describe("voidOrder — estorno de comanda fechada", () => {
+  it("estorna: FECHADA → CANCELADA, reverte estoque e grava auditoria", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Óleo", priceCents: 3000, kind: "PRODUTO", trackStock: true });
+    await recordEntry(acc, prod.id, { qty: 10, createdById: acc });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 2 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(8);
+
+    const voided = await voidOrder(acc, o.id, "valor errado", acc);
+    expect(voided.status).toBe("CANCELADA");
+    // estoque volta a 10 com ENTRADA de estorno no ledger
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(10);
+    const mv = await listMovements(acc, prod.id);
+    expect(mv[0].kind).toBe("ENTRADA");
+    expect(mv[0].orderId).toBe(o.id);
+    // auditoria
+    const row = (await prisma.order.findUnique({ where: { id: o.id } }))!;
+    expect(row.status).toBe("CANCELADA");
+    expect(row.canceledReason).toBe("valor errado");
+    expect(row.canceledById).toBe(acc);
+    expect(row.canceledAt).toBeTruthy();
+  });
+
+  it("recusa motivo vazio", async () => {
+    const acc = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { name: "Y", unitPriceCents: 1000, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(voidOrder(acc, o.id, "   ", acc)).rejects.toThrow(/motivo/i);
+  });
+
+  it("só estorna FECHADA (ABERTA lança)", async () => {
+    const acc = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await expect(voidOrder(acc, o.id, "engano", acc)).rejects.toThrow();
+  });
+
+  it("estornar duas vezes: a segunda é recusada (guarda)", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Gel", priceCents: 1500, kind: "PRODUTO", trackStock: true });
+    await recordEntry(acc, prod.id, { qty: 10, createdById: acc });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 4 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await voidOrder(acc, o.id, "primeiro", acc);
+    await expect(voidOrder(acc, o.id, "segundo", acc)).rejects.toThrow();
+    // estoque revertido uma vez só (10, não 14)
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(10);
+  });
+
+  it("não deixa outra conta estornar", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { name: "Y", unitPriceCents: 1000, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await expect(voidOrder(other, o.id, "engano", other)).rejects.toThrow();
+  });
+});
+
+describe("reopenOrder — reabre comanda fechada p/ correção", () => {
+  it("FECHADA → ABERTA: limpa fechamento e reverte estoque", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Cera", priceCents: 2000, kind: "PRODUTO", trackStock: true });
+    await recordEntry(acc, prod.id, { qty: 10, createdById: acc });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 3 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(7);
+
+    const reopened = await reopenOrder(acc, o.id, acc);
+    expect(reopened.status).toBe("ABERTA");
+    expect(reopened.payment).toBeNull();
+    expect(reopened.closedAt).toBeNull();
+    const row = (await prisma.order.findUnique({ where: { id: o.id } }))!;
+    expect(row.number).toBeNull();
+    expect(row.amountTenderedCents).toBeNull();
+    // tenders limpos e estoque revertido
+    expect(await prisma.orderTender.count({ where: { orderId: o.id } })).toBe(0);
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(10);
+
+    // volta a aparecer na lista de abertas e re-baixa ao fechar de novo
+    expect((await listOpenOrders(acc)).map((x) => x.id)).toContain(o.id);
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    expect((await listStock(acc)).find((x) => x.id === prod.id)?.stockQty).toBe(7);
+  });
+
+  it("só reabre FECHADA (ABERTA lança)", async () => {
+    const acc = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await expect(reopenOrder(acc, o.id, acc)).rejects.toThrow();
   });
 });
 
