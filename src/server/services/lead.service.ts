@@ -226,6 +226,74 @@ export async function createLead(
 }
 
 /**
+ * Lead "leve" a partir do auto-agendamento público (Onda F). Difere do `createLead`
+ * interno: escolhe o CHIP primário da conta (p/ o lembrete ter por onde sair) e
+ * deduplica pela identidade real do contato — (whatsAppNumberId, phone) quando há
+ * chip, senão (userId, phone). Retorna `null` quando o teto de contatos estoura:
+ * é o SINAL de "cai para walk-in" (o confirm marca sem virar contato/lembrete).
+ * `consentSource: "public_booking"` registra a origem do opt-in (o cliente marcou).
+ */
+export async function resolveOrCreatePublicLead(
+  accountId: string,
+  input: { name: string; phone: string },
+): Promise<Lead | null> {
+  const phone = normalizePhone(input.phone);
+  if (!phone) throw new Error(`Telefone inválido: ${input.phone}`);
+  const name = input.name.trim() || phone; // sem nome → o telefone é o rótulo inicial
+
+  // Chip primário: um CONECTADO de preferência; senão qualquer; senão nenhum.
+  const chip =
+    (await prisma.whatsAppNumber.findFirst({
+      where: { userId: accountId, status: "CONNECTED" },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    })) ??
+    (await prisma.whatsAppNumber.findFirst({
+      where: { userId: accountId },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    }));
+
+  // Dedupe pela identidade do contato: com chip, por (whatsAppNumberId, phone);
+  // sem chip, por (userId, phone).
+  const existing = chip
+    ? await prisma.lead.findFirst({
+        where: { whatsAppNumberId: chip.id, phone },
+        select: { id: true, name: true },
+      })
+    : await prisma.lead.findFirst({
+        where: { userId: accountId, phone },
+        select: { id: true, name: true },
+      });
+  if (existing) {
+    // Atualiza o nome só se antes era o placeholder (o próprio telefone).
+    if (existing.name === phone && name !== phone) {
+      return prisma.lead.update({ where: { id: existing.id }, data: { name } });
+    }
+    return prisma.lead.findUniqueOrThrow({ where: { id: existing.id } });
+  }
+
+  // Novo contato: respeita o teto do plano. Estourou → null (o confirm vira walk-in).
+  try {
+    await assertContactQuota(accountId);
+  } catch {
+    return null;
+  }
+  const lead = await prisma.lead.create({
+    data: {
+      userId: accountId,
+      whatsAppNumberId: chip?.id ?? null,
+      phone,
+      name,
+      status: "NOVO",
+      consentSource: "public_booking",
+    },
+  });
+  await invalidateLeadCaches(accountId);
+  return lead;
+}
+
+/**
  * Edita um lead. Telefone, se informado, é normalizado para E.164; conflito de
  * telefone (já usado por outro lead) vira erro amigável.
  */
