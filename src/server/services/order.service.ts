@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import { Prisma } from "@prisma/client";
 import type { OrderPayment, OrderStatus } from "@prisma/client";
 import { applyOrderStockExit, reverseOrderStockExit } from "./stock.service";
+import { pickCommissionRule, commissionForLine } from "@/lib/commission";
 import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { getBranding } from "@/server/services/branding.service";
@@ -223,12 +224,22 @@ export async function closeOrder(
     amountTenderedCents?: number; // valor recebido em espécie (base do troco)
     note?: string;
     closedById?: string;
+    professionalId?: string; // profissional creditado (comissão); null = deriva do agendamento
     allowPartial?: boolean; // soma < total só fecha com esta flag (dinheiro não trava)
   },
 ): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId); // já inclui items
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
   const closerId = data.closedById ?? order.openedById;
+
+  // Comissão: resolve o profissional creditado. O explícito valida posse AQUI
+  // (read-only, fora da tx); a derivação por agendamento roda dentro da tx (junto
+  // do fechamento). null = sem crédito (grava professionalId/commissionCents null).
+  const explicitPro = data.professionalId ?? null;
+  if (explicitPro) {
+    const owned = await prisma.professional.findFirst({ where: { id: explicitPro, accountId }, select: { id: true } });
+    if (!owned) throw new Error("Profissional não encontrado.");
+  }
 
   // Total derivado COM os ajustes da comanda — é a base do saldo e do troco.
   const total = orderTotalCents({
@@ -303,6 +314,37 @@ export async function closeOrder(
           data: tenders.map((t) => ({ orderId, method: t.method, amountCents: t.amountCents })),
         });
         await applyOrderStockExit(tx, accountId, order.items, orderId, closerId);
+
+        // ── Comissão: snapshot por linha ──────────────────────────────────────
+        // Credita UM profissional por comanda: o explícito do fechamento OU, na
+        // falta, o único do agendamento ligado (0 ou >1 distinto = ambíguo → sem
+        // crédito). Cada linha calcula pela SUA regra (específica > padrão). Sem
+        // profissional resolvido, os campos ficam null (comanda sem comissão).
+        let creditedProId = explicitPro;
+        if (!creditedProId) {
+          const appts = await tx.appointment.findMany({
+            where: { orderId, professionalId: { not: null } },
+            select: { professionalId: true },
+          });
+          const distinct = [...new Set(appts.map((a) => a.professionalId))];
+          creditedProId = distinct.length === 1 ? distinct[0] : null;
+        }
+        if (creditedProId) {
+          const rules = await tx.commissionRule.findMany({
+            where: { accountId, professionalId: creditedProId, active: true },
+            select: { catalogItemId: true, percentBps: true, fixedCents: true },
+          });
+          for (const it of order.items) {
+            const rule = pickCommissionRule(rules, it.catalogItemId);
+            const commissionCents = commissionForLine({
+              unitPriceCents: it.unitPriceCents, quantity: it.quantity, rule,
+            });
+            await tx.orderItem.update({
+              where: { id: it.id },
+              data: { professionalId: creditedProId, commissionCents },
+            });
+          }
+        }
       });
       break;
     } catch (e) {
@@ -334,6 +376,8 @@ export async function voidOrder(accountId: string, orderId: string, reason: stri
       data: { status: "CANCELADA", canceledAt: new Date(), canceledReason: trimmed, canceledById: byId },
     });
     if (res.count === 0) throw new Error("Comanda já estornada.");
+    // NÃO limpa o snapshot de comissão: o relatório filtra status=FECHADA, então a
+    // comanda CANCELADA some sozinha; o snapshot fica no item p/ auditoria (inofensivo).
     await reverseOrderStockExit(tx, accountId, orderId, byId);
   });
   return toDTO(await loadOwned(accountId, orderId));
@@ -360,6 +404,9 @@ export async function reopenOrder(accountId: string, orderId: string, byId: stri
     });
     if (res.count === 0) throw new Error("Comanda não pôde ser reaberta.");
     await tx.orderTender.deleteMany({ where: { orderId } });
+    // Limpa o snapshot de comissão — será recalculado no próximo fechamento (a
+    // regra/preço/agendamento podem ter mudado). Sem isso o snapshot fica velho.
+    await tx.orderItem.updateMany({ where: { orderId }, data: { professionalId: null, commissionCents: null } });
     await reverseOrderStockExit(tx, accountId, orderId, byId);
   });
   return toDTO(await loadOwned(accountId, orderId));

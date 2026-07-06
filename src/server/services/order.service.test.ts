@@ -5,6 +5,7 @@ import { createDef } from "./custom-field.service";
 import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, voidOrder, reopenOrder } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 import { openSession } from "./cash-session.service";
+import { createCommissionRule } from "./commission.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({
@@ -504,5 +505,125 @@ describe("closeOrder — carimbo da sessão de caixa", () => {
     const full = await closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 4000 }], closedById: acc });
     expect(full.status).toBe("FECHADA");
     expect((await prisma.order.findUnique({ where: { id: o.id } }))!.cashSessionId).toBeNull();
+  });
+});
+
+describe("closeOrder — comissão (snapshot por linha)", () => {
+  async function makePro(acc: string, name = "João") {
+    const p = await prisma.professional.create({ data: { accountId: acc, name } });
+    return p.id;
+  }
+
+  it("snapshota professionalId + commissionCents por linha (percentual explícito)", async () => {
+    const acc = await makeOwner();
+    const proId = await makePro(acc);
+    await createCommissionRule(acc, { professionalId: proId, percentBps: 4000 }); // padrão 40%
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 10000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 10000 }], closedById: acc, professionalId: proId });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(items[0].professionalId).toBe(proId);
+    expect(items[0].commissionCents).toBe(4000);
+  });
+
+  it("regra específica do serviço vence a padrão", async () => {
+    const acc = await makeOwner();
+    const proId = await makePro(acc);
+    const corte = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const pomada = await createCatalogItem(acc, { name: "Pomada", priceCents: 3000 });
+    await createCommissionRule(acc, { professionalId: proId, percentBps: 3000 }); // padrão 30%
+    await createCommissionRule(acc, { professionalId: proId, catalogItemId: corte.id, percentBps: 5000 }); // Corte 50%
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: corte.id, quantity: 1 });
+    await addItem(acc, o.id, { catalogItemId: pomada.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc, professionalId: proId });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id }, orderBy: { createdAt: "asc" } });
+    expect(items.find((i) => i.catalogItemId === corte.id)?.commissionCents).toBe(2500); // 50% de 5000
+    expect(items.find((i) => i.catalogItemId === pomada.id)?.commissionCents).toBe(900); // 30% de 3000
+  });
+
+  it("sem profissional resolvido → sem comissão (null/null)", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(items[0].professionalId).toBeNull();
+    expect(items[0].commissionCents).toBeNull();
+  });
+
+  it("profissional resolvido mas sem regra → comissão 0 (linha creditada)", async () => {
+    const acc = await makeOwner();
+    const proId = await makePro(acc);
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc, professionalId: proId });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(items[0].professionalId).toBe(proId);
+    expect(items[0].commissionCents).toBe(0);
+  });
+
+  it("deriva o profissional do agendamento ligado quando não passado explícito", async () => {
+    const acc = await makeOwner();
+    const proId = await makePro(acc, "Maria");
+    await createCommissionRule(acc, { professionalId: proId, percentBps: 2000 });
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    // agendamento ligado à comanda (markRealized grava orderId + professionalId)
+    await prisma.appointment.create({
+      data: { accountId: acc, professionalId: proId, orderId: o.id, scheduledAt: new Date(), createdById: acc },
+    });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(items[0].professionalId).toBe(proId);
+    expect(items[0].commissionCents).toBe(1000); // 20% de 5000
+  });
+
+  it("dois profissionais no agendamento (ambíguo) → sem crédito automático", async () => {
+    const acc = await makeOwner();
+    const p1 = await makePro(acc, "A");
+    const p2 = await makePro(acc, "B");
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await prisma.appointment.create({ data: { accountId: acc, professionalId: p1, orderId: o.id, scheduledAt: new Date(), createdById: acc } });
+    await prisma.appointment.create({ data: { accountId: acc, professionalId: p2, orderId: o.id, scheduledAt: new Date(), createdById: acc } });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc });
+    const items = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(items[0].professionalId).toBeNull();
+  });
+
+  it("profissional de outra conta no payload → erro (não fecha)", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const otherProId = await makePro(other);
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 5000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await expect(closeOrder(acc, o.id, { payment: "PIX", closedById: acc, professionalId: otherProId })).rejects.toThrow();
+    expect((await prisma.order.findUnique({ where: { id: o.id } }))!.status).toBe("ABERTA");
+  });
+
+  it("reabertura limpa o snapshot; refechar recalcula", async () => {
+    const acc = await makeOwner();
+    const proId = await makePro(acc);
+    await createCommissionRule(acc, { professionalId: proId, percentBps: 4000 });
+    const item = await createCatalogItem(acc, { name: "Corte", priceCents: 10000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc, professionalId: proId });
+    expect((await prisma.orderItem.findMany({ where: { orderId: o.id } }))[0].commissionCents).toBe(4000);
+
+    await reopenOrder(acc, o.id, acc);
+    const cleared = await prisma.orderItem.findMany({ where: { orderId: o.id } });
+    expect(cleared[0].professionalId).toBeNull();
+    expect(cleared[0].commissionCents).toBeNull();
+
+    await closeOrder(acc, o.id, { payment: "PIX", closedById: acc, professionalId: proId });
+    expect((await prisma.orderItem.findMany({ where: { orderId: o.id } }))[0].commissionCents).toBe(4000);
   });
 });

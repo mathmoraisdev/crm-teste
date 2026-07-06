@@ -25,6 +25,7 @@ const closeSchema = z.object({
   amountTenderedCents: z.number().int().min(0).optional(),
   allowPartial: z.boolean().optional(),
   note: z.string().optional(),
+  professionalId: z.string().optional(), // profissional creditado (comissão); opcional
 });
 const adjustmentsSchema = z.object({
   discountCents: z.number().int().min(0).nullish(),
