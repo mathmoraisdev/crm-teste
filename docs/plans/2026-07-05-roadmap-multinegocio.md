@@ -42,12 +42,14 @@ não paga o cheque. Este roadmap fecha essa distância.
 > **Ondas A e B aplicadas em PROD em 2026-07-05** (`onda-a.sql` + `onda-b.sql` rodados no Supabase; código deployado via Vercel CLI). NÃO reaplicar o SQL.
 >
 > ¹ **Iniciativas 5, 6, 7 = FEITO em dev** (models no schema + `onda-c/d/e.sql` + código/testes, tudo committado). **PROD não confirmado**: falta verificar se `onda-c.sql`/`onda-d.sql`/`onda-e.sql` foram aplicados no Supabase e se o código foi deployado no Vercel. Confirmar e, quando aplicado, trocar para `PROD ✅`. (Reconciliado por verificação do repo — os chats que implementaram não atualizaram este mestre.)
+>
+> ² **Iniciativa 10 = FEITO em dev** (`db push` local + testes verdes + E2E do toggle). **PROD pendente**: aplicar a seção da iniciativa 10 do `onda-e.sql` no Supabase (idempotente, `IF NOT EXISTS` — pode aplicar o arquivo inteiro), deploy web (leva a toggle) + `git pull`/restart do worker (leva o tick, sobe inerte). Ligar **gradual**: `LIFECYCLE_AUTOMATION=true` + `LIFECYCLE_POSTSALE_HOURS=2` numa conta piloto com opt-in → depois NPS → **reengajamento por último** (cold-ish).
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
 | 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` — **plano escrito, pronto p/ executar** (depende de 5, já em dev) |
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
-| 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **plano escrito, pronto p/ executar** (independe; roda no worker) |
+| 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **FEITO (dev)** ² (motor puro + serviço idempotente + tick no worker + opt-in por conta na UI; `onda-e.sql` composto/append, PROD a aplicar; sobe **inerte** — off até `LIFECYCLE_AUTOMATION`=true **e** opt-in da conta) |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D | **P3** | `2026-07-10-verticais-unificadas.md` |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
