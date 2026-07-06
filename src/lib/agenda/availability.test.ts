@@ -7,6 +7,7 @@ import {
   localWeekdayAndMinutes,
   zonedWallTimeToUtc,
   enumerateLocalDates,
+  computeDaySlots,
   type DayWindow,
 } from "./availability";
 
@@ -267,5 +268,127 @@ describe("enumerateLocalDates", () => {
     const a = zonedWallTimeToUtc(2026, 7, 8, 0, "America/Sao_Paulo");
     const b = zonedWallTimeToUtc(2026, 7, 6, 0, "America/Sao_Paulo");
     expect(enumerateLocalDates(a, b, "America/Sao_Paulo")).toEqual([]);
+  });
+});
+
+describe("computeDaySlots (a jóia da coroa)", () => {
+  const TZ = "America/Sao_Paulo";
+  const DATE = { year: 2026, month: 7, day: 6 }; // segunda
+  // Um piso de antecedência bem no passado (não corta nada, salvo o teste dele).
+  const FAR_PAST = new Date("2020-01-01T00:00:00.000Z");
+  // Hora local (min do dia) → o Date UTC esperado nesse fuso/dia.
+  const at = (minute: number) => zonedWallTimeToUtc(DATE.year, DATE.month, DATE.day, minute, TZ);
+  const H = (h: number, m = 0) => h * 60 + m;
+
+  it("janela 09–12, serviço 60min, passo 30 → 09:00/09:30/10:00/10:30/11:00", () => {
+    const slots = computeDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      windows: [{ startMinute: H(9), endMinute: H(12) }],
+      busy: [],
+      durationMinutes: 60,
+      stepMinutes: 30,
+      notBefore: FAR_PAST,
+    });
+    expect(slots.map((s) => s.getTime())).toEqual(
+      [H(9), H(9, 30), H(10), H(10, 30), H(11)].map((m) => at(m).getTime()),
+    );
+  });
+
+  it("um busy 10:00–11:00 remove 09:30/10:00/10:30", () => {
+    const slots = computeDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      windows: [{ startMinute: H(9), endMinute: H(12) }],
+      busy: [{ start: at(H(10)), end: at(H(11)) }],
+      durationMinutes: 60,
+      stepMinutes: 30,
+      notBefore: FAR_PAST,
+    });
+    // sobram 09:00 (09–10) e 11:00 (11–12); 09:30/10:00/10:30 colidem com [10,11)
+    expect(slots.map((s) => s.getTime())).toEqual([at(H(9)).getTime(), at(H(11)).getTime()]);
+  });
+
+  it("pausa 12:00–13:00 numa janela 09–18 não oferta slot que a atravesse", () => {
+    const slots = computeDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      windows: [{ startMinute: H(9), endMinute: H(18), breakStart: H(12), breakEnd: H(13) }],
+      busy: [],
+      durationMinutes: 60,
+      stepMinutes: 60,
+      notBefore: FAR_PAST,
+    });
+    const localMinutes = slots.map((s) => localWeekdayAndMinutes(s, TZ).minuteOfDay);
+    // nenhum slot começa às 12:00 (atravessaria a pausa até 13:00)
+    expect(localMinutes).not.toContain(H(12));
+    // 11:00 (11–12, encosta) e 13:00 (13–14) existem
+    expect(localMinutes).toContain(H(11));
+    expect(localMinutes).toContain(H(13));
+  });
+
+  it("notBefore 10:15 corta os inícios anteriores", () => {
+    const slots = computeDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      windows: [{ startMinute: H(9), endMinute: H(12) }],
+      busy: [],
+      durationMinutes: 60,
+      stepMinutes: 30,
+      notBefore: at(H(10, 15)), // 10:15 local
+    });
+    // 09:00/09:30/10:00 (< 10:15) caem; sobram 10:30 e 11:00
+    expect(slots.map((s) => s.getTime())).toEqual([at(H(10, 30)).getTime(), at(H(11)).getTime()]);
+  });
+
+  it("sem janela → []", () => {
+    expect(
+      computeDaySlots({
+        date: DATE,
+        timeZone: TZ,
+        windows: [],
+        busy: [],
+        durationMinutes: 30,
+        stepMinutes: 15,
+        notBefore: FAR_PAST,
+      }),
+    ).toEqual([]);
+  });
+
+  it("duração que não cabe na janela → []", () => {
+    expect(
+      computeDaySlots({
+        date: DATE,
+        timeZone: TZ,
+        windows: [{ startMinute: H(9), endMinute: H(10) }], // 1h de janela
+        busy: [],
+        durationMinutes: 90, // serviço de 1h30 não cabe
+        stepMinutes: 15,
+        notBefore: FAR_PAST,
+      }),
+    ).toEqual([]);
+  });
+
+  it("deduplica e ordena entre janelas sobrepostas", () => {
+    const slots = computeDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      windows: [
+        { startMinute: H(9), endMinute: H(11) },
+        { startMinute: H(10), endMinute: H(12) }, // sobrepõe às 10:00/10:30
+      ],
+      busy: [],
+      durationMinutes: 30,
+      stepMinutes: 30,
+      notBefore: FAR_PAST,
+    });
+    const times = slots.map((s) => s.getTime());
+    // ordenado crescente e sem repetição
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    expect(new Set(times).size).toBe(times.length);
+    // cobre 09:00..11:30 (união das janelas)
+    expect(times).toEqual(
+      [H(9), H(9, 30), H(10), H(10, 30), H(11), H(11, 30)].map((m) => at(m).getTime()),
+    );
   });
 });

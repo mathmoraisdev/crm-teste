@@ -234,3 +234,54 @@ export function enumerateLocalDates(
   }
   return out;
 }
+
+export interface DaySlotOpts {
+  date: { year: number; month: number; day: number }; // dia-calendário local (mês 1-based)
+  timeZone: string;
+  windows: DayWindow[]; // expediente do dia
+  busy: { start: Date; end: Date }[]; // ocupados (UTC) do profissional nesse dia
+  durationMinutes: number; // duração do serviço (>0)
+  stepMinutes: number; // grade (bookingSlotStep)
+  notBefore: Date; // piso de antecedência (agora + bookingLeadMinutes), UTC
+}
+
+/**
+ * PURA: gera os horários de início LIVRES do dia. Para cada janela, varre inícios
+ * candidatos de `startMinute` até `endMinute - duração`, de `stepMinutes` em
+ * `stepMinutes`, converte cada um p/ UTC via `zonedWallTimeToUtc` e MANTÉM o slot
+ * sse: cabe inteiro na janela e fora da pausa (`isWithinWorkingHours` no par
+ * [start, start+dur]), `slotStart >= notBefore`, e NÃO sobrepõe nenhum `busy`
+ * (`overlaps` + `appointmentEnd`). Ordena crescente e deduplica entre janelas.
+ */
+export function computeDaySlots(opts: DaySlotOpts): Date[] {
+  const { date, timeZone, windows, busy, durationMinutes, stepMinutes, notBefore } = opts;
+  if (durationMinutes <= 0 || stepMinutes <= 0 || windows.length === 0) return [];
+
+  const seen = new Set<number>();
+  const slots: Date[] = [];
+
+  for (const w of windows) {
+    // Último início possível: o slot precisa terminar até endMinute.
+    const lastStart = w.endMinute - durationMinutes;
+    for (let startMin = w.startMinute; startMin <= lastStart; startMin += stepMinutes) {
+      const slotEndMin = startMin + durationMinutes;
+      // Cabe na janela E fora da pausa (a mesma regra do fluxo interno).
+      if (!isWithinWorkingHours(startMin, slotEndMin, [w])) continue;
+
+      const slotStart = zonedWallTimeToUtc(date.year, date.month, date.day, startMin, timeZone);
+      if (slotStart.getTime() < notBefore.getTime()) continue;
+
+      const slotEnd = appointmentEnd(slotStart, durationMinutes);
+      const collides = busy.some((b) => overlaps(slotStart, slotEnd, b.start, b.end));
+      if (collides) continue;
+
+      const key = slotStart.getTime();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      slots.push(slotStart);
+    }
+  }
+
+  slots.sort((a, b) => a.getTime() - b.getTime());
+  return slots;
+}
