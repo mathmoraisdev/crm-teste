@@ -95,3 +95,52 @@ export async function whoIsViewing(
     return [];
   }
 }
+
+/**
+ * Presença de vários leads de uma vez (p/ a lista do inbox). Uma pipeline: purga
+ * + lê os membros de cada lead num só round-trip, depois resolve os nomes em um
+ * único HMGET. Sem Redis → mapa vazio. Best-effort (nunca lança).
+ */
+export async function whoIsViewingMany(
+  leadIds: string[],
+  opts: { excludeUserId?: string; now?: number } = {},
+): Promise<Record<string, Viewer[]>> {
+  const empty: Record<string, Viewer[]> = {};
+  if (!redis || leadIds.length === 0) return empty;
+  const now = opts.now ?? Date.now();
+  try {
+    const pipe = redis.pipeline();
+    for (const id of leadIds) {
+      pipe.zremrangebyscore(zkey(id), 0, now);
+      pipe.zrange(zkey(id), 0, -1);
+    }
+    const res = await pipe.exec(); // [[err, purgeRes], [err, idsRes], ...] por lead
+    if (!res) return empty;
+
+    // Junta os ids por lead (a 2ª resposta de cada par é o zrange).
+    const byLead: Record<string, string[]> = {};
+    const allIds = new Set<string>();
+    leadIds.forEach((leadId, i) => {
+      const zrangeRes = res[i * 2 + 1]?.[1] as string[] | undefined;
+      const ids = (zrangeRes ?? []).filter((u) => u !== opts.excludeUserId);
+      byLead[leadId] = ids;
+      ids.forEach((u) => allIds.add(u));
+    });
+
+    // Resolve todos os nomes num HMGET só.
+    const idList = [...allIds];
+    const nameMap = new Map<string, string>();
+    if (idList.length > 0) {
+      const names = await redis.hmget(NAME_KEY, ...idList);
+      idList.forEach((u, i) => nameMap.set(u, names[i] ?? "Operador"));
+    }
+
+    const out: Record<string, Viewer[]> = {};
+    for (const [leadId, ids] of Object.entries(byLead)) {
+      if (ids.length > 0) out[leadId] = ids.map((u) => ({ userId: u, name: nameMap.get(u) ?? "Operador" }));
+    }
+    return out;
+  } catch {
+    return empty;
+  }
+}
