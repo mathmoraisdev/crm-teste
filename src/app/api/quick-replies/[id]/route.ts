@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteQuickReply, updateQuickReply } from "@/server/services/quick-reply.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +18,14 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json(
+      { error: "Seu usuário não tem permissão para gerenciar respostas rápidas." },
+      { status: 403 },
+    );
+  }
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -30,7 +36,7 @@ export async function PATCH(
     );
   }
   try {
-    const quickReply = await updateQuickReply(userId, id, parsed.data);
+    const quickReply = await updateQuickReply(ctx.tenantUserId, id, parsed.data);
     return NextResponse.json({ quickReply });
   } catch (e) {
     return NextResponse.json(
@@ -44,11 +50,17 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json(
+      { error: "Seu usuário não tem permissão para gerenciar respostas rápidas." },
+      { status: 403 },
+    );
+  }
   const { id } = await params;
   try {
-    await deleteQuickReply(userId, id);
+    await deleteQuickReply(ctx.tenantUserId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

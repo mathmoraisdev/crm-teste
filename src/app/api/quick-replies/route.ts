@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createQuickReply, listQuickReplies } from "@/server/services/quick-reply.service";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,14 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  if (!ctx.perms.canSettings) {
+    return NextResponse.json(
+      { error: "Seu usuário não tem permissão para gerenciar respostas rápidas." },
+      { status: 403 },
+    );
+  }
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
@@ -30,7 +36,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const quickReply = await createQuickReply(userId, parsed.data);
+    const quickReply = await createQuickReply(ctx.tenantUserId, parsed.data);
     return NextResponse.json({ quickReply }, { status: 201 });
   } catch (e) {
     return NextResponse.json(
