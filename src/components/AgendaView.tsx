@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingBlock } from "@/components/ui/Spinner";
+import { StatCard } from "@/components/app/StatCard";
 import { cn, formatSlot } from "@/lib/utils";
 import type { AgendaItem } from "@/server/services/meeting.service";
 import {
@@ -114,6 +115,18 @@ export function AgendaView() {
     [appointments],
   );
 
+  const proposedCount = useMemo(
+    () => meetings?.filter((m) => m.status === "PROPOSED").length ?? 0,
+    [meetings],
+  );
+
+  // Agendamentos de serviço ainda de pé (mesma regra da aba: AGENDADO/CONFIRMADO).
+  const apptActiveCount = useMemo(
+    () =>
+      appointments?.filter((a) => a.status === "AGENDADO" || a.status === "CONFIRMADO").length ?? 0,
+    [appointments],
+  );
+
   // Agenda mostra só o que ainda está de pé (AGENDADO/CONFIRMADO); realizados,
   // faltas e cancelamentos são histórico e ficam na ficha do cliente. Mesma busca
   // por nome/telefone das reuniões. O filtro "Aguardando revisão" ignora o status
@@ -155,6 +168,33 @@ export function AgendaView() {
           </Button>
         </div>
       </div>
+
+      {/* Faixa de KPIs da seção */}
+      {(meetings || appointments) && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard
+            label="Reuniões confirmadas"
+            value={meetings ? confirmedCount : "—"}
+            hint="de pé"
+            accent
+          />
+          <StatCard
+            label="Reuniões propostas"
+            value={meetings ? proposedCount : "—"}
+            hint="aguardando confirmação"
+          />
+          <StatCard
+            label="Agendamentos ativos"
+            value={appointments ? apptActiveCount : "—"}
+            hint="serviços marcados"
+          />
+          <StatCard
+            label="Aguardando revisão"
+            value={appointments ? reviewCount : "—"}
+            hint="respostas a conferir"
+          />
+        </div>
+      )}
 
       {/* Abas: reuniões (IA) x agendamentos de serviço */}
       <div className="inline-flex rounded-xl border border-line-default bg-card p-1">

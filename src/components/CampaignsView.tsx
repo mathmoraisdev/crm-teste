@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { LoadingBlock } from "@/components/ui/Spinner";
+import { StatCard } from "@/components/app/StatCard";
 import { CampaignForm } from "@/components/CampaignForm";
 import type { CampaignListItem } from "@/server/services/campaign.service";
 
@@ -69,6 +70,25 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
 
   const hasFilters = query.trim() !== "" || statusFilter !== "ALL";
 
+  // Faixa de KPIs da seção (Crescimento) — agrega a lista inteira, não a filtrada,
+  // para refletir o estado real da conta independente dos filtros da tabela.
+  const stats = useMemo(() => {
+    if (!campaigns) return null;
+    let active = 0;
+    let sent = 0;
+    let pending = 0;
+    let failed = 0;
+    for (const c of campaigns) {
+      if (c.status === "RUNNING") active += 1;
+      sent += c.jobs.sent;
+      pending += c.jobs.pending;
+      failed += c.jobs.failed;
+    }
+    // Entrega = enviados / (enviados + falhas). Sem base ⇒ null (StatCard esconde).
+    const deliverable = sent + failed;
+    return { active, sent, pending, failed, deliveryRate: deliverable > 0 ? sent / deliverable : null };
+  }, [campaigns]);
+
   async function start(id: string) {
     setStartingId(id);
     setFlash(null);
@@ -128,6 +148,29 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
       {flash && (
         <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-700">
           {flash}
+        </div>
+      )}
+
+      {/* Faixa de KPIs da seção */}
+      {campaigns && campaigns.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard
+            label="Campanhas ativas"
+            value={stats ? stats.active : "—"}
+            hint="disparando agora"
+            accent
+          />
+          <StatCard
+            label="Mensagens enviadas"
+            value={stats ? stats.sent : "—"}
+            hint={
+              stats && stats.deliveryRate !== null
+                ? `${Math.round(stats.deliveryRate * 100)}% de entrega`
+                : "acumulado"
+            }
+          />
+          <StatCard label="Na fila" value={stats ? stats.pending : "—"} hint="aguardando envio" />
+          <StatCard label="Falhas" value={stats ? stats.failed : "—"} hint="envios recusados" />
         </div>
       )}
 
