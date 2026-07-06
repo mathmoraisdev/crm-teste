@@ -386,3 +386,21 @@ export async function setBusinessTemplateId(userId: string, templateId: string |
   if (templateId !== null && !getTemplate(templateId)) throw new Error("Ramo inválido.");
   await prisma.user.update({ where: { id: userId }, data: { businessTemplateId: templateId } });
 }
+
+/** Meta de SLA do inbox (minutos até a 1ª resposta). null = sem meta. */
+export async function getInboxSlaMinutes(userId: string): Promise<number | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { inboxSlaMinutes: true } });
+  return u?.inboxSlaMinutes ?? null;
+}
+
+/** Define/limpa a meta de SLA (null ou <=0 = sem meta). Máx. 1 dia (1440 min). */
+export async function setInboxSlaMinutes(userId: string, minutes: number | null): Promise<number | null> {
+  let value: number | null = null;
+  if (minutes != null) {
+    if (!Number.isInteger(minutes) || minutes < 0) throw new Error("Meta de SLA inválida.");
+    if (minutes > 1440) throw new Error("Meta de SLA máxima é 1440 minutos (1 dia).");
+    value = minutes > 0 ? minutes : null; // 0 = sem meta
+  }
+  await prisma.user.update({ where: { id: userId }, data: { inboxSlaMinutes: value } });
+  return value;
+}

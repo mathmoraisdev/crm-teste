@@ -13,8 +13,9 @@ import { getBranding } from "@/server/services/branding.service";
 import { PosPrintSettings } from "@/components/app/PosPrintSettings";
 import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
-import { getBusinessTemplateId } from "@/server/services/account.service";
+import { getBusinessTemplateId, getInboxSlaMinutes } from "@/server/services/account.service";
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
+import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -36,13 +37,14 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings] = await Promise.all([
+  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
     getBranding(ownerId), // identidade visual da conta (só o dono edita)
     getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
     getPosSettings(ownerId), // config de impressão de cupom (só o dono edita)
+    getInboxSlaMinutes(ownerId), // meta de SLA do inbox (só o dono edita)
   ]);
 
   return (
@@ -105,6 +107,12 @@ export default async function ConfiguracoesPage() {
       <div className="mt-6">
         <QuickRepliesSettings canEdit={canSettings} />
       </div>
+
+      {isOwner && (
+        <div className="mt-6">
+          <InboxSlaSettings initial={inboxSla} canEdit={canSettings} />
+        </div>
+      )}
     </div>
   );
 }

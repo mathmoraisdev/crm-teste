@@ -158,6 +158,9 @@ model User {
   // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
   // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
   pipelineLabels     Json?
+  // Meta de SLA do inbox (minutos até a 1ª resposta humana). null = sem meta →
+  // nunca marca estouro. Aplica-se à conta toda; só faz sentido no dono (ownerId=null).
+  inboxSlaMinutes    Int?
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId            String?

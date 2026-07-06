@@ -20,3 +20,7 @@ CREATE INDEX IF NOT EXISTS "QuickReply_userId_idx" ON "QuickReply"("userId");
 DO $$ BEGIN ALTER TABLE "QuickReply" ADD CONSTRAINT "QuickReply_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Validar: select to_regclass('public."QuickReply"');
+
+-- ── Fase 2: Meta de SLA do inbox (no dono) ───────────────────────────────────
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "inboxSlaMinutes" INTEGER;
+-- Conferir: select column_name from information_schema.columns where table_name='User' and column_name='inboxSlaMinutes';
