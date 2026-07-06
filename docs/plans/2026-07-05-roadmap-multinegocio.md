@@ -45,8 +45,8 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
-| 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` |
-| 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` |
+| 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` — **plano escrito, pronto p/ executar** (depende de 5, já em dev) |
+| 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D | **P3** | `2026-07-10-verticais-unificadas.md` |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` |
@@ -76,9 +76,17 @@ tocam o schema **compõem** o mesmo arquivo (como estoque×despesas já fizeram)
   `queuedAt`/`firstResponseAt` já existentes — sem coluna nova.*
 - **Onda E** (iniciativas 7, 10): sem schema novo obrigatório (tool-calling refatora serviço;
   automação usa worker + timestamps já existentes). Eventual `Lead.lastEngagedAt` p/ reengajamento.
-- **Onda F** (iniciativas 8, 9): rota pública não precisa de schema; comissão adiciona
-  **`CommissionRule`** (por profissional/serviço, `percent`/`fixedCents`) e `OrderItem.commissionCents`
-  (snapshot). Depende de `Professional` (Onda C).
+- **Onda F** (iniciativas 8, 9): **um** `prisma/manual/2026-07-09-onda-f.sql` idempotente e composto.
+  Iniciativa 8 (agendamento online) adiciona colunas em `User`: `publicSlug String? @unique` (link
+  público) + `bookingEnabled Boolean` + config de slot (`bookingLeadMinutes`/`bookingHorizonDays`/
+  `bookingSlotStep`) — o slug é **identidade de roteamento**, mora no `User` (não no branding, que só
+  fornece cor/logo/appName à página pública). Iniciativa 9 (comissão) **acrescenta** ao mesmo arquivo
+  **`CommissionRule`** (por profissional/serviço, `percentBps` pontos-base OU `fixedCents`) e, em
+  `OrderItem`, **`commissionCents`** + **`professionalId`** (ambos snapshot no fechamento). *Desvio
+  consciente:* o mestre listava só `commissionCents`, mas o snapshot inclui também `professionalId`
+  (profissional creditado por linha) — sem ele o relatório teria de re-derivar o profissional do
+  agendamento em leitura (frágil: agendamento pode sumir; comanda avulsa não tem agendamento). Depende
+  de `Professional`/`WorkingHours`/`durationMinutes` (Onda C).
 - **Onda G** (iniciativa 12): `CatalogItem.barcode String?`; model **`ItemVariant`** (grade/tamanho)
   ou manter SKU flat (decisão no plano filho).
 - **Onda H** (iniciativa 13): `Order.fiscalStatus`, `Order.fiscalDocId`, credenciais do emissor
@@ -221,13 +229,25 @@ Destrava **beleza, saúde, fitness** (a maior fatia dos 63 modelos):
   flag por número, com os testes de `agents.eval.test.ts` como rede.
 - **Custo:** vigiar tokens/áudio ([[ai-context-and-media-policy]], [[pricing-plans-cost]]).
 
-### 8. Auto-agendamento online (link público)
+### 8. Auto-agendamento online (link público) — **plano completo em `2026-07-09-agendamento-online.md`**
 - **Objetivo:** cliente marca sozinho por um link público, respeitando profissional/duração/expediente.
-- **Fases:** (8.1) rota pública `/agendar/[slug]` sem auth, com slug por conta → (8.2) motor de
-  disponibilidade (deriva slots livres de `WorkingHours` − agendamentos do profissional) → (8.3)
-  confirmação + criação do `Appointment` (walk-in vira lead leve) + lembrete pelo fluxo já existente.
-- **Schema (Onda F):** slug por conta (reusa branding/appName); nenhum model novo pesado.
-- **Dependência:** **exige Agenda Pro (5)** inteira.
+- **Fases (por dependência de dados, não pela numeração):** (1) Onda F — `User.publicSlug` + opt-in
+  `bookingEnabled` + config de slot + Settings UI → (2) **motor de disponibilidade PURO** em
+  `availability.ts` (hora-de-parede→UTC, varredura de dias no fuso, geração de slots livres; TDD) →
+  (3) `booking-availability.service` (monta insumos do banco, reusa `conflictsFor`/`WorkingHours`) +
+  endpoint público de slots + allowlist no `middleware.ts` + `rateLimit` → (4) página `/agendar/[slug]`
+  (server component, herda branding via `getBranding`+`<BrandingStyle>`) + widget de seleção → (5)
+  confirmação: POST público → **lead leve** (ou walk-in) + `createAppointment` (o mesmo do fluxo
+  interno) + `pg_advisory_xact_lock` anti-corrida + mensagem de confirmação; lembrete pelo worker
+  existente → (6) verificação E2E + rollout.
+- **Schema (Onda F):** colunas em `User` (`publicSlug @unique`, `bookingEnabled`, config de slot);
+  nenhum model novo. Compõe o `onda-f.sql` com a comissão (9).
+- **Dependência:** **exige Agenda Pro (5)** inteira (lê `Professional`/`WorkingHours`/`durationMinutes`,
+  reusa `createAppointment`/`conflictsFor`). Booking v1 é **por profissional** (conta sem `Professional`
+  não usa o link no v1).
+- **Riscos:** fuso (todo slot nasce de hora-de-parede local — função pura com round-trip nos testes);
+  corrida de slot entre estranhos (trava por `professionalId+startISO` no confirm); enumeração de
+  contas via slug (404 idêntico p/ inexistente×desligado + rate limit).
 
 ### 9. Comissão por profissional
 - **Objetivo:** calcular comissão por profissional sobre serviço/venda.
