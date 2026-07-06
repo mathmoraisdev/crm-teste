@@ -5,6 +5,8 @@ import {
   overlaps,
   isWithinWorkingHours,
   localWeekdayAndMinutes,
+  zonedWallTimeToUtc,
+  enumerateLocalDates,
   type DayWindow,
 } from "./availability";
 
@@ -181,5 +183,89 @@ describe("localWeekdayAndMinutes", () => {
     const { weekday, minuteOfDay } = localWeekdayAndMinutes(date, "UTC");
     expect(weekday).toBe(1);
     expect(minuteOfDay).toBe(8 * 60 + 15);
+  });
+});
+
+describe("zonedWallTimeToUtc", () => {
+  it("09:00 em America/Sao_Paulo (UTC-3) cai às 12:00 UTC", () => {
+    // 2026-07-06 é segunda; 09:00 local => 12:00Z
+    const d = zonedWallTimeToUtc(2026, 7, 6, 9 * 60, "America/Sao_Paulo");
+    expect(d.toISOString()).toBe("2026-07-06T12:00:00.000Z");
+  });
+
+  it("meia-noite (minuto 0) local => 03:00Z em São Paulo", () => {
+    const d = zonedWallTimeToUtc(2026, 7, 6, 0, "America/Sao_Paulo");
+    expect(d.toISOString()).toBe("2026-07-06T03:00:00.000Z");
+  });
+
+  it("fuso UTC (offset zero) devolve a própria parede", () => {
+    const d = zonedWallTimeToUtc(2026, 7, 6, 8 * 60 + 15, "UTC");
+    expect(d.toISOString()).toBe("2026-07-06T08:15:00.000Z");
+  });
+
+  it("fuso com DST (America/New_York) num dia de verão => EDT (UTC-4)", () => {
+    // Julho = horário de verão em NY (EDT, UTC-4). 09:00 local => 13:00Z.
+    const d = zonedWallTimeToUtc(2026, 7, 6, 9 * 60, "America/New_York");
+    expect(d.toISOString()).toBe("2026-07-06T13:00:00.000Z");
+  });
+
+  it("round-trip: localWeekdayAndMinutes(zonedWallTimeToUtc(...)) preserva minuto e weekday", () => {
+    const cases: Array<{ y: number; mo: number; d: number; min: number; tz: string; wd: number }> = [
+      { y: 2026, mo: 7, d: 6, min: 9 * 60, tz: "America/Sao_Paulo", wd: 1 }, // segunda
+      { y: 2026, mo: 7, d: 5, min: 0, tz: "America/Sao_Paulo", wd: 0 }, // domingo, meia-noite
+      { y: 2026, mo: 12, d: 25, min: 14 * 60 + 30, tz: "America/New_York", wd: 5 }, // sexta (inverno, EST)
+      { y: 2026, mo: 7, d: 1, min: 23 * 60 + 45, tz: "UTC", wd: 3 }, // quarta
+    ];
+    for (const c of cases) {
+      const utc = zonedWallTimeToUtc(c.y, c.mo, c.d, c.min, c.tz);
+      const { weekday, minuteOfDay } = localWeekdayAndMinutes(utc, c.tz);
+      expect(minuteOfDay).toBe(c.min);
+      expect(weekday).toBe(c.wd);
+    }
+  });
+});
+
+describe("enumerateLocalDates", () => {
+  it("intervalo de 3 dias corridos lista 3 dias com weekday correto (São Paulo)", () => {
+    // 00:00 de seg 06, ter 07, qua 08 (local) → instantes 03:00Z de cada.
+    const from = zonedWallTimeToUtc(2026, 7, 6, 0, "America/Sao_Paulo");
+    const to = zonedWallTimeToUtc(2026, 7, 8, 0, "America/Sao_Paulo");
+    const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
+    expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual([
+      "2026-7-6",
+      "2026-7-7",
+      "2026-7-8",
+    ]);
+    expect(days.map((d) => d.weekday)).toEqual([1, 2, 3]); // seg, ter, qua
+  });
+
+  it("virada de mês (30/06 → 02/07)", () => {
+    const from = zonedWallTimeToUtc(2026, 6, 30, 0, "America/Sao_Paulo");
+    const to = zonedWallTimeToUtc(2026, 7, 2, 0, "America/Sao_Paulo");
+    const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
+    expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual([
+      "2026-6-30",
+      "2026-7-1",
+      "2026-7-2",
+    ]);
+  });
+
+  it("começa/termina no meio do dia: só conta os 00:00 que caem no intervalo", () => {
+    // from = seg 06 10:00 local (03+10=13:00Z? não: 10:00 local = 13:00Z). A meia-noite
+    // de seg 06 (03:00Z) é ANTES de from → seg 06 fica de fora. to = qua 08 10:00 local.
+    const from = zonedWallTimeToUtc(2026, 7, 6, 10 * 60, "America/Sao_Paulo");
+    const to = zonedWallTimeToUtc(2026, 7, 8, 10 * 60, "America/Sao_Paulo");
+    const days = enumerateLocalDates(from, to, "America/Sao_Paulo");
+    // 00:00 de ter 07 e qua 08 caem dentro; seg 06 não (sua meia-noite ficou antes).
+    expect(days.map((d) => `${d.year}-${d.month}-${d.day}`)).toEqual([
+      "2026-7-7",
+      "2026-7-8",
+    ]);
+  });
+
+  it("intervalo vazio/invertido → []", () => {
+    const a = zonedWallTimeToUtc(2026, 7, 8, 0, "America/Sao_Paulo");
+    const b = zonedWallTimeToUtc(2026, 7, 6, 0, "America/Sao_Paulo");
+    expect(enumerateLocalDates(a, b, "America/Sao_Paulo")).toEqual([]);
   });
 });
