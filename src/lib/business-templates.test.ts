@@ -10,6 +10,7 @@ import {
   type BusinessTemplate,
   type TemplateApplyTarget,
 } from "./business-templates";
+import { PIPELINE_ORDER } from "./leadStatus";
 
 const DUMMY: BusinessTemplate = {
   id: "dummy",
@@ -177,5 +178,94 @@ describe("catalogSeedItems", () => {
   it("a maioria dos modelos gera ao menos 1 item", () => {
     const withItems = BUSINESS_TEMPLATES.filter((t) => catalogSeedItems(t).length > 0);
     expect(withItems.length).toBeGreaterThan(BUSINESS_TEMPLATES.length / 2);
+  });
+});
+
+describe("customFieldsPreset", () => {
+  const withPreset = BUSINESS_TEMPLATES.filter((t) => t.customFieldsPreset?.length);
+
+  it("todo item de preset é bem-formado (scope/label/type)", () => {
+    for (const t of withPreset) {
+      for (const f of t.customFieldsPreset!) {
+        expect(["ORDER", "ORDER_ITEM"], `scope inválido em ${t.id}`).toContain(f.scope);
+        expect(["TEXT", "NUMBER", "DATE", "SELECT", "BOOLEAN"], `type inválido em ${t.id}`).toContain(f.type);
+        expect(f.label.trim(), `label vazio em ${t.id}`).not.toBe("");
+        if (f.type === "SELECT") expect(f.options?.length, `SELECT sem options em ${t.id}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("labels do preset são únicos dentro do mesmo escopo (evita colisão de key)", () => {
+    for (const t of withPreset) {
+      const keys = t.customFieldsPreset!.map((f) => `${f.scope}|${f.label.toLowerCase()}`);
+      expect(new Set(keys).size, `labels colidem em ${t.id}`).toBe(keys.length);
+    }
+  });
+
+  it("cobre as verticais de alto valor do roadmap", () => {
+    const ids = new Set(withPreset.map((t) => t.id));
+    for (const id of ["oficina-mecanica", "otica", "imobiliaria", "restaurante-delivery", "clinica-veterinaria", "petshop-produtos"]) {
+      expect(ids.has(id), `sem customFieldsPreset: ${id}`).toBe(true);
+    }
+  });
+});
+
+describe("suggestedOffers", () => {
+  const withOffers = BUSINESS_TEMPLATES.filter((t) => t.suggestedOffers?.length);
+
+  it("todo item tem name não-vazio", () => {
+    for (const t of withOffers)
+      for (const o of t.suggestedOffers!) expect(o.name.trim(), `oferta sem nome em ${t.id}`).not.toBe("");
+  });
+
+  it("names únicos dentro do template (seed é idempotente por nome)", () => {
+    for (const t of withOffers) {
+      const names = t.suggestedOffers!.map((o) => o.name.toLowerCase());
+      expect(new Set(names).size, `ofertas duplicadas em ${t.id}`).toBe(names.length);
+    }
+  });
+
+  it("cobre ramos com sales=true (onde oferta faz sentido)", () => {
+    const salesTemplates = BUSINESS_TEMPLATES.filter((t) => t.suggested.sales);
+    const covered = salesTemplates.filter((t) => t.suggestedOffers?.length);
+    expect(covered.length, "nenhum ramo de venda tem suggestedOffers").toBeGreaterThan(0);
+  });
+});
+
+describe("pipelineLabels do template", () => {
+  it("só usa chaves de LeadStatus válidas e rótulos não-vazios", () => {
+    const valid = new Set(PIPELINE_ORDER);
+    for (const t of BUSINESS_TEMPLATES.filter((x) => x.pipelineLabels)) {
+      for (const [k, v] of Object.entries(t.pipelineLabels!)) {
+        expect(valid.has(k as (typeof PIPELINE_ORDER)[number]), `chave inválida em ${t.id}: ${k}`).toBe(true);
+        expect(String(v).trim(), `rótulo vazio em ${t.id}`).not.toBe("");
+      }
+    }
+  });
+});
+
+describe("catalogPreset (estruturado)", () => {
+  it("quando o template tem catalogPreset, catalogSeedItems usa-o (nomes exatos)", () => {
+    for (const t of BUSINESS_TEMPLATES.filter((x) => x.catalogPreset?.length)) {
+      expect(catalogSeedItems(t).map((i) => i.name), `nomes divergem em ${t.id}`).toEqual(
+        t.catalogPreset!.map((p) => p.name),
+      );
+    }
+  });
+
+  it("preço do preset (quando informado) é inteiro >= 0", () => {
+    for (const t of BUSINESS_TEMPLATES.filter((x) => x.catalogPreset?.length)) {
+      for (const p of t.catalogPreset!) {
+        if (p.priceCents !== undefined) {
+          expect(Number.isInteger(p.priceCents), `preço não-inteiro em ${t.id}`).toBe(true);
+          expect(p.priceCents, `preço negativo em ${t.id}`).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
+  });
+
+  it("sem catalogPreset, a heurística segue valendo (salao-beleza scrape)", () => {
+    const names = catalogSeedItems(getTemplate("salao-beleza")!).map((i) => i.name);
+    expect(names.length).toBeGreaterThan(0);
   });
 });

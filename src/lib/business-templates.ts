@@ -5,6 +5,8 @@
  * com seções + [placeholders] que ensina o usuário o que a IA precisa saber.
  */
 
+import type { LeadStatus } from "@prisma/client";
+
 export type BusinessCategory =
   | "saude"
   | "beleza"
@@ -68,6 +70,10 @@ export interface BusinessTemplate {
     type: "TEXT" | "NUMBER" | "DATE" | "SELECT" | "BOOLEAN";
     options?: string[];
   }[];
+  /** Renomeia rótulos do funil por ramo (opcional). Chaves = LeadStatus; aplicado via setPipelineLabels. */
+  pipelineLabels?: Partial<Record<LeadStatus, string>>;
+  /** Itens de catálogo explícitos (preferidos à heurística de knowledgeBase). Preço opcional (0 = a definir). */
+  catalogPreset?: { name: string; kind: CatalogSeedKind; priceCents?: number }[];
 }
 
 /** Campos do formulário de Atendimento que um modelo consegue preencher. */
@@ -126,6 +132,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Se o cliente descrever um problema (barulho, luz no painel, vibração), NÃO diagnostique à distância nem chute preço fechado: explique que precisa passar pela oficina para avaliação e ofereça agendar. Sempre confirme marca/modelo/ano do veículo antes de estimar prazo.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Modelo/Ano", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "KM", type: "NUMBER" },
+    ],
   },
   {
     id: "clinica-odontologica",
@@ -334,6 +345,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não diagnostique nem indique medicação para o animal pelo chat. Para sintomas, oriente trazer o pet para consulta. Em emergência (atropelamento, envenenamento, dificuldade para respirar, convulsão), oriente vir imediatamente ou procurar um plantão 24h.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Pet", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Espécie/Raça", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Porte", type: "SELECT", options: ["Pequeno", "Médio", "Grande"] },
+    ],
   },
   {
     id: "laboratorio-exames",
@@ -576,6 +592,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "NÃO feche preço de reparo sem ver o veículo — fotos ajudam, mas o orçamento final é presencial. Confirme marca/modelo/ano e ofereça agendar a avaliação. Se for sinistro, oriente sobre franquia/seguradora sem prometer cobertura.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Modelo/Ano", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "KM", type: "NUMBER" },
+    ],
   },
   {
     id: "auto-eletrica",
@@ -602,6 +623,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não diagnostique problema elétrico à distância nem chute preço fechado — precisa de teste/scanner no veículo. Confirme marca/modelo/ano e ofereça agendar. Se o carro não liga (pane), oriente sobre socorro/guincho quando fizer sentido.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Modelo/Ano", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "KM", type: "NUMBER" },
+    ],
   },
   {
     id: "revenda-veiculos",
@@ -956,6 +982,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o idioma, o objetivo (viagem, trabalho, prova), o nível atual e a disponibilidade antes de indicar turma e valor. Ofereça teste de nível e aula experimental. Não prometa fluência em prazo específico.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Plano mensal", description: "Aulas 2x por semana em turma", priceHint: "a partir de R$ 250/mês" },
+      { name: "Curso intensivo", description: "Foco em conversação", priceHint: "sob consulta" },
+      { name: "Aula particular", description: "Individual, horário flexível", priceHint: "a partir de R$ 90/aula" },
+    ],
   },
   {
     id: "curso-profissionalizante",
@@ -982,6 +1013,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o curso de interesse e o objetivo do aluno. Informe carga horária, certificação e formas de pagamento. NÃO prometa emprego ou salário garantido após o curso.",
     suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Curso completo", description: "Com certificado ao concluir", priceHint: "a partir de R$ 890 ou 10x" },
+      { name: "Matrícula antecipada", description: "Desconto para a próxima turma", priceHint: "condição especial" },
+      { name: "Combo de cursos", description: "Dois cursos da mesma área", priceHint: "sob consulta" },
+    ],
   },
   {
     id: "autoescola-cfc",
@@ -1011,6 +1047,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Explique as etapas e os documentos, mas as taxas, exames e provas seguem as regras oficiais do Detran — não prometa aprovação nem prazo garantido. Confirme a categoria desejada antes de orçar.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Pacote 1ª habilitação (B)", description: "Curso teórico + aulas práticas", priceHint: "a partir de R$ 2.200 ou parcelado" },
+      { name: "Adição de categoria (A)", description: "Para quem já tem CNH", priceHint: "sob consulta" },
+      { name: "Aulas práticas avulsas", description: "Reforço de direção", priceHint: "a partir de R$ 90/aula" },
+    ],
   },
   {
     id: "escola-infantil",
@@ -1065,6 +1106,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme a matéria, o nível/série e o objetivo (recuperação, prova, vestibular) antes de propor plano e valor. Ofereça uma aula inicial. Não prometa nota ou aprovação garantida.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Aula avulsa", description: "Individual, presencial ou online", priceHint: "a partir de R$ 70/aula" },
+      { name: "Pacote mensal (8 aulas)", description: "2 aulas por semana", priceHint: "a partir de R$ 480/mês" },
+      { name: "Intensivo pré-prova", description: "Foco em prova ou vestibular", priceHint: "sob consulta" },
+    ],
   },
   {
     id: "restaurante-delivery",
@@ -1092,6 +1138,18 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "NUNCA invente itens ou preços que não estão no cardápio — se não tiver certeza, diga que vai confirmar. Sempre confirme os itens, a quantidade, o endereço completo e a forma de pagamento (com troco, se dinheiro) antes de fechar o pedido. Informe o tempo estimado de entrega.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Mesa/Comanda", type: "TEXT" },
+      { scope: "ORDER", label: "Endereço de entrega", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Observação", type: "TEXT" },
+    ],
+    pipelineLabels: { REUNIAO_AGENDADA: "Pedido agendado", PAGO: "Entregue" },
+    catalogPreset: [
+      { name: "Prato executivo", kind: "PRODUTO", priceCents: 2500 },
+      { name: "Marmita M", kind: "PRODUTO", priceCents: 1800 },
+      { name: "Refrigerante lata", kind: "PRODUTO", priceCents: 600 },
+      { name: "Sobremesa", kind: "PRODUTO", priceCents: 0 },
+    ],
   },
   {
     id: "pizzaria-hamburgueria",
@@ -1119,6 +1177,18 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não invente sabores ou preços fora do cardápio. Confirme tamanho, sabores (e se aceita meio a meio), adicionais, endereço e forma de pagamento antes de fechar. Informe o tempo estimado.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Mesa/Comanda", type: "TEXT" },
+      { scope: "ORDER", label: "Endereço de entrega", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Observação", type: "TEXT" },
+    ],
+    catalogPreset: [
+      { name: "Pizza grande", kind: "PRODUTO", priceCents: 5900 },
+      { name: "Hambúrguer artesanal", kind: "PRODUTO", priceCents: 3200 },
+      { name: "Combo lanche + bebida", kind: "PRODUTO", priceCents: 3900 },
+      { name: "Refrigerante", kind: "PRODUTO", priceCents: 800 },
+      { name: "Borda recheada", kind: "PRODUTO", priceCents: 0 },
+    ],
   },
   {
     id: "confeitaria-bolos",
@@ -1194,6 +1264,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme tamanho, cor e disponibilidade em estoque antes de garantir a venda. Enviar foto do produto ajuda. Informe a política de trocas. Não prometa item que está esgotado.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Leve 3, pague 2", description: "Em peças selecionadas", priceHint: "promoção da coleção" },
+      { name: "Frete grátis acima de R$ 199", description: "Para a região atendida", priceHint: "sem custo de entrega" },
+      { name: "Cupom primeira compra", description: "Desconto no primeiro pedido", priceHint: "10% de desconto" },
+    ],
   },
   {
     id: "otica",
@@ -1220,6 +1295,24 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Para lentes de grau é necessária a receita médica atualizada — nunca indique grau ou diagnostique a visão. Confirme se o cliente já tem receita. O prazo de montagem varia conforme a lente. Ofereça agendar o exame se houver no local.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Esférico (OD/OE)", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Cilíndrico (OD/OE)", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Eixo (OD/OE)", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Adição", type: "TEXT" },
+      { scope: "ORDER", label: "Médico/Receita", type: "TEXT" },
+    ],
+    suggestedOffers: [
+      { name: "Kit óculos completo", description: "Armação + lentes de grau", priceHint: "a partir de R$ 299" },
+      { name: "Segundo par com desconto", description: "Na compra do primeiro óculos", priceHint: "50% no segundo par" },
+      { name: "Consulta + óculos", description: "Exame de vista no local + montagem", priceHint: "sob consulta" },
+    ],
+    catalogPreset: [
+      { name: "Armações", kind: "PRODUTO", priceCents: 0 },
+      { name: "Óculos de sol", kind: "PRODUTO", priceCents: 0 },
+      { name: "Lentes de grau", kind: "PRODUTO", priceCents: 29900 },
+      { name: "Lentes de contato", kind: "PRODUTO", priceCents: 12000 },
+    ],
   },
   {
     id: "moveis-decoracao",
@@ -1246,6 +1339,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme medidas/dimensões e disponibilidade antes de fechar. Prazos de encomenda variam — informe se montagem e entrega estão inclusas. Para planejados, o orçamento sai após medição.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Frete + montagem grátis", description: "Na compra de móveis planejados", priceHint: "sem custo adicional" },
+      { name: "Kit sala completo", description: "Sofá + rack + mesa de centro", priceHint: "a partir de R$ 2.490 ou parcelado" },
+      { name: "Colchão com desconto", description: "Linha selecionada", priceHint: "condição especial" },
+    ],
   },
   {
     id: "materiais-construcao",
@@ -1271,6 +1369,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme quantidade e especificação (marca, medida) antes de orçar; o frete depende do volume e da região. Para lista de obra, peça a relação de itens. Não garanta preço sem confirmar o estoque.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Kit obra básica", description: "Cimento, areia e brita", priceHint: "sob consulta por volume" },
+      { name: "Frete grátis na região", description: "Acima de valor mínimo", priceHint: "entrega com caminhão" },
+      { name: "Desconto para construtor", description: "Cadastro com CNPJ", priceHint: "preço de atacado" },
+    ],
   },
   {
     id: "petshop-produtos",
@@ -1296,6 +1399,16 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme espécie, porte e idade do pet para indicar a ração certa. Medicamento pet pode exigir receita veterinária — não indique remédio. Se houver banho e tosa, ofereça agendar.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Pet", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Espécie/Raça", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Porte", type: "SELECT", options: ["Pequeno", "Médio", "Grande"] },
+    ],
+    suggestedOffers: [
+      { name: "Assinatura de ração", description: "Entrega mensal automática com desconto", priceHint: "10% de desconto recorrente" },
+      { name: "Kit banho e tosa", description: "Higiene completa para o pet", priceHint: "a partir de R$ 60" },
+      { name: "Combo higiene", description: "Tapete + shampoo + petiscos", priceHint: "a partir de R$ 79" },
+    ],
   },
   {
     id: "distribuidora-atacado",
@@ -1321,6 +1434,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme se o cliente é revenda/empresa (pode exigir CNPJ) e o pedido mínimo antes de passar preço de atacado. Condições de prazo/faturamento dependem de cadastro. O volume define o preço.",
     suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Combo revenda", description: "Mix de produtos mais vendidos", priceHint: "preço por volume" },
+      { name: "Primeira compra com prazo", description: "Após cadastro aprovado", priceHint: "faturamento a combinar" },
+      { name: "Desconto por caixa fechada", description: "Quanto mais volume, menor o preço", priceHint: "tabela por quantidade" },
+    ],
   },
   {
     id: "advocacia",
@@ -1394,6 +1512,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o perfil (compra ou locação, tipo, região, faixa de valor, nº de quartos) antes de indicar imóveis. Não afirme disponibilidade ou preço sem checar a carteira. Financiamento depende de análise de crédito — não prometa aprovação. Visitas são agendadas.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Código do imóvel", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Endereço", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Finalidade", type: "SELECT", options: ["Venda", "Aluguel"] },
+    ],
   },
   {
     id: "corretor-seguros",
@@ -1491,6 +1614,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Convide para uma aula experimental ou visita. Confirme o objetivo e a disponibilidade de horário e ofereça o plano adequado sem empurrar o mais caro. Para condições de saúde, recomende avaliação física/liberação médica.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Plano mensal", description: "Musculação + aulas coletivas", priceHint: "a partir de R$ 99/mês" },
+      { name: "Plano anual", description: "Melhor custo-benefício", priceHint: "sob consulta com desconto" },
+      { name: "Diária experimental", description: "Conheça a estrutura", priceHint: "grátis na primeira visita" },
+    ],
   },
   {
     id: "personal-trainer",
@@ -1516,6 +1644,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o objetivo (emagrecimento, hipertrofia, saúde), a frequência e o local antes de propor plano. Recomende avaliação física e liberação médica se houver condição de saúde. Não prescreva treino sem avaliação.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Aula avulsa", description: "Treino individual", priceHint: "a partir de R$ 80/aula" },
+      { name: "Pacote mensal (12 sessões)", description: "3x por semana", priceHint: "a partir de R$ 720/mês" },
+      { name: "Consultoria online", description: "Treino montado + acompanhamento", priceHint: "a partir de R$ 250/mês" },
+    ],
   },
   {
     id: "pilates-yoga",
@@ -1541,6 +1674,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Ofereça uma aula experimental e confirme disponibilidade de horário/turma. Para dores, lesões ou gestação, peça para informar antes — a prática é adaptada e pode exigir liberação. Não indique exercício pelo chat.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Plano 2x por semana", description: "Turma de pilates ou yoga", priceHint: "a partir de R$ 220/mês" },
+      { name: "Aula experimental", description: "Conheça o método", priceHint: "grátis" },
+      { name: "Pacote individual", description: "Atendimento personalizado", priceHint: "sob consulta" },
+    ],
   },
   {
     id: "crossfit",
@@ -1564,6 +1702,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Convide para a aula experimental e explique que há turma para iniciantes (on-ramp). Confirme a disponibilidade de horário. Para condições de saúde, recomende liberação médica — a intensidade é adaptável pelo coach.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Plano mensal", description: "Acesso a todas as turmas", priceHint: "a partir de R$ 180/mês" },
+      { name: "Turma iniciante (on-ramp)", description: "Adaptação para quem está começando", priceHint: "incluso no plano" },
+      { name: "Aula experimental", description: "Experimente um treino", priceHint: "grátis" },
+    ],
   },
   {
     id: "escola-natacao",
@@ -1589,6 +1732,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme a idade e o nível (iniciante ou já nada) para indicar a turma; convide para aula experimental/avaliação. Verifique disponibilidade de vaga e horário. Para condições de saúde, peça para informar antes.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: true },
+    suggestedOffers: [
+      { name: "Plano 2x por semana", description: "Turma por nível e idade", priceHint: "a partir de R$ 190/mês" },
+      { name: "Aula experimental / avaliação", description: "Conheça a escola", priceHint: "grátis" },
+      { name: "Matrícula em dupla", description: "Desconto para irmãos ou amigos", priceHint: "condição especial" },
+    ],
   },
   {
     id: "fotografia-filmagem",
@@ -1715,6 +1863,12 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o perfil de busca (compra ou locação, tipo, região, faixa de valor, nº de quartos) antes de indicar imóveis. Não afirme disponibilidade ou preço sem checar a carteira. Locação exige documentação/garantia; financiamento depende de análise de crédito — não prometa aprovação. Visitas são agendadas.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Código do imóvel", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Endereço", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Finalidade", type: "SELECT", options: ["Venda", "Aluguel"] },
+    ],
+    pipelineLabels: { OFERTA_ENVIADA: "Proposta enviada", PAGO: "Negócio fechado" },
   },
   {
     id: "agencia-viagens",
@@ -1739,6 +1893,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme destino, datas, nº de pessoas e orçamento antes de cotar — preços variam muito e mudam por disponibilidade. Não garanta preço ou disponibilidade sem consultar. Oriente sobre documentação (passaporte, visto, vacinas) sem substituir as fontes oficiais.",
     suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
+    suggestedOffers: [
+      { name: "Pacote nacional", description: "Passagem + hospedagem", priceHint: "a partir de R$ 990 por pessoa" },
+      { name: "Pacote internacional", description: "Roteiro com aéreo e hotel", priceHint: "sob consulta" },
+      { name: "Seguro viagem", description: "Cobertura para a viagem", priceHint: "a partir de R$ 12/dia" },
+    ],
   },
   {
     id: "atendimento-generico",
@@ -1813,6 +1972,10 @@ function isSeedPlaceholder(s: string): boolean {
  * cujo "áreas de atuação" é só placeholder) — nesse caso cai no cadastro manual.
  */
 export function catalogSeedItems(tpl: BusinessTemplate): CatalogSeedItem[] {
+  // Preset explícito tem prioridade sobre a heurística do knowledgeBase.
+  if (tpl.catalogPreset?.length) {
+    return tpl.catalogPreset.map((p) => ({ name: p.name, kind: p.kind }));
+  }
   const kind: CatalogSeedKind =
     tpl.category === "alimentacao" || tpl.category === "varejo" ? "PRODUTO" : "SERVICO";
   const lines = tpl.knowledgeBase.split("\n");
