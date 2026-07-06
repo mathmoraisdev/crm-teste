@@ -35,9 +35,9 @@ não paga o cheque. Este roadmap fecha essa distância.
 | # | Iniciativa | Onda | Prioridade | Plano filho (a criar) |
 |---|---|---|---|---|
 | 1 | Impressão de comanda/recibo (N1 navegador · N2 ESC/POS · N3 cozinha) | A | **P0** | `2026-07-05-impressao-comanda.md` — **N1 FEITO** (dev); N2/N3 pendentes |
-| 2 | POS financeiro (desconto, acréscimo/taxa, gorjeta, troco, qtd editável, multi-pagamento) | A | **P0** | `2026-07-05-pos-financeiro.md` |
-| 3 | Sessão de caixa (abrir/fechar, fundo de troco, sangria/suprimento, conferência) | B | **P1** | `2026-07-06-sessao-de-caixa.md` |
-| 4 | Estorno / reabertura de comanda (reverte baixa de estoque) | B | **P1** | `2026-07-06-estorno-comanda.md` |
+| 2 | POS financeiro (desconto, acréscimo/taxa, gorjeta, troco, qtd editável, multi-pagamento) | A | **P0** | `2026-07-05-pos-financeiro.md` — **FEITO** (dev) |
+| 3 | Sessão de caixa (abrir/fechar, fundo de troco, sangria/suprimento, conferência) | B | **P1** | `2026-07-06-sessao-de-caixa.md` — **FEITO** (dev) |
+| 4 | Estorno / reabertura de comanda (reverte baixa de estoque) | B | **P1** | `2026-07-06-estorno-comanda.md` — **FEITO** (dev) |
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` |

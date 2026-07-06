@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Printer, Ban } from "lucide-react";
+import { Loader2, Printer, Ban, RotateCcw } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
@@ -58,7 +58,9 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [voidTarget, setVoidTarget] = useState<Row | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<Row | null>(null);
 
   // debounce da busca por nome
   const [qDebounced, setQDebounced] = useState("");
@@ -128,6 +130,9 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
     <div className="space-y-4">
       {error && (
         <p className="rounded-lg bg-danger-surface px-3 py-2 text-xs text-danger">{error}</p>
+      )}
+      {notice && (
+        <p className="rounded-lg bg-info-surface px-3 py-2 text-xs text-info">{notice}</p>
       )}
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3">
@@ -273,14 +278,24 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
                             <Printer size={14} /> Reimprimir
                           </button>
                           {canEdit && !canceled && (
-                            <button
-                              type="button"
-                              onClick={() => setVoidTarget(r)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-danger hover:text-danger"
-                              title="Estornar (anula a venda)"
-                            >
-                              <Ban size={14} /> Estornar
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setReopenTarget(r)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-600"
+                                title="Reabrir para corrigir"
+                              >
+                                <RotateCcw size={14} /> Reabrir
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVoidTarget(r)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-danger hover:text-danger"
+                                title="Estornar (anula a venda)"
+                              >
+                                <Ban size={14} /> Estornar
+                              </button>
+                            </>
                           )}
                         </div>
                       </Td>
@@ -315,7 +330,23 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
           onDone={() => {
             setVoidTarget(null);
             setError(null);
+            setNotice(null);
             setShowCanceled(true); // revela a linha estornada (riscada) no lugar
+            load(0, false);
+          }}
+        />
+      )}
+
+      {reopenTarget && (
+        <ReopenModal
+          row={reopenTarget}
+          onClose={() => setReopenTarget(null)}
+          onError={setError}
+          onDone={() => {
+            setReopenTarget(null);
+            setError(null);
+            // Reaberta vira ABERTA → sai do extrato; avisa onde encontrá-la.
+            setNotice("Comanda reaberta — disponível na aba Comandas para correção.");
             load(0, false);
           }}
         />
@@ -384,6 +415,58 @@ function VoidModal({
           </Button>
           <Button onClick={submit} loading={busy} disabled={!reason.trim()}>
             Estornar venda
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReopenModal({
+  row,
+  onClose,
+  onDone,
+  onError,
+}: {
+  row: Row;
+  onClose: () => void;
+  onDone: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    onError(null);
+    try {
+      const res = await fetch(`/api/vendas/orders/${row.id}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao reabrir a comanda.");
+      onDone();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Erro ao reabrir a comanda.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Reabrir comanda">
+      <div className="space-y-4">
+        <div className="rounded-lg bg-warning-surface px-3 py-2 text-xs text-warning">
+          A comanda volta para <strong>ABERTA</strong> para edição e <strong>devolve o estoque</strong>{" "}
+          (será baixado de novo ao fechar). O número do cupom já impresso é liberado — a sequência fica
+          com um buraco. Use para <strong>corrigir</strong> uma venda; para anulá-la, prefira estornar.
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} loading={busy}>
+            Reabrir comanda
           </Button>
         </div>
       </div>
