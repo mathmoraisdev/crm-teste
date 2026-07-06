@@ -100,6 +100,18 @@ const schema = z.object({
   MEDIA_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0),
   MEDIA_AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0), // 0 = usa MEDIA_RETENTION_DAYS
   MEDIA_RETENTION_EVERY_MS: z.coerce.number().int().positive().default(21_600_000), // 6h: granularidade é dia
+  // Automação de ciclo de vida (pós-venda, NPS, reengajamento de frio). Roda no
+  // worker. LIFECYCLE_AUTOMATION é o KILL-SWITCH global: false = nada dispara
+  // (sobe inerte, igual MEDIA_RETENTION_DAYS). Cada toque liga pelo seu atraso
+  // (0 = desligado). O opt-in POR CONTA (User.lifecycleAutomationEnabled) é a 2ª
+  // chave — as duas precisam estar ligadas. Recomendado ao ligar: postsale 2,
+  // review 24, reengage 7.
+  LIFECYCLE_AUTOMATION: z.coerce.boolean().default(false),
+  LIFECYCLE_POSTSALE_HOURS: z.coerce.number().int().nonnegative().default(0), // 0 = off; rec 2
+  LIFECYCLE_REVIEW_HOURS: z.coerce.number().int().nonnegative().default(0), // 0 = off; rec 24
+  LIFECYCLE_REENGAGE_DAYS: z.coerce.number().int().nonnegative().default(0), // 0 = off; rec 7
+  LIFECYCLE_BACKLOG_FLOOR_DAYS: z.coerce.number().int().positive().default(7), // não tocar eventos + antigos ao ligar
+  LIFECYCLE_EVERY_MS: z.coerce.number().int().positive().default(900_000), // 15 min: granularidade é hora/dia
   // Dias de teste grátis para cadastros novos. Padrão 0 = nasce SUSPENSO (sem
   // trial automático); o admin libera o teste manualmente no /financeiro.
   TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(0),
