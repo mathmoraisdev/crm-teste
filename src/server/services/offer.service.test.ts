@@ -96,6 +96,33 @@ describe("listActiveOffers", () => {
   });
 });
 
+describe("seedOffersFromTemplate", () => {
+  it("cria só as ofertas cujo nome ainda não existe no número (inativas, preço 0)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.whatsAppNumber.findFirst as any).mockResolvedValue({ id: "n1" }); // posse ok
+    (prisma.offer.findMany as any).mockResolvedValue([{ name: "Plano mensal" }]); // já existe uma
+    (prisma.offer.create as any).mockImplementation(({ data }: any) => ({ id: "off_new", ...data }));
+    const { seedOffersFromTemplate } = await import("./offer.service");
+
+    // usa um template real com suggestedOffers (escola-idiomas)
+    const r = await seedOffersFromTemplate("u1", "n1", "escola-idiomas");
+
+    expect(r.skipped).toBeGreaterThanOrEqual(1); // "Plano mensal" pulado
+    expect(r.created).toBeGreaterThanOrEqual(1); // ao menos uma nova
+    const createdArgs = (prisma.offer.create as any).mock.calls.map((c: any) => c[0].data);
+    expect(createdArgs.every((d: any) => d.priceCents === 0 && d.active === false)).toBe(true);
+    expect(createdArgs.every((d: any) => d.whatsAppNumberId === "n1" && d.userId === "u1")).toBe(true);
+  });
+
+  it("template sem suggestedOffers → no-op {created:0,skipped:0}", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.whatsAppNumber.findFirst as any).mockResolvedValue({ id: "n1" });
+    (prisma.offer.findMany as any).mockResolvedValue([]);
+    const { seedOffersFromTemplate } = await import("./offer.service");
+    expect(await seedOffersFromTemplate("u1", "n1", "advocacia")).toEqual({ created: 0, skipped: 0 });
+  });
+});
+
 describe("updateOffer/deleteOffer", () => {
   it("updateOffer valida que a oferta é do dono", async () => {
     const prisma = await db();

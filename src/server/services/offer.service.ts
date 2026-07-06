@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import { assertFeature } from "@/server/services/entitlements";
+import { getTemplate } from "@/lib/business-templates";
 
 export interface OfferItem {
   id: string;
@@ -111,6 +112,47 @@ export async function updateOffer(
 
   const offer = await prisma.offer.update({ where: { id }, data: patch });
   return toItem(offer);
+}
+
+/**
+ * Semeia as ofertas sugeridas pelo ramo (`suggestedOffers`) num número. Idempotente
+ * por PRÉ-CARGA dos nomes já existentes (não por capturar P2002). Ofertas nascem
+ * INATIVAS e com priceCents 0 (a definir): o dono revisa preço e publica — o runtime
+ * da IA só lê ofertas ativas (`listActiveOffers`). Gateado por `sales` + posse do número.
+ */
+export async function seedOffersFromTemplate(
+  userId: string,
+  whatsAppNumberId: string,
+  templateId: string,
+): Promise<{ created: number; skipped: number }> {
+  const offers = getTemplate(templateId)?.suggestedOffers;
+  if (!offers || offers.length === 0) return { created: 0, skipped: 0 };
+  await assertFeature(userId, "sales");
+  await assertOwnsNumber(userId, whatsAppNumberId);
+
+  const existing = await prisma.offer.findMany({
+    where: { userId, whatsAppNumberId },
+    select: { name: true },
+  });
+  const seen = new Set(existing.map((o) => o.name.trim().toLowerCase()));
+
+  let created = 0;
+  let skipped = 0;
+  for (const o of offers) {
+    const key = o.name.trim().toLowerCase();
+    if (seen.has(key)) {
+      skipped++;
+      continue;
+    }
+    // Descrição carrega o priceHint (texto) já que o preço nasce a definir.
+    const description = [o.description, o.priceHint && `(${o.priceHint})`].filter(Boolean).join(" ") || null;
+    await prisma.offer.create({
+      data: { userId, whatsAppNumberId, name: o.name.trim(), description, priceCents: 0, active: false },
+    });
+    seen.add(key);
+    created++;
+  }
+  return { created, skipped };
 }
 
 export async function deleteOffer(userId: string, id: string): Promise<void> {
