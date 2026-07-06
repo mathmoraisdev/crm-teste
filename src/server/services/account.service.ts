@@ -404,3 +404,21 @@ export async function setInboxSlaMinutes(userId: string, minutes: number | null)
   await prisma.user.update({ where: { id: userId }, data: { inboxSlaMinutes: value } });
   return value;
 }
+
+/** Opt-in por conta das automações de ciclo de vida (pós-venda/NPS/reengajamento).
+ *  2ª chave: além deste flag, o kill-switch global de ambiente precisa estar ligado. */
+export async function getLifecycleAutomationEnabled(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lifecycleAutomationEnabled: true },
+  });
+  return u?.lifecycleAutomationEnabled ?? false;
+}
+
+export async function setLifecycleAutomationEnabled(userId: string, enabled: boolean): Promise<boolean> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lifecycleAutomationEnabled: enabled },
+  });
+  return enabled;
+}
