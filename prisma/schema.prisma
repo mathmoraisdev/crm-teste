@@ -69,6 +69,18 @@ enum StockMovementKind {
   AJUSTE // inventário/correção/perda (+/−)
 }
 
+// Sessão de caixa (turno conferível): uma por operador/conta em ABERTA.
+enum CashSessionStatus {
+  ABERTA
+  FECHADA
+}
+
+// Movimento de caixa fora de venda: retirada (SANGRIA) ou reforço (SUPRIMENTO).
+enum CashMovementKind {
+  SANGRIA
+  SUPRIMENTO
+}
+
 enum ExpenseCategory {
   ALUGUEL // aluguel/ocupação
   FORNECEDOR // mercadoria/insumo
@@ -194,6 +206,10 @@ model User {
   stockMovements           StockMovement[]          @relation("StockMovementAccount")
   stockMovementsCreated    StockMovement[]          @relation("StockMovementCreatedBy")
   createdAppointments      Appointment[]            @relation("AppointmentCreatedBy")
+  cashSessions             CashSession[]            @relation("CashSessionAccount")
+  cashSessionsOpened       CashSession[]            @relation("CashSessionOpenedBy")
+  cashSessionsClosed       CashSession[]            @relation("CashSessionClosedBy")
+  cashMovementsCreated     CashMovement[]           @relation("CashMovementCreatedBy")
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -311,6 +327,9 @@ model Order {
   amountTenderedCents Int? // valor recebido (dinheiro) — base do troco
   changeCents         Int? // troco derivado no fechamento (max(0, recebido − total))
   tableLabel          String? // mesa/comanda física (rótulo livre)
+  // Sessão de caixa em que a comanda foi FECHADA (null = fechada fora de sessão).
+  cashSessionId  String?
+  cashSession    CashSession?    @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   items          OrderItem[]
   tenders        OrderTender[]
   stockMovements StockMovement[]
@@ -376,6 +395,46 @@ model StockMovement {
 
   @@index([accountId, catalogItemId, createdAt])
   @@index([orderId])
+}
+
+// Sessão de caixa: um turno conferível de um operador. O "esperado em dinheiro" é
+// DERIVADO (fundo + Σ vendas em dinheiro + Σ suprimentos − Σ sangrias), nunca
+// desnormalizado. Conferência CEGA: o operador digita `closingCountedCents` antes
+// de ver o esperado; a diferença (sobra/falta) é calculada no relatório.
+model CashSession {
+  id                  String            @id @default(cuid())
+  accountId           String // User.id do dono (tenant)
+  account             User              @relation("CashSessionAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  status              CashSessionStatus @default(ABERTA)
+  openingFloatCents   Int               @default(0) // fundo de troco
+  closingCountedCents Int? // valor contado na conferência cega
+  openedById          String
+  openedBy            User              @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  closedById          String?
+  closedBy            User?             @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+  openedAt            DateTime          @default(now())
+  closedAt            DateTime?
+  note                String?
+  movements           CashMovement[]
+  orders              Order[]
+
+  @@index([accountId, status])
+}
+
+// Livro-razão append-only de movimentos de caixa (sangria/suprimento), ligado à
+// sessão. Espelha o padrão imutável de StockMovement/Payment.
+model CashMovement {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  kind        CashMovementKind
+  amountCents Int
+  reason      String?
+  createdById String
+  createdBy   User             @relation("CashMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId])
 }
 
 // Despesa / conta a pagar da conta. Pode ser AVULSA ou uma materialização de uma
