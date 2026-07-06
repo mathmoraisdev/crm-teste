@@ -52,6 +52,7 @@ enum CatalogItemKind {
 enum OrderStatus {
   ABERTA
   FECHADA
+  CANCELADA // estornada: anula a venda e reverte a baixa de estoque (auditoria)
 }
 
 // Forma de pagamento da COMANDA. Enum próprio (o PaymentMethod existente é do
@@ -319,6 +320,11 @@ model Order {
   createdAt      DateTime        @default(now())
   closedAt       DateTime? // quando foi fechada (FECHADA)
   number         Int? // nº sequencial do cupom POR conta; atribuído no fechamento (null = comanda antiga)
+  // Estorno (CANCELADA): auditoria de quem anulou a venda e por quê. canceledById é
+  // só o id (sem relação — espelha o mínimo do padrão de auditoria, sem back-relation).
+  canceledAt     DateTime?
+  canceledReason String?
+  canceledById   String?
   // Camada financeira (POS): ajustes sobre Σ itens. O total continua DERIVADO —
   // estes campos são ENTRADAS do cálculo, nunca o total desnormalizado.
   discountCents       Int? // desconto da comanda (valor OU % resolvido na borda → centavos)
