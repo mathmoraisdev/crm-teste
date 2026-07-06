@@ -4,3 +4,8 @@
 
 -- ── 12.1: snapshot de custo por linha (margem realizada) ──────────────────────
 ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "unitCostCents" INTEGER;
+
+-- ── 12.2: código de barras/EAN (único por conta; NULLs coexistem) ─────────────
+ALTER TABLE "CatalogItem" ADD COLUMN IF NOT EXISTS "barcode" TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS "CatalogItem_accountId_barcode_key"
+  ON "CatalogItem"("accountId", "barcode");

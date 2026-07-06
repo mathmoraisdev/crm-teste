@@ -363,6 +363,7 @@ model CatalogItem {
   // --- Controle de estoque (opt-in; só faz sentido em kind = PRODUTO) ---
   trackStock     Boolean         @default(false) // liga o controle p/ este item
   sku            String? // código interno opcional
+  barcode        String? // código de barras/EAN (bipar no caixa); único por conta, NULLs coexistem
   stockQty       Int             @default(0) // saldo atual (desnormalizado; = Σ dos movimentos)
   minStock       Int             @default(0) // alerta quando stockQty <= minStock
   costCents      Int? // custo unitário em centavos (opcional; p/ valor em estoque)
@@ -371,6 +372,7 @@ model CatalogItem {
   // --- Comanda de cozinha (N3): roteia o item p/ a impressora do setor ---
   printSector String? // ex.: "cozinha", "bar", "balcao"; null = não vai p/ produção
 
+  @@unique([accountId, barcode]) // bipar resolve p/ um item; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, active])
   @@index([accountId, trackStock])
 }

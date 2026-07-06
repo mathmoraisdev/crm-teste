@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
-import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate } from "./catalog.service";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode } from "./catalog.service";
 
 // Cria um usuário-dono descartável por teste (isolamento).
 async function makeOwner() {
@@ -115,5 +115,27 @@ describe("catalog.service", () => {
     expect(item.trackStock).toBe(false);
     expect(item.stockQty).toBe(0);
     expect(item.sku).toBeNull();
+  });
+
+  it("barcode é único por conta (P2002 vira erro amigável)", async () => {
+    const acc = await makeOwner();
+    await createCatalogItem(acc, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    await expect(createCatalogItem(acc, { name: "B", priceCents: 200, kind: "PRODUTO", barcode: "789" }))
+      .rejects.toThrow(/código de barras|já/i);
+  });
+
+  it("contas diferentes podem repetir o mesmo barcode", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createCatalogItem(a, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    await expect(createCatalogItem(b, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" })).resolves.toBeTruthy();
+  });
+
+  it("findByBarcode resolve o item da conta pelo código", async () => {
+    const acc = await makeOwner();
+    const p = await createCatalogItem(acc, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    expect((await findByBarcode(acc, "789"))?.id).toBe(p.id);
+    expect(await findByBarcode(acc, "000")).toBeNull(); // inexistente
+    expect(await findByBarcode(acc, "  ")).toBeNull(); // vazio
   });
 });

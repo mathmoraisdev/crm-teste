@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import type { CatalogItemKind } from "@prisma/client";
 import { getTemplate, catalogSeedItems } from "@/lib/business-templates";
@@ -11,6 +12,7 @@ export interface CatalogItemDTO {
   active: boolean;
   trackStock: boolean;
   sku: string | null;
+  barcode: string | null;
   stockQty: number;
   minStock: number;
   costCents: number | null;
@@ -32,18 +34,27 @@ const durationSchema = z.object({
 const stockConfigSchema = z.object({
   trackStock: z.boolean().optional(),
   sku: z.string().trim().max(60).nullish(),
+  barcode: z.string().trim().max(64).nullish(),
   minStock: z.number().int().min(0).optional(),
   costCents: z.number().int().min(0).nullish(),
 });
 
+// P2002 (unique) no barcode → mensagem amigável (o resto propaga).
+function rethrowCatalog(e: unknown): never {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    throw new Error("Já existe um item com este código de barras.");
+  }
+  throw e;
+}
+
 function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
-  trackStock: boolean; sku: string | null; stockQty: number; minStock: number; costCents: number | null;
+  trackStock: boolean; sku: string | null; barcode: string | null; stockQty: number; minStock: number; costCents: number | null;
   printSector: string | null; durationMinutes: number | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
-    trackStock: o.trackStock, sku: o.sku, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
+    trackStock: o.trackStock, sku: o.sku, barcode: o.barcode, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
     printSector: o.printSector, durationMinutes: o.durationMinutes,
   };
 }
@@ -52,25 +63,30 @@ export async function createCatalogItem(
   accountId: string,
   data: {
     name: string; priceCents: number; kind?: CatalogItemKind;
-    trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+    trackStock?: boolean; sku?: string | null; barcode?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
   const parsed = upsertSchema.parse(data);
   const cfg = stockConfigSchema.parse(data);
   const dur = durationSchema.parse(data);
-  const item = await prisma.catalogItem.create({
-    data: {
-      accountId, name: parsed.name, priceCents: parsed.priceCents, kind: parsed.kind,
-      trackStock: cfg.trackStock ?? false,
-      sku: cfg.sku?.trim() || null,
-      minStock: cfg.minStock ?? 0,
-      costCents: cfg.costCents ?? null,
-      printSector: data.printSector?.trim().toLowerCase() || null,
-      durationMinutes: dur.durationMinutes ?? null,
-    },
-  });
-  return toDTO(item);
+  try {
+    const item = await prisma.catalogItem.create({
+      data: {
+        accountId, name: parsed.name, priceCents: parsed.priceCents, kind: parsed.kind,
+        trackStock: cfg.trackStock ?? false,
+        sku: cfg.sku?.trim() || null,
+        barcode: cfg.barcode?.trim() || null,
+        minStock: cfg.minStock ?? 0,
+        costCents: cfg.costCents ?? null,
+        printSector: data.printSector?.trim().toLowerCase() || null,
+        durationMinutes: dur.durationMinutes ?? null,
+      },
+    });
+    return toDTO(item);
+  } catch (e) {
+    rethrowCatalog(e);
+  }
 }
 
 export async function listCatalogItems(accountId: string, opts?: { activeOnly?: boolean }): Promise<CatalogItemDTO[]> {
@@ -86,7 +102,7 @@ export async function updateCatalogItem(
   id: string,
   data: {
     name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
-    trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
+    trackStock?: boolean; sku?: string | null; barcode?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
@@ -106,6 +122,7 @@ export async function updateCatalogItem(
   if (data.active !== undefined) patch.active = data.active;
   if (data.trackStock !== undefined) patch.trackStock = data.trackStock;
   if (data.sku !== undefined) patch.sku = data.sku?.trim() || null;
+  if (data.barcode !== undefined) patch.barcode = data.barcode?.trim() || null;
   if (data.minStock !== undefined) {
     if (!Number.isInteger(data.minStock) || data.minStock < 0) throw new Error("Mínimo inválido.");
     patch.minStock = data.minStock;
@@ -119,8 +136,21 @@ export async function updateCatalogItem(
     }
   }
   if (data.printSector !== undefined) patch.printSector = data.printSector?.trim().toLowerCase() || null;
-  const item = await prisma.catalogItem.update({ where: { id }, data: patch });
-  return toDTO(item);
+  try {
+    const item = await prisma.catalogItem.update({ where: { id }, data: patch });
+    return toDTO(item);
+  } catch (e) {
+    rethrowCatalog(e);
+  }
+}
+
+/** Resolve o item da conta por código de barras (bipar no caixa). null = não achou.
+ * Sem filtro de `active`: o caixa pode bipar um item inativo; o front decide. */
+export async function findByBarcode(accountId: string, barcode: string): Promise<CatalogItemDTO | null> {
+  const code = barcode.trim();
+  if (!code) return null;
+  const item = await prisma.catalogItem.findFirst({ where: { accountId, barcode: code } });
+  return item ? toDTO(item) : null;
 }
 
 export async function deleteCatalogItem(accountId: string, id: string): Promise<void> {
