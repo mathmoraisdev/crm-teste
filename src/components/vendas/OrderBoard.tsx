@@ -418,7 +418,6 @@ function OrderPanel({
   const [catQuery, setCatQuery] = useState("");
   const [avulsoName, setAvulsoName] = useState("");
   const [avulsoPrice, setAvulsoPrice] = useState("");
-  const [payment, setPayment] = useState<Payment>("DINHEIRO");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -510,15 +509,17 @@ function OrderPanel({
       body: JSON.stringify(patch),
     });
 
-  async function close() {
+  // Fecha a comanda com o payload de pagamento montado pelo PaymentPanel
+  // (tenders + valor recebido + allowPartial). Sucesso: a comanda vira FECHADA e
+  // sai da lista de abertas — sinaliza p/ o board oferecer a impressão do cupom.
+  async function submitClose(payload: Record<string, unknown>) {
     const ok = await call(`/api/vendas/orders/${order.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payment }),
+      body: JSON.stringify(payload),
     });
-    // Sucesso: a comanda vira FECHADA e sai da lista de abertas — sinaliza p/ o
-    // board oferecer a impressão do cupom (id capturado antes do refresh).
     if (ok) onClosed(order.id, order.customerName ?? "lead");
+    return ok;
   }
 
   // N3: imprime as comandas de produção (um ticket por setor). Roda com a comanda
@@ -729,23 +730,8 @@ function OrderPanel({
           </Button>
         </div>
 
-        {/* Fechar */}
-        <div className="flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-end">
-          <select
-            value={payment}
-            onChange={(e) => setPayment(e.target.value as Payment)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          >
-            {PAYMENTS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <Button onClick={close} loading={busy} disabled={order.items.length === 0}>
-            Fechar comanda
-          </Button>
-        </div>
+        {/* Pagamento + fechamento (multi-meio, troco, parcial) */}
+        <PaymentPanel order={order} busy={busy} onSubmit={submitClose} />
       </div>
     </Card>
   );
@@ -878,6 +864,168 @@ function AdjustmentsEditor({
         disabled={disabled}
         onApply={(cents) => onSave({ tipCents: cents })}
       />
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Pagamento: N meios (multi/parcial), valor recebido + troco, fechamento
+// ───────────────────────────────────────────────────────────────────────
+function PaymentPanel({
+  order,
+  busy,
+  onSubmit,
+}: {
+  order: Order;
+  busy: boolean;
+  onSubmit: (payload: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const total = order.totalCents;
+  const [lines, setLines] = useState<{ method: Payment; raw: string }[]>([{ method: "DINHEIRO", raw: "" }]);
+  const [received, setReceived] = useState("");
+  const [confirmPartial, setConfirmPartial] = useState(false);
+
+  const parsed = lines.map((l) => ({ method: l.method, amountCents: parseBRLToCents(l.raw) ?? 0 }));
+  const typedSum = parsed.reduce((s, t) => s + t.amountCents, 0);
+  // Fechamento simples: ninguém digitou valor → 1 tender do 1º método cobre o total.
+  const tenders = typedSum === 0 ? [{ method: lines[0].method, amountCents: total }] : parsed.filter((t) => t.amountCents > 0);
+  const paid = tenders.reduce((s, t) => s + t.amountCents, 0);
+  const saldo = total - paid; // >0 falta (parcial); <=0 integral
+  const hasCash = tenders.some((t) => t.method === "DINHEIRO");
+  const receivedCents = parseBRLToCents(received);
+  const troco = hasCash && receivedCents != null ? Math.max(0, receivedCents - total) : 0;
+
+  const resetConfirm = () => setConfirmPartial(false);
+  function updateLine(i: number, patch: Partial<{ method: Payment; raw: string }>) {
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+    resetConfirm();
+  }
+  function addLine() {
+    setLines((ls) => [...ls, { method: "PIX", raw: "" }]);
+    resetConfirm();
+  }
+  function removeLineAt(i: number) {
+    setLines((ls) => (ls.length > 1 ? ls.filter((_, idx) => idx !== i) : ls));
+    resetConfirm();
+  }
+
+  async function submit() {
+    // Saldo positivo = fechamento parcial → pede uma confirmação explícita.
+    if (saldo > 0 && !confirmPartial) {
+      setConfirmPartial(true);
+      return;
+    }
+    const payload: Record<string, unknown> = { tenders, allowPartial: saldo > 0 };
+    if (receivedCents != null) payload.amountTenderedCents = receivedCents;
+    const ok = await onSubmit(payload);
+    if (ok) {
+      setLines([{ method: "DINHEIRO", raw: "" }]);
+      setReceived("");
+      setConfirmPartial(false);
+    }
+  }
+
+  const disabled = busy || order.items.length === 0;
+
+  return (
+    <div className="space-y-3 border-t border-slate-100 pt-3">
+      <p className="text-xs font-semibold text-slate-600">Pagamento</p>
+
+      {/* Linhas de pagamento (método + valor) */}
+      <div className="space-y-2">
+        {lines.map((l, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <select
+              value={l.method}
+              onChange={(e) => updateLine(i, { method: e.target.value as Payment })}
+              disabled={disabled}
+              className="rounded-lg border border-slate-300 px-2 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+            >
+              {PAYMENTS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={l.raw}
+              onChange={(e) => updateLine(i, { raw: e.target.value })}
+              disabled={disabled}
+              inputMode="decimal"
+              placeholder={lines.length === 1 ? `${formatCentsBRL(total)} (total)` : "Valor (R$)"}
+              className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+            />
+            {lines.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeLineAt(i)}
+                disabled={disabled}
+                className="text-slate-400 hover:text-danger disabled:opacity-40"
+                aria-label="Remover meio de pagamento"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addLine}
+          disabled={disabled}
+          className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50"
+        >
+          + adicionar meio
+        </button>
+      </div>
+
+      {/* Valor recebido (dinheiro) → troco ao vivo */}
+      {hasCash && (
+        <div className="flex items-center gap-2">
+          <span className="w-28 shrink-0 text-sm text-slate-600">Valor recebido</span>
+          <input
+            value={received}
+            onChange={(e) => setReceived(e.target.value)}
+            disabled={disabled}
+            inputMode="decimal"
+            placeholder="R$ recebido em dinheiro"
+            className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+          />
+        </div>
+      )}
+
+      {/* Saldo / troco */}
+      <div className="space-y-1 text-sm">
+        {troco > 0 && (
+          <div className="flex items-center justify-between font-semibold text-success">
+            <span>Troco</span>
+            <span>{formatCentsBRL(troco)}</span>
+          </div>
+        )}
+        {saldo > 0 ? (
+          <div className="flex items-center justify-between font-medium text-warning">
+            <span>Falta</span>
+            <span>{formatCentsBRL(saldo)}</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-slate-400">
+            <span>Saldo</span>
+            <span>pago integral</span>
+          </div>
+        )}
+      </div>
+
+      {confirmPartial && saldo > 0 && (
+        <p className="rounded-lg bg-warning-surface px-3 py-2 text-xs text-warning">
+          Pagamento menor que o total (falta {formatCentsBRL(saldo)}). Clique de novo para
+          <strong> fechar parcial</strong> — a comanda fecha com saldo em aberto.
+        </p>
+      )}
+
+      <div className="flex justify-end">
+        <Button onClick={submit} loading={busy} disabled={disabled}>
+          {saldo > 0 ? (confirmPartial ? "Confirmar parcial" : "Fechar parcial…") : "Fechar comanda"}
+        </Button>
+      </div>
     </div>
   );
 }
