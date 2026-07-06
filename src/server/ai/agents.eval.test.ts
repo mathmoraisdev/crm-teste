@@ -6,6 +6,7 @@ import type { ConversationTurn } from "./transcript";
 // e o arquivo coleta limpo (0 testes), sem exigir DATABASE_URL/OPENAI_API_KEY.
 const loadQual = () => import("./qualification.agent").then((m) => m.runQualification);
 const loadSlot = () => import("./conversation.agent").then((m) => m.interpretSlotChoice);
+const loadAgentic = () => import("./conversation.agent").then((m) => m.generateAgenticReply);
 // AiClient de plataforma (OpenAI), construído dinamicamente p/ não puxar env
 // quando o eval está desligado.
 const loadAi = () =>
@@ -108,5 +109,63 @@ describe.skipIf(!enabled)("eval: interpretSlotChoice", () => {
     const ai = await loadAi();
     const r = await interpretSlotChoice({ ai, formattedSlots: slots, leadMessage: "qualquer um tá bom" });
     expect(r.confident === false || r.chosenIndex === null).toBe(true);
+  }, EVAL_TIMEOUT);
+});
+
+describe.skipIf(!enabled)("eval: attendance tool-calling", () => {
+  // Tools "fake" (sem DB/WhatsApp): catálogo pequeno fixo + flag de envio. A
+  // asserção é por TOOL CHAMADA (toolsUsed), não pelo texto exato (não-determinístico).
+  function fakeTools() {
+    const sent: string[] = [];
+    const tools = [
+      {
+        name: "consultar_estoque",
+        description:
+          "Consulta o catálogo e o estoque ao vivo. Use para responder preço/disponibilidade.",
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { query: { type: "string", description: "filtro por nome (opcional)" } },
+        },
+        handler: async () => ({ content: "id=ci_1 | Corte | R$ 40,00 | estoque=—" }),
+      },
+      {
+        name: "enviar_catalogo",
+        description:
+          "Envia ao cliente, pelo WhatsApp, a lista de produtos/serviços com preços. Use quando ele pedir o cardápio/catálogo.",
+        jsonSchema: { type: "object", additionalProperties: false, properties: {} },
+        handler: async () => {
+          sent.push("catalogo");
+          return { content: "catálogo enviado" };
+        },
+      },
+    ];
+    return { tools, sent };
+  }
+
+  it("'quanto tá o corte?' → consulta o estoque (ou responde o preço)", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools } = fakeTools();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Barbearia do Zé", persona: "direto e simpático" },
+      conversation: [{ direction: "INBOUND", content: "quanto tá o corte?" }],
+      tools,
+    });
+    expect(r.toolsUsed.includes("consultar_estoque") || /40|R\$/.test(r.text)).toBe(true);
+  }, EVAL_TIMEOUT);
+
+  it("'me manda o cardápio' → envia o catálogo", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const { tools, sent } = fakeTools();
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Barbearia do Zé" },
+      conversation: [{ direction: "INBOUND", content: "me manda o cardápio completo?" }],
+      tools,
+    });
+    expect(r.toolsUsed.includes("enviar_catalogo") || sent.length > 0).toBe(true);
   }, EVAL_TIMEOUT);
 });

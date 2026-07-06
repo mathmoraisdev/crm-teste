@@ -3,7 +3,8 @@ import { prisma } from "@/server/db/client";
 import type { AttendanceStatus } from "@prisma/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
-import { generateAttendanceReply, interpretAppointmentReply } from "@/server/ai/conversation.agent";
+import { generateAttendanceReply, generateAgenticReply, interpretAppointmentReply } from "@/server/ai/conversation.agent";
+import { buildAttendanceTools } from "@/server/ai/tools/attendance-tools";
 import { getAiClient } from "@/server/ai/resolve";
 import type { AiClient } from "@/server/ai/provider";
 import { decideApptTransition, applyApptTransition } from "./appointment.service";
@@ -585,7 +586,7 @@ export async function respondToLead(leadId: string): Promise<void> {
           persona: true, knowledgeBase: true,
           businessHours: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
-          salesEnabled: true,
+          salesEnabled: true, aiToolCallingEnabled: true,
           contextResetMinutes: true,
         },
       })
@@ -665,20 +666,42 @@ export async function respondToLead(leadId: string): Promise<void> {
 
   // 4d. Atendimento: responde a dúvida no contexto da empresa (sempre que autoReply).
   if (mode.reply) {
-    const catalogBlock = await loadCatalogBlock(lead.userId);
-    const reply = await generateAttendanceReply({
-      ai,
-      company: {
-        displayName: company?.displayName ?? company?.label ?? null,
-        systemPromptOverride: company?.systemPromptOverride ?? null,
-        persona: company?.persona ?? null,
-        knowledgeBase: company?.knowledgeBase ?? null,
-        businessHours: company?.businessHours ?? null,
-        customInstructions: company?.customInstructions ?? null,
-      },
-      catalogBlock,
-      conversation,
-    });
+    const { block: catalogBlock, hasCatalog } = await loadCatalogBlock(lead.userId);
+    const companyForReply = {
+      displayName: company?.displayName ?? company?.label ?? null,
+      systemPromptOverride: company?.systemPromptOverride ?? null,
+      persona: company?.persona ?? null,
+      knowledgeBase: company?.knowledgeBase ?? null,
+      businessHours: company?.businessHours ?? null,
+      customInstructions: company?.customInstructions ?? null,
+    };
+
+    // Caminho AGÊNTICO (opt-in por número + kill-switch global). Fora dele, o
+    // fluxo de hoje segue byte-idêntico. `escalar`/tools de efeito colateral
+    // podem encerrar o turno (r.stopped) — nesse caso não enviamos texto.
+    const toolsOn = !env.AI_TOOLCALLING_DISABLED && (company?.aiToolCallingEnabled ?? false);
+    if (toolsOn) {
+      const tools = buildAttendanceTools({
+        lead: {
+          id: lead.id,
+          phone: lead.phone,
+          userId: lead.userId,
+          whatsAppNumberId: lead.whatsAppNumberId ?? null,
+          name: lead.name,
+        },
+        accountId: lead.userId,
+        company,
+        hasCatalog,
+        hasMedia: false, // liga na Fase 5
+      });
+      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools });
+      if (!(await aiStillActive(lead.id))) return; // recheck preservado
+      if (r.stopped) return; // uma tool já encerrou o turno (ex.: escalar)
+      if (r.text) await sendWhatsAppMessage(lead, r.text);
+      return;
+    }
+
+    const reply = await generateAttendanceReply({ ai, company: companyForReply, catalogBlock, conversation });
     // Recheck pós-geração: a chamada da IA leva segundos; nesse meio o operador
     // pode ter assumido (auto-pause/handoff manual, possivelmente em outro
     // processo). Relê o estado fresco e NÃO envia por cima do humano.
@@ -688,8 +711,14 @@ export async function respondToLead(leadId: string): Promise<void> {
   // !mode.reply → handoff total: só persiste o inbound (humano responde via /reply).
 }
 
-/** Bloco de catálogo ativo da conta p/ o contexto da IA (vazio se não há itens). */
-async function loadCatalogBlock(accountId: string): Promise<string | undefined> {
+/**
+ * Bloco de catálogo ativo da conta p/ o contexto da IA (vazio se não há itens).
+ * Devolve também `hasCatalog` — se a conta tem ao menos 1 item ativo — p/ o
+ * caminho agêntico decidir registrar a tool `criar_comanda` sem repetir a query.
+ */
+async function loadCatalogBlock(
+  accountId: string,
+): Promise<{ block: string | undefined; hasCatalog: boolean }> {
   const items = await listCatalogItems(accountId, { activeOnly: true });
   const block = renderCatalogForAI(
     items.map((i) => ({
@@ -700,7 +729,7 @@ async function loadCatalogBlock(accountId: string): Promise<string | undefined> 
       stockQty: i.stockQty,
     })),
   );
-  return block || undefined;
+  return { block: block || undefined, hasCatalog: items.length > 0 };
 }
 
 /**
@@ -749,7 +778,7 @@ export async function suggestAttendanceReply(
     company?.contextResetMinutes ?? DEFAULT_CONTEXT_RESET_MINUTES,
   );
 
-  const catalogBlock = await loadCatalogBlock(lead.userId);
+  const { block: catalogBlock } = await loadCatalogBlock(lead.userId);
 
   return generateAttendanceReply({
     ai,

@@ -32,6 +32,7 @@ interface NumberItem {
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
   salesEnabled: boolean;
+  aiToolCallingEnabled: boolean;
   reminderDayBeforeTemplate: string | null;
   reminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
@@ -53,6 +54,7 @@ interface ServiceConfig {
   qualifyEnabled: boolean;
   scheduleEnabled: boolean;
   salesEnabled: boolean;
+  aiToolCallingEnabled: boolean;
   reminderDayBeforeTemplate: string;
   reminderHourBeforeTemplate: string;
   replyDelaySeconds: number;
@@ -303,6 +305,7 @@ export function WhatsAppNumbersPanel() {
       qualifyEnabled: n.qualifyEnabled,
       scheduleEnabled: n.scheduleEnabled,
       salesEnabled: n.salesEnabled,
+      aiToolCallingEnabled: n.aiToolCallingEnabled,
       reminderDayBeforeTemplate: n.reminderDayBeforeTemplate ?? "",
       reminderHourBeforeTemplate: n.reminderHourBeforeTemplate ?? "",
       replyDelaySeconds: n.replyDelaySeconds,
@@ -332,6 +335,7 @@ export function WhatsAppNumbersPanel() {
         qualifyEnabled: service.qualifyEnabled,
         scheduleEnabled: service.scheduleEnabled,
         salesEnabled: service.salesEnabled,
+        aiToolCallingEnabled: service.aiToolCallingEnabled,
         reminderDayBeforeTemplate: service.reminderDayBeforeTemplate.trim() || null,
         reminderHourBeforeTemplate: service.reminderHourBeforeTemplate.trim() || null,
         replyDelaySeconds: service.replyDelaySeconds,
@@ -984,6 +988,22 @@ export function WhatsAppNumbersPanel() {
                   Modo vendas (IA cobra via Pix)
                 </label>
               )}
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={service.aiToolCallingEnabled}
+                  onChange={(e) =>
+                    setService({ ...service, aiToolCallingEnabled: e.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                />
+                <span>
+                  IA com ações (beta)
+                  <span className="block text-xs text-slate-500">
+                    a IA pode consultar estoque, enviar catálogo e abrir comandas pelo chat
+                  </span>
+                </span>
+              </label>
             </div>
 
             {salesAllowed && service.salesEnabled && serviceFor && (

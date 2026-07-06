@@ -40,6 +40,7 @@ const updateSchema = z
     qualifyEnabled: z.boolean().optional(),
     scheduleEnabled: z.boolean().optional(),
     salesEnabled: z.boolean().optional(),
+    aiToolCallingEnabled: z.boolean().optional(), // "IA com ações" (beta): loop de tools
     // texto dos lembretes de reunião (placeholders {{nome}} {{quando}} {{link}})
     reminderDayBeforeTemplate: z.string().max(1000).nullable().optional(),
     reminderHourBeforeTemplate: z.string().max(1000).nullable().optional(),

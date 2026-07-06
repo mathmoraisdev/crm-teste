@@ -11,7 +11,7 @@ import {
 } from "./schemas";
 import { formatTranscript, type ConversationTurn } from "./transcript";
 import { stripMarkdownLinks, stripSpeakerLabel } from "./sanitize";
-import type { AiClient } from "./provider";
+import type { AiClient, LoopMessage, ToolDef } from "./provider";
 
 /**
  * Agente de conversa (tier "cheap") — gera a PRÓXIMA pergunta de qualificação.
@@ -114,26 +114,26 @@ function brazilTodayLine(): string {
   return `Data de hoje: ${hoje}.`;
 }
 
+interface AttendanceCompany {
+  displayName?: string | null;
+  systemPromptOverride?: string | null;
+  persona?: string | null;
+  knowledgeBase?: string | null;
+  businessHours?: string | null;
+  customInstructions?: string | null;
+}
+
 /**
- * Agente de ATENDIMENTO — gera a próxima mensagem respondendo o cliente no
- * contexto da empresa (persona + base de conhecimento + horário).
+ * Monta (PURA) o `system` base + o prefixo de contexto (empresa/catálogo/extra)
+ * comum aos dois caminhos de atendimento — a resposta livre (`generateText`) e o
+ * loop de tools (`runToolLoop`). Prompt mestre da empresa (override), quando
+ * setado, SUBSTITUI o padrão e zera o bloco de contexto (o operador escreve tudo
+ * inline). Extrai o trecho para não duplicar entre os dois caminhos.
  */
-export async function generateAttendanceReply(opts: {
-  ai: AiClient;
-  company: {
-    displayName?: string | null;
-    systemPromptOverride?: string | null;
-    persona?: string | null;
-    knowledgeBase?: string | null;
-    businessHours?: string | null;
-    customInstructions?: string | null;
-  };
+function buildAttendancePrompt(opts: {
+  company: AttendanceCompany;
   catalogBlock?: string;
-  conversation: ConversationTurn[];
-}): Promise<string> {
-  // Prompt mestre da empresa (quando setado) SUBSTITUI o padrão fixo. Nesse modo
-  // o operador escreve tudo inline, então NÃO injetamos o bloco de contexto
-  // (persona/base/horário/instruções/catálogo) — ficam a cargo do próprio prompt.
+}): { system: string; contextPrefix: string } {
   const override = opts.company.systemPromptOverride?.trim();
   const system = override || ATTENDANCE_SYSTEM;
   const context = override ? "" : buildAttendanceContext(opts.company);
@@ -142,16 +142,76 @@ export async function generateAttendanceReply(opts: {
     !override && opts.company.customInstructions
       ? `\n\nInstruções adicionais da empresa:\n${opts.company.customInstructions}`
       : "";
-  const prefix = context || catalog || extra ? `${context}${catalog}${extra}\n\n` : "";
+  const contextPrefix = context || catalog || extra ? `${context}${catalog}${extra}\n\n` : "";
+  return { system, contextPrefix };
+}
+
+/**
+ * Agente de ATENDIMENTO — gera a próxima mensagem respondendo o cliente no
+ * contexto da empresa (persona + base de conhecimento + horário).
+ */
+export async function generateAttendanceReply(opts: {
+  ai: AiClient;
+  company: AttendanceCompany;
+  catalogBlock?: string;
+  conversation: ConversationTurn[];
+}): Promise<string> {
+  const { system, contextPrefix } = buildAttendancePrompt(opts);
   const text = await opts.ai.generateText({
     tier: "cheap",
     maxTokens: 700,
     system,
     user:
       `${brazilTodayLine()}\n\n` +
-      `${prefix}` +
+      `${contextPrefix}` +
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem ao cliente.`,
   });
   return stripSpeakerLabel(stripMarkdownLinks(text || "Oi! Como posso te ajudar?"));
+}
+
+/** Converte o transcript em mensagens do loop (INBOUND→user, OUTBOUND→assistant). */
+function conversationToLoopMessages(turns: ConversationTurn[]): LoopMessage[] {
+  return turns.map((t) => ({
+    role: t.direction === "INBOUND" ? "user" : "assistant",
+    content: t.content,
+  }));
+}
+
+export interface AgenticReplyResult {
+  text: string;
+  toolsUsed: string[];
+  stopped: boolean;
+}
+
+/**
+ * Agente de ATENDIMENTO com AÇÕES (caminho agêntico) — espelha
+ * `generateAttendanceReply`, mas roda o loop de tools em vez de uma geração de
+ * texto. O bloco de contexto (empresa/catálogo) vai no `system` porque as
+ * `messages` carregam o transcript turno-a-turno. A sanitização do texto final é
+ * idêntica; devolve também as tools usadas e se um handler encerrou o turno.
+ */
+export async function generateAgenticReply(opts: {
+  ai: AiClient;
+  company: AttendanceCompany;
+  catalogBlock?: string;
+  conversation: ConversationTurn[];
+  tools: ToolDef[];
+}): Promise<AgenticReplyResult> {
+  const { system: baseSystem, contextPrefix } = buildAttendancePrompt(opts);
+  const contextBlock = contextPrefix.trimEnd();
+  const system =
+    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "");
+  const messages = conversationToLoopMessages(opts.conversation);
+  const result = await opts.ai.runToolLoop({
+    tier: "cheap",
+    maxTokens: 700,
+    maxSteps: 4,
+    system,
+    messages,
+    tools: opts.tools,
+  });
+  // Texto vazio quando uma tool encerrou o turno (stop) — mantém "" nesse caso.
+  const text = result.text ? stripSpeakerLabel(stripMarkdownLinks(result.text)) : "";
+  return { text, toolsUsed: result.toolsUsed, stopped: result.stopped };
 }
