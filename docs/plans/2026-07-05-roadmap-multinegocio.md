@@ -43,6 +43,11 @@ não paga o cheque. Este roadmap fecha essa distância.
 >
 > ¹ **Iniciativas 5, 6, 7 = FEITO em dev** (models no schema + `onda-c/d/e.sql` + código/testes, tudo committado). **PROD não confirmado**: falta verificar se `onda-c.sql`/`onda-d.sql`/`onda-e.sql` foram aplicados no Supabase e se o código foi deployado no Vercel. Confirmar e, quando aplicado, trocar para `PROD ✅`. (Reconciliado por verificação do repo — os chats que implementaram não atualizaram este mestre.)
 >
+> ³ **Iniciativa 11 = plano escrito** (`2026-07-10-verticais-unificadas.md`). **Não acrescenta schema à Onda D**
+> (nem a nenhuma outra): é conteúdo (`business-templates.ts` + `theme/presets.ts`) + orquestração que reusa
+> colunas/serviços existentes (`User.businessTemplateId`/`pipelineLabels`, `AccountBranding.presetId`,
+> `CustomFieldDef`, `CatalogItem`, `Offer`). **Sem `prisma/manual/*.sql`, sem `db push` — PROD = só deploy de código.**
+>
 > ² **Iniciativa 10 = FEITO em dev** (`db push` local + testes verdes + E2E do toggle). **PROD pendente**: aplicar a seção da iniciativa 10 do `onda-e.sql` no Supabase (idempotente, `IF NOT EXISTS` — pode aplicar o arquivo inteiro), deploy web (leva a toggle) + `git pull`/restart do worker (leva o tick, sobe inerte). Ligar **gradual**: `LIFECYCLE_AUTOMATION=true` + `LIFECYCLE_POSTSALE_HOURS=2` numa conta piloto com opt-in → depois NPS → **reengajamento por último** (cold-ish).
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
@@ -50,7 +55,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` — **plano escrito, pronto p/ executar** (depende de 5, já em dev) |
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **FEITO (dev)** ² (motor puro + serviço idempotente + tick no worker + opt-in por conta na UI; `onda-e.sql` composto/append, PROD a aplicar; sobe **inerte** — off até `LIFECYCLE_AUTOMATION`=true **e** opt-in da conta) |
-| 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D | **P3** | `2026-07-10-verticais-unificadas.md` |
+| 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D (**sem schema**) | **P3** | `2026-07-10-verticais-unificadas.md` — **FEITO (dev)** ³ (conteúdo + wizard de orquestração; 10 commits em master; gate verde 780 testes; **PROD = só deploy de código**) |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
 
@@ -73,9 +78,11 @@ tocam o schema **compõem** o mesmo arquivo (como estoque×despesas já fizeram)
 - **Onda C** (iniciativa 5): novo model **`Professional`** (nome, ativo, `color`, vínculo a `User`
   membro opcional). `Appointment.professionalId String?`. `CatalogItem.durationMinutes Int?`. Novo
   model **`WorkingHours`** (por profissional/conta: dia da semana, início, fim, intervalo).
-- **Onda D** (iniciativas 6, 11): novo model **`QuickReply`** (snippet por conta, `title`, `body`,
+- **Onda D** (iniciativa 6): novo model **`QuickReply`** (snippet por conta, `title`, `body`,
   `shortcut`). Novo model **`InternalNote`** (nota de operador na conversa/lead). *SLA reusa
-  `queuedAt`/`firstResponseAt` já existentes — sem coluna nova.*
+  `queuedAt`/`firstResponseAt` já existentes — sem coluna nova.* **A iniciativa 11 estava listada nesta
+  onda, mas NÃO acrescenta schema** — é conteúdo + orquestração sobre colunas existentes (ver plano filho
+  e nota ³). A Onda D fica sendo só o schema da iniciativa 6.
 - **Onda E** (iniciativas 7, 10): a iniciativa 7 (tool-calling) refatora serviço + `MediaAsset` +
   `WhatsAppNumber.aiToolCallingEnabled` (**dona** do `prisma/manual/2026-07-08-onda-e.sql`). A iniciativa
   10 (automação) **acrescenta** ao mesmo arquivo (append idempotente) — *desvio consciente do "sem schema
