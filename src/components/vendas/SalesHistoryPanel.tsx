@@ -188,7 +188,7 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar cliente…"
+          placeholder="Buscar cliente ou item…"
           className="min-w-[180px] flex-1 rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
 

@@ -66,6 +66,30 @@ describe("GET /api/vendas/orders/history (E2E extrato)", () => {
     expect(byName.body.items.map((r: any) => r.customerName)).toEqual(["Carlos Dono"]);
   });
 
+  it("busca por nome do item/serviço (nameSnapshot), não só do cliente", async () => {
+    const acc = (await prisma.user.create({ data: { email: `e2e_item_${Math.random()}@t.test`, name: "Dono Item", passwordHash: "x" } })).id;
+    const corte = await createCatalogItem(acc, { name: "Corte Degradê", priceCents: 3000 });
+    const barba = await createCatalogItem(acc, { name: "Barba", priceCents: 2000 });
+
+    // o1: cliente "Zé" comprou o Degradê; o2: cliente "Ana" comprou só Barba.
+    const o1 = await openOrder(acc, { openedById: acc, customerName: "Zé" });
+    await addItem(acc, o1.id, { catalogItemId: corte.id, quantity: 1 });
+    await closeOrder(acc, o1.id, { payment: "DINHEIRO" });
+    const o2 = await openOrder(acc, { openedById: acc, customerName: "Ana" });
+    await addItem(acc, o2.id, { catalogItemId: barba.id, quantity: 1 });
+    await closeOrder(acc, o2.id, { payment: "PIX" });
+
+    const { getTenantContext } = await import("@/lib/tenant");
+    (getTenantContext as any).mockResolvedValue({ sessionUserId: acc, tenantUserId: acc, role: "ADMIN" });
+
+    const from = new Date(Date.now() - 3600_000).toISOString();
+    const to = new Date(Date.now() + 3600_000).toISOString();
+
+    // busca pelo nome do item — só o1 tem "Degradê", e o termo não bate em cliente algum
+    const byItem = await call(`from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&q=degrad`);
+    expect(byItem.body.items.map((r: any) => r.customerName)).toEqual(["Zé"]);
+  });
+
   it("datas inválidas → 400", async () => {
     const { getTenantContext } = await import("@/lib/tenant");
     (getTenantContext as any).mockResolvedValue({ sessionUserId: "x", tenantUserId: "x", role: "ADMIN" });

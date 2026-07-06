@@ -29,8 +29,15 @@ export async function listSalesHistory(
     status: opts.includeCanceled ? { in: ["FECHADA", "CANCELADA"] as OrderStatus[] } : ("FECHADA" as const),
     closedAt: { gte: opts.from, lte: opts.to },
     ...(opts.operatorId ? { openedById: opts.operatorId } : {}),
+    // Busca livre: casa no nome do cliente OU no nome de qualquer item da comanda
+    // (nameSnapshot = rótulo do serviço/produto no momento da venda).
     ...(opts.query?.trim()
-      ? { customerName: { contains: opts.query.trim(), mode: "insensitive" as const } }
+      ? {
+          OR: [
+            { customerName: { contains: opts.query.trim(), mode: "insensitive" as const } },
+            { items: { some: { nameSnapshot: { contains: opts.query.trim(), mode: "insensitive" as const } } } },
+          ],
+        }
       : {}),
   };
   const [rows, total] = await Promise.all([
