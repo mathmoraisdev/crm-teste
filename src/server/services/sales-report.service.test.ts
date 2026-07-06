@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { openOrder, addItem, closeOrder } from "./order.service";
+import { setOrderAdjustments } from "./order.service";
 import { salesSummary, topItems, revenueByPayment, revenueByOperator } from "./sales-report.service";
 
 async function makeOwner() {
@@ -36,6 +37,28 @@ describe("sales-report.service", () => {
     expect(top[0].name).toBe("Corte");
     expect(top[0].quantity).toBe(3);
     expect(top[0].totalCents).toBe(12000);
+  });
+
+  it("salesSummary e revenueByOperator aplicam os ajustes (reconciliam com o recibo)", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: 10000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "A" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500 }); // total 9850
+    await closeOrder(acc, o.id, { tenders: [{ method: "PIX", amountCents: 9850 }], closedById: acc });
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+    const s = await salesSummary(acc, from, to);
+    expect(s.totalCents).toBe(9850); // NÃO 10000 (subtotal)
+    expect(s.avgTicketCents).toBe(9850);
+
+    const byOp = await revenueByOperator(acc, from, to);
+    expect(byOp[0].totalCents).toBe(9850);
+
+    // faturamento (billed) == recebido por meio (fully paid) → reconcilia
+    const byPay = await revenueByPayment(acc, from, to);
+    expect(byPay.find((p) => p.payment === "PIX")?.totalCents).toBe(9850);
   });
 
   it("revenueByPayment soma por tender: comanda com 2 meios aparece nos dois", async () => {

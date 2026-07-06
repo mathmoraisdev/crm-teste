@@ -13,11 +13,19 @@ async function closedOrderIds(accountId: string, from: Date, to: Date): Promise<
 }
 
 export async function salesSummary(accountId: string, from: Date, to: Date): Promise<SalesSummary> {
-  const ids = await closedOrderIds(accountId, from, to);
-  if (!ids.length) return { totalCents: 0, orderCount: 0, avgTicketCents: 0 };
-  const agg = await prisma.orderItem.findMany({ where: { orderId: { in: ids } }, select: { unitPriceCents: true, quantity: true } });
-  const totalCents = agg.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
-  const orderCount = ids.length;
+  // Faturamento = Σ do total DERIVADO por comanda (aplica desconto/taxa/gorjeta),
+  // p/ reconciliar com os recibos e com revenueByPayment. Somar só Σ(itens)
+  // ignoraria os ajustes e infla/deforma o número exibido no painel.
+  const orders = await prisma.order.findMany({
+    where: { accountId, status: "FECHADA", closedAt: { gte: from, lte: to } },
+    select: {
+      discountCents: true, surchargeCents: true, tipCents: true,
+      items: { select: { unitPriceCents: true, quantity: true } },
+    },
+  });
+  if (!orders.length) return { totalCents: 0, orderCount: 0, avgTicketCents: 0 };
+  const totalCents = orders.reduce((s, o) => s + orderTotalCents(o), 0);
+  const orderCount = orders.length;
   return { totalCents, orderCount, avgTicketCents: Math.round(totalCents / orderCount) };
 }
 
@@ -52,11 +60,15 @@ export interface OperatorRevenue { operatorId: string; operatorName: string; tot
 export async function revenueByOperator(accountId: string, from: Date, to: Date): Promise<OperatorRevenue[]> {
   const orders = await prisma.order.findMany({
     where: { accountId, status: "FECHADA", closedAt: { gte: from, lte: to } },
-    select: { openedById: true, openedBy: { select: { name: true } }, items: { select: { unitPriceCents: true, quantity: true } } },
+    select: {
+      openedById: true, openedBy: { select: { name: true } },
+      discountCents: true, surchargeCents: true, tipCents: true,
+      items: { select: { unitPriceCents: true, quantity: true } },
+    },
   });
   const map = new Map<string, { name: string; totalCents: number; orderCount: number }>();
   for (const o of orders) {
-    const t = o.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+    const t = orderTotalCents(o); // aplica os ajustes p/ reconciliar com o faturamento
     const cur = map.get(o.openedById) ?? { name: o.openedBy?.name ?? "—", totalCents: 0, orderCount: 0 };
     cur.totalCents += t;
     cur.orderCount += 1;
