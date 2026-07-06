@@ -15,12 +15,18 @@ export interface CatalogItemDTO {
   minStock: number;
   costCents: number | null;
   printSector: string | null;
+  durationMinutes: number | null;
 }
 
 const upsertSchema = z.object({
   name: z.string().trim().min(1, "Nome obrigatório."),
   priceCents: z.number().int().min(0, "Preço não pode ser negativo."),
   kind: z.enum(["SERVICO", "PRODUTO"]).default("SERVICO"),
+});
+
+// Duração (min) — opcional, só faz sentido para SERVICO. Vazio → null.
+const durationSchema = z.object({
+  durationMinutes: z.number().int().min(0).nullish(),
 });
 
 const stockConfigSchema = z.object({
@@ -33,12 +39,12 @@ const stockConfigSchema = z.object({
 function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
   trackStock: boolean; sku: string | null; stockQty: number; minStock: number; costCents: number | null;
-  printSector: string | null;
+  printSector: string | null; durationMinutes: number | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
     trackStock: o.trackStock, sku: o.sku, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
-    printSector: o.printSector,
+    printSector: o.printSector, durationMinutes: o.durationMinutes,
   };
 }
 
@@ -47,11 +53,12 @@ export async function createCatalogItem(
   data: {
     name: string; priceCents: number; kind?: CatalogItemKind;
     trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
-    printSector?: string | null;
+    printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
   const parsed = upsertSchema.parse(data);
   const cfg = stockConfigSchema.parse(data);
+  const dur = durationSchema.parse(data);
   const item = await prisma.catalogItem.create({
     data: {
       accountId, name: parsed.name, priceCents: parsed.priceCents, kind: parsed.kind,
@@ -60,6 +67,7 @@ export async function createCatalogItem(
       minStock: cfg.minStock ?? 0,
       costCents: cfg.costCents ?? null,
       printSector: data.printSector?.trim().toLowerCase() || null,
+      durationMinutes: dur.durationMinutes ?? null,
     },
   });
   return toDTO(item);
@@ -79,7 +87,7 @@ export async function updateCatalogItem(
   data: {
     name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
     trackStock?: boolean; sku?: string | null; minStock?: number; costCents?: number | null;
-    printSector?: string | null;
+    printSector?: string | null; durationMinutes?: number | null;
   },
 ): Promise<CatalogItemDTO> {
   const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
@@ -103,6 +111,13 @@ export async function updateCatalogItem(
     patch.minStock = data.minStock;
   }
   if (data.costCents !== undefined) patch.costCents = data.costCents === null ? null : data.costCents;
+  if (data.durationMinutes !== undefined) {
+    if (data.durationMinutes === null) patch.durationMinutes = null;
+    else {
+      if (!Number.isInteger(data.durationMinutes) || data.durationMinutes < 0) throw new Error("Duração inválida.");
+      patch.durationMinutes = data.durationMinutes;
+    }
+  }
   if (data.printSector !== undefined) patch.printSector = data.printSector?.trim().toLowerCase() || null;
   const item = await prisma.catalogItem.update({ where: { id }, data: patch });
   return toDTO(item);

@@ -216,6 +216,10 @@ model User {
   cashMovementsCreated     CashMovement[]           @relation("CashMovementCreatedBy")
   quickReplies             QuickReply[]             @relation("QuickReplyAccount")
   internalNotes            InternalNote[]           @relation("InternalNoteAuthor")
+  professionals            Professional[]           @relation("ProfessionalAccount")
+  professionalMemberships  Professional[]           @relation("ProfessionalMember")
+  workingHours             WorkingHours[]           @relation("WorkingHoursAccount")
+  walkInAppointments       Appointment[]            @relation("AppointmentAccount")
 }
 
 // Resposta rápida (snippet) da CONTA, compartilhada pela equipe. Corpo aceita
@@ -316,6 +320,7 @@ model CatalogItem {
   kind         CatalogItemKind @default(SERVICO)
   name         String
   priceCents   Int // preço em centavos (BRL)
+  durationMinutes Int? // duração padrão do serviço (min); snapshotada no Appointment. null = instante
   active       Boolean         @default(true)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -805,11 +810,23 @@ enum AppointmentStatus {
 // lembretes véspera/1h (remindedDayBeforeAt/remindedHourBeforeAt).
 model Appointment {
   id                   String            @id @default(cuid())
-  lead                 Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  leadId               String
+  // Lead OPCIONAL: walk-in (agendamento avulso sem cadastro) não tem lead. Quando
+  // há lead, o scoping é por `lead.userId`; sem lead, por `accountId` (abaixo).
+  lead                 Lead?             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId               String?
+  // Conta dona quando NÃO há lead (walk-in). Null em agendamentos com lead (scoping
+  // segue por lead.userId, retrocompat). Preenchido = tenantUserId do criador.
+  account              User?             @relation("AppointmentAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  accountId            String?
+  customerName         String? // walk-in: nome livre do cliente sem cadastro
+  customerPhone        String? // walk-in: telefone opcional (p/ lembrete)
+  // Profissional/recurso que atende (opcional; agendamentos antigos ficam sem).
+  professional         Professional?     @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  professionalId       String?
   catalogItem          CatalogItem?      @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   catalogItemId        String?
   serviceName          String? // snapshot do serviço (sobrevive à exclusão do item)
+  durationMinutes      Int? // snapshot da duração (min) no momento do agendamento; null = instante
   scheduledAt          DateTime
   status               AppointmentStatus @default(AGENDADO)
   note                 String?
@@ -829,6 +846,48 @@ model Appointment {
   @@index([seriesId])
   @@index([status, scheduledAt])
   @@index([needsReview])
+  @@index([professionalId, scheduledAt])
+  @@index([accountId, scheduledAt])
+}
+
+// Profissional/recurso que atende (por conta). Opcionalmente ligado a um membro da
+// equipe (login), mas não exige — pode ser só um nome. Soft-delete via `active`
+// (nunca apaga, p/ preservar o histórico de agendamentos que apontam pra ele).
+model Professional {
+  id           String         @id @default(cuid())
+  accountId    String // User.id do dono (tenantUserId)
+  account      User           @relation("ProfessionalAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  name         String
+  active       Boolean        @default(true)
+  color        String         @default("slate") // chave de Tone p/ o bloco no calendário
+  userId       String? // vínculo opcional a um membro da equipe (login); null = só nome
+  member       User?          @relation("ProfessionalMember", fields: [userId], references: [id], onDelete: SetNull)
+  appointments Appointment[]
+  workingHours WorkingHours[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([accountId, active])
+}
+
+// Horário de funcionamento estruturado. `professionalId` null = expediente PADRÃO
+// da conta (fallback quando o profissional não tem grade própria). Minutos desde
+// 00:00 (ex.: 540 = 09:00). Intervalo (almoço) opcional via breakStart/breakEnd.
+model WorkingHours {
+  id             String        @id @default(cuid())
+  accountId      String // User.id do dono (tenantUserId)
+  account        User          @relation("WorkingHoursAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  professionalId String? // null = expediente padrão da conta
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  weekday        Int // 0=domingo … 6=sábado
+  startMinute    Int // minutos desde 00:00
+  endMinute      Int
+  breakStart     Int? // início do intervalo (almoço) opcional
+  breakEnd       Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([accountId, professionalId, weekday])
 }
 
 model OutboundJob {

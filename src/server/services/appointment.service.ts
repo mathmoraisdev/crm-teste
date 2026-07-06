@@ -2,6 +2,17 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/server/db/client";
 import type { AppointmentStatus, Prisma } from "@prisma/client";
 import type { ApptReply } from "@/server/ai/schemas";
+import { env } from "@/lib/env";
+import { formatSlot } from "@/lib/utils";
+import {
+  overlaps,
+  appointmentEnd,
+  isWithinWorkingHours,
+  localWeekdayAndMinutes,
+  type DayWindow,
+} from "@/lib/agenda/availability";
+
+const TZ = env.SCHEDULING_TIMEZONE;
 
 export interface ApptTransition {
   status: "CONFIRMADO" | "CANCELADO" | null; // null = não mexe no status
@@ -48,14 +59,24 @@ export async function applyApptTransition(userId: string, id: string, t: ApptTra
 
 /**
  * Agendamentos de serviço (Appointment): N por Lead, ≠ Meeting (1:1, "reunião de
- * venda"). Scoping SEMPRE por `lead.userId` — Appointment não tem userId próprio,
- * igual Meeting. Todo caminho que grava valida antes que o lead pertence à conta.
+ * venda"). Scoping por `lead.userId` QUANDO há lead; walk-in (sem cadastro) escopa
+ * por `accountId`. Todo caminho que grava valida antes que o lead/profissional/
+ * comanda pertence à conta.
  */
 
 /** Confere que o lead é da conta antes de agendar (evita gravar em lead de outro dono). */
 async function assertLeadOwned(userId: string, leadId: string): Promise<void> {
   const lead = await prisma.lead.findFirst({ where: { id: leadId, userId }, select: { id: true } });
   if (!lead) throw new Error("Cliente não encontrado.");
+}
+
+/** Confere que o profissional é da conta antes de vincular (evita referência cross-tenant). */
+async function assertProfessionalOwned(userId: string, professionalId: string): Promise<void> {
+  const p = await prisma.professional.findFirst({
+    where: { id: professionalId, accountId: userId },
+    select: { id: true },
+  });
+  if (!p) throw new Error("Profissional não encontrado.");
 }
 
 /** Snapshot do nome do serviço: usa o informado ou, se veio catalogItemId, o do item. */
@@ -76,29 +97,211 @@ async function resolveServiceName(
   return { catalogItemId: null, serviceName: name || null };
 }
 
+/**
+ * Snapshot da duração (min): usa a informada; senão, se veio catalogItemId,
+ * copia a duração do item; senão null (agendamento pontual, sem janela). Espelha
+ * `resolveServiceName` — a duração vira snapshot e sobrevive à edição do item.
+ */
+async function resolveDuration(
+  userId: string,
+  catalogItemId: string | null | undefined,
+  durationMinutes: number | null | undefined,
+): Promise<number | null> {
+  if (durationMinutes != null) return durationMinutes;
+  if (catalogItemId) {
+    const ci = await prisma.catalogItem.findFirst({
+      where: { id: catalogItemId, accountId: userId },
+      select: { durationMinutes: true },
+    });
+    return ci?.durationMinutes ?? null;
+  }
+  return null;
+}
+
+/** Scoping resolvido de um agendamento: OU lead (da conta) OU walk-in (accountId). */
+interface ResolvedScope {
+  leadId: string | null;
+  accountId: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+}
+
+/**
+ * Resolve o dono do agendamento. Com leadId: valida posse e escopa por lead
+ * (accountId fica null, retrocompat). Sem leadId (walk-in): exige customerName e
+ * escopa por accountId = conta. Uma linha tem SEMPRE leadId OU accountId.
+ */
+async function resolveScope(userId: string, input: CreateAppointmentInput): Promise<ResolvedScope> {
+  if (input.leadId) {
+    await assertLeadOwned(userId, input.leadId);
+    return { leadId: input.leadId, accountId: null, customerName: null, customerPhone: null };
+  }
+  const name = input.customerName?.trim();
+  if (!name) throw new Error("Informe o nome do cliente.");
+  return {
+    leadId: null,
+    accountId: userId,
+    customerName: name,
+    customerPhone: input.customerPhone?.trim() || null,
+  };
+}
+
+/**
+ * Carrega as janelas de expediente aplicáveis ao profissional no dia do slot.
+ * Prioriza a grade PRÓPRIA do profissional; se ele não tem grade nesse dia, cai
+ * no expediente PADRÃO da conta (professionalId null). Vazio = sem expediente
+ * configurado (o chamador decide não bloquear).
+ */
+async function loadWorkingWindows(
+  userId: string,
+  professionalId: string,
+  start: Date,
+): Promise<DayWindow[]> {
+  const { weekday } = localWeekdayAndMinutes(start, TZ);
+  const own = await prisma.workingHours.findMany({
+    where: { accountId: userId, professionalId, weekday },
+    select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
+  });
+  const rows =
+    own.length > 0
+      ? own
+      : await prisma.workingHours.findMany({
+          where: { accountId: userId, professionalId: null, weekday },
+          select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
+        });
+  return rows.map((r) => ({
+    startMinute: r.startMinute,
+    endMinute: r.endMinute,
+    breakStart: r.breakStart,
+    breakEnd: r.breakEnd,
+  }));
+}
+
+/**
+ * Verdadeiro sse há expediente configurado para o dia E o slot [start,end) cai
+ * FORA dele. Sem expediente configurado => false (não bloqueia — a conta não
+ * definiu grade). É um AVISO, não uma regra rígida: o chamador pode forçar.
+ */
+async function isOutsideWorkingHours(
+  userId: string,
+  professionalId: string,
+  start: Date,
+  end: Date,
+): Promise<boolean> {
+  const windows = await loadWorkingWindows(userId, professionalId, start);
+  if (windows.length === 0) return false;
+  const { minuteOfDay: slotStartMin } = localWeekdayAndMinutes(start, TZ);
+  const { minuteOfDay: slotEndMin } = localWeekdayAndMinutes(end, TZ);
+  return !isWithinWorkingHours(slotStartMin, slotEndMin, windows);
+}
+
+/**
+ * Agendamentos ATIVOS (AGENDADO/CONFIRMADO) do profissional cujo intervalo
+ * [scheduledAt, fim) sobrepõe [start, end). O profissional é único da conta, mas
+ * filtramos também por conta (defesa em profundidade). Busca candidatos por uma
+ * janela grosseira de `scheduledAt` (um agendamento com duração pode COMEÇAR
+ * antes de `start` e ainda sobrepor) e refina com a `overlaps()` pura.
+ */
+export async function conflictsFor(
+  accountId: string,
+  professionalId: string,
+  start: Date,
+  end: Date,
+  exceptId?: string,
+): Promise<{ id: string; scheduledAt: Date; serviceName: string | null }[]> {
+  // Janela grosseira p/ trás: cobre agendamentos que começam antes mas se estendem
+  // até `start`. 24h folga com sobra a durações reais (minutos/horas).
+  const COARSE_BACK_MS = 24 * 60 * 60 * 1000;
+  const candidates = await prisma.appointment.findMany({
+    where: {
+      professionalId,
+      professional: { accountId },
+      status: { in: ["AGENDADO", "CONFIRMADO"] },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+      // scheduledAt >= end nunca sobrepõe [start,end); < end é o teto seguro.
+      scheduledAt: { gte: new Date(start.getTime() - COARSE_BACK_MS), lt: end },
+    },
+    select: { id: true, scheduledAt: true, durationMinutes: true, serviceName: true },
+  });
+  return candidates
+    .filter((c) =>
+      overlaps(start, end, c.scheduledAt, appointmentEnd(c.scheduledAt, c.durationMinutes)),
+    )
+    .map((c) => ({ id: c.id, scheduledAt: c.scheduledAt, serviceName: c.serviceName }));
+}
+
+interface SlotGuardOpts {
+  allowOverlap?: boolean;
+  force?: boolean;
+  exceptId?: string;
+}
+
+/**
+ * Guarda de slot p/ um profissional: bloqueia sobreposição (salvo allowOverlap) e
+ * horário fora do expediente (salvo force). Prefixos distintos (CONFLICT: /
+ * OUTSIDE_HOURS:) deixam a API mapear p/ 409 e a UI oferecer o override.
+ */
+async function assertSlotFree(
+  userId: string,
+  professionalId: string,
+  start: Date,
+  durationMinutes: number | null,
+  opts: SlotGuardOpts,
+): Promise<void> {
+  const end = appointmentEnd(start, durationMinutes);
+  if (!opts.allowOverlap) {
+    const conflicts = await conflictsFor(userId, professionalId, start, end, opts.exceptId);
+    if (conflicts.length > 0) {
+      throw new Error("CONFLICT: Profissional já tem agendamento nesse horário.");
+    }
+  }
+  if (!opts.force && (await isOutsideWorkingHours(userId, professionalId, start, end))) {
+    throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
+  }
+}
+
 export interface CreateAppointmentInput {
-  leadId: string;
+  leadId?: string | null; // opcional: walk-in não tem lead
+  customerName?: string | null; // walk-in: nome livre (obrigatório sem lead)
+  customerPhone?: string | null; // walk-in: telefone opcional
   scheduledAt: Date;
   catalogItemId?: string | null;
   serviceName?: string | null;
+  durationMinutes?: number | null;
+  professionalId?: string | null;
   note?: string | null;
   createdById: string;
+  allowOverlap?: boolean; // override do bloqueio de conflito
+  force?: boolean; // override do aviso de fora-do-expediente
 }
 
-/** Cria um agendamento avulso, snapshotando o nome do serviço. */
+/** Cria um agendamento avulso, snapshotando nome+duração do serviço. */
 export async function createAppointment(userId: string, input: CreateAppointmentInput) {
-  await assertLeadOwned(userId, input.leadId);
+  const scope = await resolveScope(userId, input);
   const { catalogItemId, serviceName } = await resolveServiceName(
     userId,
     input.catalogItemId,
     input.serviceName,
   );
+  const durationMinutes = await resolveDuration(userId, catalogItemId, input.durationMinutes);
+  if (input.professionalId) {
+    await assertProfessionalOwned(userId, input.professionalId);
+    await assertSlotFree(userId, input.professionalId, input.scheduledAt, durationMinutes, {
+      allowOverlap: input.allowOverlap,
+      force: input.force,
+    });
+  }
   return prisma.appointment.create({
     data: {
-      leadId: input.leadId,
+      leadId: scope.leadId,
+      accountId: scope.accountId,
+      customerName: scope.customerName,
+      customerPhone: scope.customerPhone,
       scheduledAt: input.scheduledAt,
       catalogItemId,
       serviceName,
+      durationMinutes,
+      professionalId: input.professionalId ?? null,
       note: input.note?.trim() || null,
       createdById: input.createdById,
     },
@@ -110,14 +313,15 @@ const MAX_SERIES = 52; // teto de sessões numa série (cobre 1 por semana por 1
 /**
  * Gera uma SÉRIE (pacote): `count` agendamentos com o mesmo `seriesId`, espaçados
  * de `everyDays` dias a partir de `base.scheduledAt`. Cobre "10 sessões, 1 por
- * semana". Cria tudo numa transação (ou entra a série inteira, ou nada).
+ * semana". Cria tudo numa transação (ou entra a série inteira, ou nada). O
+ * conflito é conferido POR SESSÃO — a primeira colisão aborta a série toda.
  */
 export async function createSeries(
   userId: string,
   base: CreateAppointmentInput,
   opts: { everyDays: number; count: number },
 ) {
-  await assertLeadOwned(userId, base.leadId);
+  const scope = await resolveScope(userId, base);
   const count = Math.floor(opts.count);
   const everyDays = Math.floor(opts.everyDays);
   if (count < 1 || count > MAX_SERIES) throw new Error(`Quantidade de sessões inválida (1 a ${MAX_SERIES}).`);
@@ -128,15 +332,41 @@ export async function createSeries(
     base.catalogItemId,
     base.serviceName,
   );
+  const durationMinutes = await resolveDuration(userId, catalogItemId, base.durationMinutes);
   const seriesId = randomUUID();
   const start = base.scheduledAt.getTime();
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const sessions = Array.from({ length: count }, (_, i) => new Date(start + i * everyDays * DAY_MS));
 
-  const rows: Prisma.AppointmentCreateManyInput[] = Array.from({ length: count }, (_, i) => ({
-    leadId: base.leadId,
-    scheduledAt: new Date(start + i * everyDays * DAY_MS),
+  if (base.professionalId) {
+    await assertProfessionalOwned(userId, base.professionalId);
+    const profId = base.professionalId;
+    for (const at of sessions) {
+      const end = appointmentEnd(at, durationMinutes);
+      if (!base.allowOverlap) {
+        const conflicts = await conflictsFor(userId, profId, at, end);
+        if (conflicts.length > 0) {
+          throw new Error(
+            `CONFLICT: Profissional já tem agendamento em ${formatSlot(at.toISOString(), TZ)}.`,
+          );
+        }
+      }
+      if (!base.force && (await isOutsideWorkingHours(userId, profId, at, end))) {
+        throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
+      }
+    }
+  }
+
+  const rows: Prisma.AppointmentCreateManyInput[] = sessions.map((at) => ({
+    leadId: scope.leadId,
+    accountId: scope.accountId,
+    customerName: scope.customerName,
+    customerPhone: scope.customerPhone,
+    scheduledAt: at,
     catalogItemId,
     serviceName,
+    durationMinutes,
+    professionalId: base.professionalId ?? null,
     note: base.note?.trim() || null,
     seriesId,
     createdById: base.createdById,
@@ -150,19 +380,22 @@ export interface ListAppointmentsParams {
   from?: Date;
   to?: Date;
   leadId?: string;
+  professionalId?: string;
   status?: AppointmentStatus;
   needsReview?: boolean;
 }
 
 /**
- * Lista agendamentos da conta (scoping por `lead.userId`), do mais próximo ao mais
- * distante. Filtros opcionais por janela (from/to), lead e status. Traz o lead
- * (id/name/phone) e o item de catálogo embutidos p/ a UI.
+ * Lista agendamentos da conta (lead da conta OU walk-in por accountId), do mais
+ * próximo ao mais distante. Filtros opcionais por janela (from/to), lead,
+ * profissional e status. Traz lead (nullable), profissional e item de catálogo
+ * embutidos p/ a UI; os escalares (customerName/phone/duração/etc.) vêm por padrão.
  */
 export async function listAppointments(userId: string, params: ListAppointmentsParams = {}) {
   const where: Prisma.AppointmentWhereInput = {
-    lead: { userId },
+    OR: [{ lead: { userId } }, { accountId: userId }],
     ...(params.leadId ? { leadId: params.leadId } : {}),
+    ...(params.professionalId ? { professionalId: params.professionalId } : {}),
     ...(params.status ? { status: params.status } : {}),
     ...(params.needsReview !== undefined ? { needsReview: params.needsReview } : {}),
     ...(params.from || params.to
@@ -175,15 +408,22 @@ export async function listAppointments(userId: string, params: ListAppointmentsP
     include: {
       lead: { select: { id: true, name: true, phone: true } },
       catalogItem: { select: { id: true, name: true } },
+      professional: { select: { id: true, name: true, color: true } },
     },
   });
 }
 
-/** Carrega um agendamento garantindo que o lead é da conta. Lança se não for. */
+/** Carrega um agendamento garantindo que é da conta (lead ou walk-in). Lança se não. */
 async function loadOwned(userId: string, id: string) {
   const appt = await prisma.appointment.findFirst({
-    where: { id, lead: { userId } },
-    select: { id: true },
+    where: { id, OR: [{ lead: { userId } }, { accountId: userId }] },
+    select: {
+      id: true,
+      scheduledAt: true,
+      professionalId: true,
+      durationMinutes: true,
+      catalogItemId: true,
+    },
   });
   if (!appt) throw new Error("Agendamento não encontrado.");
   return appt;
@@ -194,8 +434,14 @@ export interface UpdateAppointmentInput {
   status?: AppointmentStatus;
   catalogItemId?: string | null;
   serviceName?: string | null;
+  durationMinutes?: number | null;
+  professionalId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
   note?: string | null;
   orderId?: string | null; // liga/desliga a comanda gerada (ex.: ao marcar REALIZADO)
+  allowOverlap?: boolean; // override do bloqueio de conflito
+  force?: boolean; // override do aviso de fora-do-expediente
 }
 
 /** Confere que a comanda é da conta antes de vincular (evita referência cross-tenant). */
@@ -207,9 +453,9 @@ async function assertOrderOwned(userId: string, orderId: string): Promise<void> 
   if (!order) throw new Error("Comanda não encontrada.");
 }
 
-/** Edita um agendamento (reagendar/trocar serviço/observação/status). Scoping por conta. */
+/** Edita um agendamento (reagendar/trocar serviço/profissional/status). Scoping por conta. */
 export async function updateAppointment(userId: string, id: string, input: UpdateAppointmentInput) {
-  await loadOwned(userId, id);
+  const current = await loadOwned(userId, id);
   const data: Prisma.AppointmentUpdateInput = {};
   if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt;
   if (input.status !== undefined) {
@@ -219,9 +465,13 @@ export async function updateAppointment(userId: string, id: string, input: Updat
     data.reviewReason = null;
   }
   if (input.note !== undefined) data.note = input.note?.trim() || null;
-  // Trocar o item do catálogo re-snapshota o nome (salvo serviceName explícito) e
-  // religa/desliga o vínculo. Mandar SÓ serviceName renomeia o snapshot SEM mexer
+  if (input.customerName !== undefined) data.customerName = input.customerName?.trim() || null;
+  if (input.customerPhone !== undefined) data.customerPhone = input.customerPhone?.trim() || null;
+
+  // Trocar o item do catálogo re-snapshota nome E duração (salvo valores explícitos)
+  // e religa/desliga o vínculo. Mandar SÓ serviceName renomeia o snapshot SEM mexer
   // no vínculo com o catálogo (renomear ≠ desvincular).
+  let effectiveDuration = current.durationMinutes;
   if (input.catalogItemId !== undefined) {
     const { catalogItemId, serviceName } = await resolveServiceName(
       userId,
@@ -230,9 +480,37 @@ export async function updateAppointment(userId: string, id: string, input: Updat
     );
     data.serviceName = serviceName;
     data.catalogItem = catalogItemId ? { connect: { id: catalogItemId } } : { disconnect: true };
+    effectiveDuration = await resolveDuration(userId, catalogItemId, input.durationMinutes);
+    data.durationMinutes = effectiveDuration;
   } else if (input.serviceName !== undefined) {
     data.serviceName = input.serviceName?.trim() || null;
   }
+  if (input.durationMinutes !== undefined && input.catalogItemId === undefined) {
+    effectiveDuration = input.durationMinutes;
+    data.durationMinutes = effectiveDuration;
+  }
+
+  // Profissional: valida posse; connect/disconnect conforme informado.
+  let effectiveProfessionalId = current.professionalId;
+  if (input.professionalId !== undefined) {
+    if (input.professionalId) await assertProfessionalOwned(userId, input.professionalId);
+    effectiveProfessionalId = input.professionalId;
+    data.professional = input.professionalId
+      ? { connect: { id: input.professionalId } }
+      : { disconnect: true };
+  }
+
+  // Conflito/expediente: só quando o resultado tem profissional. Exclui a própria
+  // linha (exceptId) p/ um reagendamento não colidir consigo mesmo.
+  if (effectiveProfessionalId) {
+    const effectiveStart = input.scheduledAt ?? current.scheduledAt;
+    await assertSlotFree(userId, effectiveProfessionalId, effectiveStart, effectiveDuration, {
+      allowOverlap: input.allowOverlap,
+      force: input.force,
+      exceptId: id,
+    });
+  }
+
   if (input.orderId !== undefined) {
     if (input.orderId) {
       await assertOrderOwned(userId, input.orderId);

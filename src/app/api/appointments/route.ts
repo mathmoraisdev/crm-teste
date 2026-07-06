@@ -15,6 +15,28 @@ function parseDate(s: string | null): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+/**
+ * Mapeia erros do serviço para HTTP. Conflito de slot (CONFLICT:) e fora do
+ * expediente (OUTSIDE_HOURS:) viram 409 com `kind` — deixa a UI oferecer o
+ * override (allowOverlap/force). Qualquer outro erro cai em 400.
+ */
+function errorResponse(e: unknown): NextResponse {
+  const msg = e instanceof Error ? e.message : "Erro ao agendar";
+  if (msg.startsWith("CONFLICT:")) {
+    return NextResponse.json(
+      { error: msg.slice("CONFLICT:".length).trim(), kind: "CONFLICT" },
+      { status: 409 },
+    );
+  }
+  if (msg.startsWith("OUTSIDE_HOURS:")) {
+    return NextResponse.json(
+      { error: msg.slice("OUTSIDE_HOURS:".length).trim(), kind: "OUTSIDE_HOURS" },
+      { status: 409 },
+    );
+  }
+  return NextResponse.json({ error: msg }, { status: 400 });
+}
+
 export async function GET(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -22,6 +44,7 @@ export async function GET(req: NextRequest) {
   const status = sp.get("status");
   const items = await listAppointments(ctx.tenantUserId, {
     leadId: sp.get("leadId") ?? undefined,
+    professionalId: sp.get("professionalId") ?? undefined,
     status: STATUSES.includes(status as AppointmentStatus) ? (status as AppointmentStatus) : undefined,
     from: parseDate(sp.get("from")),
     to: parseDate(sp.get("to")),
@@ -30,16 +53,28 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items });
 }
 
-const createSchema = z.object({
-  leadId: z.string().min(1, "Cliente obrigatório"),
-  scheduledAt: z.string().datetime({ message: "Data/hora inválida" }),
-  catalogItemId: z.string().nullish(),
-  serviceName: z.string().nullish(),
-  note: z.string().nullish(),
-  series: z
-    .object({ everyDays: z.number().int().positive(), count: z.number().int().min(1).max(52) })
-    .optional(),
-});
+const createSchema = z
+  .object({
+    leadId: z.string().min(1).optional(),
+    scheduledAt: z.string().datetime({ message: "Data/hora inválida" }),
+    catalogItemId: z.string().nullish(),
+    serviceName: z.string().nullish(),
+    professionalId: z.string().nullish(),
+    durationMinutes: z.number().int().nullish(),
+    customerName: z.string().nullish(),
+    customerPhone: z.string().nullish(),
+    allowOverlap: z.boolean().optional(),
+    force: z.boolean().optional(),
+    note: z.string().nullish(),
+    series: z
+      .object({ everyDays: z.number().int().positive(), count: z.number().int().min(1).max(52) })
+      .optional(),
+  })
+  // Ou cliente cadastrado (leadId), ou walk-in (customerName): um dos dois é obrigatório.
+  .refine((d) => Boolean(d.leadId) || Boolean(d.customerName?.trim()), {
+    message: "Informe o cliente ou o nome do cliente.",
+    path: ["leadId"],
+  });
 
 export async function POST(req: NextRequest) {
   const ctx = await getTenantContext();
@@ -52,12 +87,31 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { leadId, scheduledAt, catalogItemId, serviceName, note, series } = parsed.data;
-  const base = {
+  const {
     leadId,
+    scheduledAt,
+    catalogItemId,
+    serviceName,
+    professionalId,
+    durationMinutes,
+    customerName,
+    customerPhone,
+    allowOverlap,
+    force,
+    note,
+    series,
+  } = parsed.data;
+  const base = {
+    leadId: leadId ?? null,
     scheduledAt: new Date(scheduledAt),
     catalogItemId: catalogItemId ?? null,
     serviceName: serviceName ?? null,
+    professionalId: professionalId ?? null,
+    durationMinutes: durationMinutes ?? null,
+    customerName: customerName ?? null,
+    customerPhone: customerPhone ?? null,
+    allowOverlap,
+    force,
     note: note ?? null,
     createdById: ctx.sessionUserId,
   };
@@ -69,9 +123,6 @@ export async function POST(req: NextRequest) {
     const appointment = await createAppointment(ctx.tenantUserId, base);
     return NextResponse.json({ appointment }, { status: 201 });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao agendar" },
-      { status: 400 },
-    );
+    return errorResponse(e);
   }
 }

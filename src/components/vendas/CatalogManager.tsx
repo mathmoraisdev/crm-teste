@@ -20,6 +20,7 @@ interface Item {
   minStock: number;
   costCents: number | null;
   printSector: string | null;
+  durationMinutes: number | null;
 }
 
 // Modelos que geram itens (ordenados por categoria) — pré-computado, é estático.
@@ -56,6 +57,7 @@ export function CatalogManager({
   const [minStock, setMinStock] = useState("");
   const [costStr, setCostStr] = useState("");
   const [sector, setSector] = useState("");
+  const [duration, setDuration] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +75,7 @@ export function CatalogManager({
   const [editMinStock, setEditMinStock] = useState("");
   const [editCost, setEditCost] = useState("");
   const [editSector, setEditSector] = useState("");
+  const [editDuration, setEditDuration] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -100,6 +103,7 @@ export function CatalogManager({
     setMinStock("");
     setCostStr("");
     setSector("");
+    setDuration("");
   }
 
   async function addItem() {
@@ -112,6 +116,11 @@ export function CatalogManager({
     setSaving(true);
     try {
       const body: Record<string, unknown> = { name: name.trim(), priceCents, kind, printSector: sector.trim() || null };
+      // Duração só para serviço; vazio → null.
+      if (kind === "SERVICO") {
+        const d = Math.floor(Number(duration));
+        body.durationMinutes = duration.trim() && Number.isFinite(d) && d > 0 ? d : null;
+      }
       if (useStock) {
         body.trackStock = true;
         body.sku = sku.trim() || null;
@@ -152,6 +161,7 @@ export function CatalogManager({
     setEditMinStock(it.trackStock ? String(it.minStock) : "");
     setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
     setEditSector(it.printSector ?? "");
+    setEditDuration(it.durationMinutes != null ? String(it.durationMinutes) : "");
     setEditError(null);
   }
 
@@ -168,6 +178,13 @@ export function CatalogManager({
     setEditSaving(true);
     try {
       const patch: Record<string, unknown> = { name: editName.trim(), priceCents, kind: editKind, printSector: editSector.trim() || null };
+      // Duração só para serviço; vazio → null (produto sempre zera).
+      if (editKind === "SERVICO") {
+        const d = Math.floor(Number(editDuration));
+        patch.durationMinutes = editDuration.trim() && Number.isFinite(d) && d > 0 ? d : null;
+      } else {
+        patch.durationMinutes = null;
+      }
       if (editKind === "PRODUTO") {
         patch.trackStock = editTrackStock;
         if (editTrackStock) {
@@ -330,6 +347,15 @@ export function CatalogManager({
                     placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
+                  {editKind === "SERVICO" && (
+                    <input
+                      value={editDuration}
+                      onChange={(e) => setEditDuration(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Duração (min) — opcional"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                  )}
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
                       <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
@@ -390,6 +416,9 @@ export function CatalogManager({
                     </p>
                     <p className="flex items-center gap-2 text-xs text-slate-400">
                       {it.kind === "SERVICO" ? "Serviço" : "Produto"}
+                      {it.kind === "SERVICO" && it.durationMinutes != null && (
+                        <span>· {it.durationMinutes} min</span>
+                      )}
                       {it.printSector && (
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                           {it.printSector}
@@ -476,6 +505,15 @@ export function CatalogManager({
               placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             />
+            {kind === "SERVICO" && (
+              <input
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                inputMode="numeric"
+                placeholder="Duração (min) — opcional"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            )}
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-600">

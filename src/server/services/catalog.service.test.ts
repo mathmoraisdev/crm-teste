@@ -83,6 +83,18 @@ describe("catalog.service", () => {
     expect(upd.sku).toBeNull();
   });
 
+  it("durationMinutes faz round-trip para serviço e aceita null", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO", durationMinutes: 45 });
+    expect(item.durationMinutes).toBe(45);
+    const semDur = await createCatalogItem(a, { name: "Barba", priceCents: 3000, kind: "SERVICO" });
+    expect(semDur.durationMinutes).toBeNull();
+    const upd = await updateCatalogItem(a, item.id, { durationMinutes: 30 });
+    expect(upd.durationMinutes).toBe(30);
+    const cleared = await updateCatalogItem(a, item.id, { durationMinutes: null });
+    expect(cleared.durationMinutes).toBeNull();
+  });
+
   it("serviço comum ignora campos de estoque (default off)", async () => {
     const a = await makeOwner();
     const item = await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO" });

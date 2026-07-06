@@ -1,27 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getTenantContext } from "@/lib/tenant";
-import { createCatalogItem, listCatalogItems } from "@/server/services/catalog.service";
+import { createProfessional, listProfessionals } from "@/server/services/professional.service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  const items = await listCatalogItems(ctx.tenantUserId);
-  return NextResponse.json({ items });
+  const activeOnly = req.nextUrl.searchParams.get("activeOnly") === "true";
+  const professionals = await listProfessionals(ctx.tenantUserId, { activeOnly });
+  return NextResponse.json({ professionals });
 }
 
 const createSchema = z.object({
   name: z.string(),
-  priceCents: z.number().int(),
-  kind: z.enum(["SERVICO", "PRODUTO"]).optional(),
-  trackStock: z.boolean().optional(),
-  sku: z.string().nullish(),
-  minStock: z.number().int().optional(),
-  costCents: z.number().int().nullish(),
-  printSector: z.string().nullish(),
-  durationMinutes: z.number().int().nullish(),
+  color: z.string().optional(),
+  userId: z.string().nullish(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,8 +27,8 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   try {
-    const item = await createCatalogItem(ctx.tenantUserId, parsed.data);
-    return NextResponse.json({ item });
+    const professional = await createProfessional(ctx.tenantUserId, parsed.data);
+    return NextResponse.json({ professional });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro ao salvar" }, { status: 400 });
   }

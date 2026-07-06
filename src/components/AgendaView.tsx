@@ -7,6 +7,9 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarX,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Search,
   Video,
@@ -23,8 +26,11 @@ import type { AgendaItem } from "@/server/services/meeting.service";
 import {
   APPT_STATUS_LABEL,
   APPT_STATUS_TONE,
+  apptDisplayName,
   type AppointmentDTO,
 } from "@/components/agenda/appointment-labels";
+import { CalendarGrid } from "@/components/agenda/CalendarGrid";
+import { ScheduleModal } from "@/components/clientes/AppointmentSection";
 
 const STATUS_TONE = {
   CONFIRMED: "green",
@@ -60,6 +66,44 @@ function relativeDayLabel(iso: string): "Hoje" | "Amanhã" | null {
 }
 
 type Tab = "meetings" | "appointments";
+type ApptView = "list" | "day" | "week";
+
+interface Professional {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** Intervalo [from, to) que cobre o dia/semana visível (00:00 local). */
+function calendarRange(view: ApptView, date: Date): { from: Date; to: Date } {
+  const from = new Date(date);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  if (view === "week") {
+    from.setDate(from.getDate() - from.getDay()); // volta ao domingo
+    to.setTime(from.getTime());
+    to.setDate(to.getDate() + 7);
+  } else {
+    to.setDate(to.getDate() + 1);
+  }
+  return { from, to };
+}
+
+/** Rótulo pt-BR do período visível no cabeçalho do calendário. */
+function rangeLabel(view: ApptView, date: Date): string {
+  if (view === "week") {
+    const { from, to } = calendarRange("week", date);
+    const end = new Date(to.getTime() - 1);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    return `${fmt(from)} – ${fmt(end)}`;
+  }
+  return date.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+}
 
 export function AgendaView() {
   const [tab, setTab] = useState<Tab>("meetings");
@@ -68,6 +112,19 @@ export function AgendaView() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
   const [reviewOnly, setReviewOnly] = useState(false);
+
+  // Calendário (aba Agendamentos): visão + data + intervalo carregado.
+  const [apptView, setApptView] = useState<ApptView>("day");
+  const [calDate, setCalDate] = useState(() => new Date());
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [profFilter, setProfFilter] = useState<string>("ALL");
+  const [calAppts, setCalAppts] = useState<AppointmentDTO[] | null>(null);
+
+  // Modal de agendamento (walk-in-capable): sem leadId, com defaults do slot.
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDefaults, setScheduleDefaults] = useState<
+    { scheduledAt?: string; professionalId?: string } | undefined
+  >(undefined);
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +146,59 @@ export function AgendaView() {
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Profissionais (colunas/cores do calendário) — carregados uma vez.
+  useEffect(() => {
+    fetch("/api/professionals?activeOnly=true", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setProfessionals((d.professionals as Professional[]) ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Agendamentos do intervalo visível (calendário). Refaz ao mudar visão/data/filtro.
+  const loadCalendar = useCallback(async () => {
+    if (apptView === "list") return;
+    const { from, to } = calendarRange(apptView, calDate);
+    const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+    if (profFilter !== "ALL") params.set("professionalId", profFilter);
+    try {
+      const res = await fetch(`/api/appointments?${params.toString()}`, { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok) setCalAppts(data.items as AppointmentDTO[]);
+    } catch {
+      /* mantém estado anterior */
+    }
+  }, [apptView, calDate, profFilter]);
+
+  useEffect(() => {
+    if (tab !== "appointments" || apptView === "list") return;
+    setCalAppts(null);
+    loadCalendar();
+  }, [tab, apptView, loadCalendar]);
+
+  // Navegação de data do calendário (± 1 dia/semana ou volta pra hoje).
+  const shiftDate = useCallback(
+    (dir: -1 | 0 | 1) => {
+      if (dir === 0) return setCalDate(new Date());
+      setCalDate((prev) => {
+        const d = new Date(prev);
+        d.setDate(d.getDate() + dir * (apptView === "week" ? 7 : 1));
+        return d;
+      });
+    },
+    [apptView],
+  );
+
+  // Abre o modal a partir de um slot clicado (ou botão "Novo agendamento").
+  const openSchedule = useCallback(
+    (defaults?: { scheduledAt?: string; professionalId?: string }) => {
+      setScheduleDefaults(defaults);
+      setScheduleOpen(true);
+    },
+    [],
+  );
 
   const filtered = useMemo(() => {
     if (!meetings) return null;
@@ -143,9 +253,10 @@ export function AgendaView() {
         return false;
       }
       if (!q) return true;
+      const phone = a.lead?.phone ?? a.customerPhone ?? "";
       return (
-        a.lead.name.toLowerCase().includes(lower) ||
-        (digits.length > 0 && a.lead.phone.replace(/\D/g, "").includes(digits))
+        apptDisplayName(a).toLowerCase().includes(lower) ||
+        (digits.length > 0 && phone.replace(/\D/g, "").includes(digits))
       );
     });
   }, [appointments, query, reviewOnly]);
@@ -288,6 +399,36 @@ export function AgendaView() {
         </>
       ) : (
         <>
+          {/* Barra: alternador de visão (Lista/Dia/Semana) + novo agendamento */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
+              {([
+                { value: "list", label: "Lista" },
+                { value: "day", label: "Dia" },
+                { value: "week", label: "Semana" },
+              ] as { value: ApptView; label: string }[]).map((v) => (
+                <button
+                  key={v.value}
+                  type="button"
+                  onClick={() => setApptView(v.value)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    apptView === v.value
+                      ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
+                      : "text-slate-600 hover:bg-slate-100",
+                  )}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" onClick={() => openSchedule()}>
+              <CalendarPlus size={14} /> Novo agendamento
+            </Button>
+          </div>
+
+          {apptView === "list" ? (
+            <>
           {/* Busca (nome/telefone) + filtro de revisão para agendamentos */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[220px] max-w-[300px] flex-1 sm:flex-none">
@@ -342,7 +483,7 @@ export function AgendaView() {
                   ? "Nenhum agendamento aguardando revisão."
                   : query.trim()
                     ? "Nenhum agendamento corresponde à busca."
-                    : "Nenhum agendamento em aberto. Agende um serviço na ficha do cliente."}
+                    : "Nenhum agendamento em aberto. Clique em “Novo agendamento” para marcar."}
               </div>
             </Card>
           ) : (
@@ -354,8 +495,70 @@ export function AgendaView() {
               </ul>
             </Card>
           )}
+            </>
+          ) : (
+            <>
+              {/* Navegação de data + filtro de profissional para o calendário */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Button variant="secondary" size="sm" onClick={() => shiftDate(-1)} aria-label="Anterior">
+                    <ChevronLeft size={15} />
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => shiftDate(0)}>
+                    Hoje
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => shiftDate(1)} aria-label="Próximo">
+                    <ChevronRight size={15} />
+                  </Button>
+                  <span className="ml-1 text-sm font-semibold capitalize text-ink">
+                    {rangeLabel(apptView, calDate)}
+                  </span>
+                </div>
+                <select
+                  value={profFilter}
+                  onChange={(e) => setProfFilter(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                >
+                  <option value="ALL">Todos os profissionais</option>
+                  {professionals.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {calAppts === null ? (
+                <Card>
+                  <LoadingBlock label="Carregando agenda…" />
+                </Card>
+              ) : (
+                <CalendarGrid
+                  appointments={calAppts}
+                  professionals={
+                    profFilter === "ALL"
+                      ? professionals
+                      : professionals.filter((p) => p.id === profFilter)
+                  }
+                  mode={apptView === "week" ? "week" : "day"}
+                  date={calDate}
+                  onSlotClick={openSchedule}
+                />
+              )}
+            </>
+          )}
         </>
       )}
+
+      <ScheduleModal
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        defaults={scheduleDefaults}
+        onDone={async () => {
+          setScheduleOpen(false);
+          await Promise.all([load(), loadCalendar()]);
+        }}
+      />
     </div>
   );
 }
@@ -386,12 +589,17 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={`/leads/${item.lead.id}`}
-            className="font-bold text-ink hover:text-brand-600 hover:underline"
-          >
-            {item.lead.name}
-          </Link>
+          {/* Walk-in não tem lead → nome livre sem link para a ficha. */}
+          {item.lead ? (
+            <Link
+              href={`/leads/${item.lead.id}`}
+              className="font-bold text-ink hover:text-brand-600 hover:underline"
+            >
+              {item.lead.name}
+            </Link>
+          ) : (
+            <span className="font-bold text-ink">{apptDisplayName(item)}</span>
+          )}
           <Badge tone={APPT_STATUS_TONE[item.status]}>{APPT_STATUS_LABEL[item.status]}</Badge>
           {relDay && (
             <span className="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-bold text-white">
@@ -407,7 +615,11 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
             <AlertTriangle size={12} /> {item.reviewReason}
           </p>
         )}
-        <p className="mt-0.5 font-mono text-xs text-slate-400">{item.lead.phone}</p>
+        {(item.lead?.phone ?? item.customerPhone) && (
+          <p className="mt-0.5 font-mono text-xs text-slate-400">
+            {item.lead?.phone ?? item.customerPhone}
+          </p>
+        )}
       </div>
     </li>
   );

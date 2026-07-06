@@ -74,6 +74,9 @@ export async function dispatchDueAppointmentReminders(now: Date): Promise<number
     where: {
       status: { in: ["AGENDADO", "CONFIRMADO"] },
       scheduledAt: { gt: now },
+      // Só agendamentos com lead são lembrados: walk-in (sem cadastro/chip) não
+      // tem para onde enviar. Lembrete de walk-in está fora de escopo.
+      leadId: { not: null },
       OR: [{ remindedDayBeforeAt: null }, { remindedHourBeforeAt: null }],
     },
     select: {
@@ -90,6 +93,7 @@ export async function dispatchDueAppointmentReminders(now: Date): Promise<number
 
   let sent = 0;
   for (const a of appts) {
+    if (!a.lead) continue; // walk-in (guard: o filtro já exclui, mas estreita o tipo)
     const kind = dueReminder({
       scheduledAt: a.scheduledAt,
       now,

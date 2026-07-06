@@ -16,6 +16,7 @@ import { BusinessCategorySettings } from "@/components/app/BusinessCategorySetti
 import { getBusinessTemplateId, getInboxSlaMinutes } from "@/server/services/account.service";
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
+import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,12 @@ export default async function ConfiguracoesPage() {
       <div className="mt-6">
         <PipelineLabelsManager canEdit={canSettings} />
       </div>
+
+      {(isOwner || canSettings) && (
+        <div className="mt-6">
+          <ProfessionalsSettings canEdit={canSettings} />
+        </div>
+      )}
 
       <div className="mt-6">
         <QuickRepliesSettings canEdit={canSettings} />

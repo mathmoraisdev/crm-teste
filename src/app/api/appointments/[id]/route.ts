@@ -10,9 +10,35 @@ const patchSchema = z.object({
   status: z.enum(["AGENDADO", "CONFIRMADO", "REALIZADO", "FALTOU", "CANCELADO"]).optional(),
   catalogItemId: z.string().nullish(),
   serviceName: z.string().nullish(),
+  professionalId: z.string().nullish(),
+  durationMinutes: z.number().int().nullish(),
+  allowOverlap: z.boolean().optional(),
+  force: z.boolean().optional(),
   note: z.string().nullish(),
   orderId: z.string().optional(), // ao marcar REALIZADO, liga a comanda gerada
 });
+
+/**
+ * Mapeia erros do serviço para HTTP. Conflito de slot (CONFLICT:) e fora do
+ * expediente (OUTSIDE_HOURS:) viram 409 com `kind` — deixa a UI oferecer o
+ * override (allowOverlap/force). Qualquer outro erro cai em 400.
+ */
+function errorResponse(e: unknown): NextResponse {
+  const msg = e instanceof Error ? e.message : "Erro ao atualizar";
+  if (msg.startsWith("CONFLICT:")) {
+    return NextResponse.json(
+      { error: msg.slice("CONFLICT:".length).trim(), kind: "CONFLICT" },
+      { status: 409 },
+    );
+  }
+  if (msg.startsWith("OUTSIDE_HOURS:")) {
+    return NextResponse.json(
+      { error: msg.slice("OUTSIDE_HOURS:".length).trim(), kind: "OUTSIDE_HOURS" },
+      { status: 409 },
+    );
+  }
+  return NextResponse.json({ error: msg }, { status: 400 });
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
@@ -35,15 +61,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       status: d.status,
       catalogItemId: d.catalogItemId,
       serviceName: d.serviceName,
+      professionalId: d.professionalId,
+      durationMinutes: d.durationMinutes,
+      allowOverlap: d.allowOverlap,
+      force: d.force,
       note: d.note,
       orderId: d.orderId,
     });
     return NextResponse.json({ appointment });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao atualizar" },
-      { status: 400 },
-    );
+    return errorResponse(e);
   }
 }
 

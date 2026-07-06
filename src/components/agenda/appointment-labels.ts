@@ -21,9 +21,11 @@ export const APPT_STATUS_TONE: Record<AppointmentStatus, Tone> = {
 /** Shape serializado (via fetch) de um item de `listAppointments`. */
 export interface AppointmentDTO {
   id: string;
-  leadId: string;
+  leadId: string | null; // null = walk-in (sem cadastro)
+  accountId: string | null; // preenchido no walk-in (scoping por conta)
   catalogItemId: string | null;
   serviceName: string | null;
+  durationMinutes: number | null;
   scheduledAt: string; // ISO
   status: AppointmentStatus;
   note: string | null;
@@ -31,6 +33,15 @@ export interface AppointmentDTO {
   orderId: string | null;
   needsReview: boolean;
   reviewReason: string | null;
-  lead: { id: string; name: string; phone: string };
+  professionalId: string | null;
+  customerName: string | null; // walk-in: nome livre
+  customerPhone: string | null; // walk-in: telefone opcional
+  lead: { id: string; name: string; phone: string } | null; // null = walk-in
+  professional: { id: string; name: string; color: string } | null;
   catalogItem: { id: string; name: string } | null;
+}
+
+/** Nome de exibição: do lead quando há, senão o nome livre do walk-in, senão genérico. */
+export function apptDisplayName(a: Pick<AppointmentDTO, "lead" | "customerName">): string {
+  return a.lead?.name ?? a.customerName ?? "Cliente";
 }
