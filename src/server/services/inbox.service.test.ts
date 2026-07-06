@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/server/db/client", () => ({
   prisma: {
     lead: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
-    user: { findMany: vi.fn() },
+    user: { findMany: vi.fn(), findUnique: vi.fn() },
     message: { groupBy: vi.fn() },
   },
 }));
@@ -142,5 +142,47 @@ describe("listConversations + unread", () => {
     await listConversations("dono-1", { filter: "ia", sessionUserId: "dono-1" });
     const where = (prisma.lead.findMany as any).mock.calls[0][0].where;
     expect(where.attendanceStatus).toBe("IA");
+  });
+
+  it("marca SLA breached e ordena a fila por mais antigo primeiro", async () => {
+    const { prisma } = await import("@/server/db/client");
+    const old = new Date(Date.now() - 60 * 60_000); // 60min atrás → estoura meta de 5min
+    const recent = new Date(Date.now() - 1 * 60_000); // 1min atrás
+    (prisma.lead.findMany as any).mockResolvedValue([
+      {
+        id: "novo", name: "Novo", phone: "+551", attendanceStatus: "FILA", assignedTo: null,
+        whatsAppNumber: null, lastReadAt: null, queuedAt: recent, firstResponseAt: null,
+        messages: [{ content: "b", createdAt: recent }],
+      },
+      {
+        id: "antigo", name: "Antigo", phone: "+552", attendanceStatus: "FILA", assignedTo: null,
+        whatsAppNumber: null, lastReadAt: null, queuedAt: old, firstResponseAt: null,
+        messages: [{ content: "a", createdAt: old }],
+      },
+    ]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    (prisma.user.findUnique as any).mockResolvedValue({ inboxSlaMinutes: 5 });
+    const { listConversations } = await import("./inbox.service");
+    const rows = await listConversations("dono-1", { filter: "fila", sessionUserId: "dono-1" });
+    // Fila: mais antigo primeiro.
+    expect(rows.map((r) => r.id)).toEqual(["antigo", "novo"]);
+    expect(rows[0].sla.status).toBe("breached");
+  });
+
+  it("sem meta de SLA → status ok mesmo com fila antiga", async () => {
+    const { prisma } = await import("@/server/db/client");
+    const old = new Date(Date.now() - 120 * 60_000);
+    (prisma.lead.findMany as any).mockResolvedValue([
+      {
+        id: "lead-1", name: "X", phone: "+551", attendanceStatus: "FILA", assignedTo: null,
+        whatsAppNumber: null, lastReadAt: null, queuedAt: old, firstResponseAt: null,
+        messages: [{ content: "a", createdAt: old }],
+      },
+    ]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    (prisma.user.findUnique as any).mockResolvedValue({ inboxSlaMinutes: null });
+    const { listConversations } = await import("./inbox.service");
+    const rows = await listConversations("dono-1", { filter: "fila", sessionUserId: "dono-1" });
+    expect(rows[0].sla.status).toBe("ok");
   });
 });

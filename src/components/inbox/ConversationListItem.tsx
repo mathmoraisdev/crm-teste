@@ -17,6 +17,19 @@ export const ATTENDANCE_META: Record<AttendanceStatus, { label: string; tone: To
   RESOLVIDA: { label: "Resolvida", tone: "green" },
 };
 
+// Tempo de espera compacto p/ o selo de SLA ("3min", "1h20", "2d").
+function formatWait(ms: number): string {
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) {
+    const rem = min % 60;
+    return rem ? `${h}h${String(rem).padStart(2, "0")}` : `${h}h`;
+  }
+  return `${Math.floor(h / 24)}d`;
+}
+
 // memo: numa lista de conversas, só re-renderiza o item cujo `conversation`,
 // `active` ou `onSelect` mudou (não a lista inteira a cada poll). `onSelect`
 // recebe o id e é estável no pai (não mais um arrow inline por item).
@@ -37,6 +50,10 @@ export const ConversationListItem = memo(function ConversationListItem({
   onToggleSelect?: (id: string) => void;
 }) {
   const meta = ATTENDANCE_META[conversation.attendanceStatus];
+  // Conversa ainda aguardando 1ª resposta humana → mostra o selo de espera.
+  const waiting = !!conversation.queuedAt && !conversation.firstResponseAt;
+  const sla = conversation.sla;
+  const breached = waiting && sla.status === "breached";
   return (
     <button
       onClick={() =>
@@ -46,6 +63,8 @@ export const ConversationListItem = memo(function ConversationListItem({
         "flex w-full items-start gap-2.5 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
         active && !selectMode && "bg-brand-50/60",
         selected && "bg-brand-50/60",
+        // Estouro de SLA: destaque de urgência (barra + leve fundo), some ao responder.
+        breached && "border-l-2 border-l-danger bg-danger-surface/40",
       )}
     >
       {selectMode && (
@@ -88,6 +107,11 @@ export const ConversationListItem = memo(function ConversationListItem({
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <Badge tone={meta.tone}>{meta.label}</Badge>
+        {waiting && sla.status !== "ok" && (
+          <Badge tone={sla.status === "breached" ? "red" : "amber"}>
+            {sla.status === "breached" ? "SLA " : ""}⏱ {formatWait(sla.waitingMs)}
+          </Badge>
+        )}
         <LeadStatusBadge status={conversation.status} />
         {conversation.optOut && <Badge tone="red">Opt-out</Badge>}
         {conversation.assignedTo && (

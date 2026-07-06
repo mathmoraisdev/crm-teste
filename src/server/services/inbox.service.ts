@@ -2,6 +2,7 @@ import { prisma } from "@/server/db/client";
 import type { AttendanceStatus, LeadStatus } from "@prisma/client";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
+import { slaState, type SlaState } from "@/lib/inbox/sla";
 
 export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
@@ -23,6 +24,10 @@ export interface InboxConversation {
   unread: boolean;
   whatsAppNumber: string | null;
   queuedAt: Date | null;
+  firstResponseAt: Date | null;
+  // Estado de SLA (reusa queuedAt/firstResponseAt + meta do dono). Calculado no
+  // servidor a cada listagem (re-fetch por SSE/polling mantém o destaque fresco).
+  sla: SlaState;
   optOut: boolean;
 }
 
@@ -98,14 +103,20 @@ export async function listConversations(
     ...(opts.whatsAppNumberId ? { whatsAppNumberId: opts.whatsAppNumberId } : {}),
   };
 
-  const leads = await prisma.lead.findMany({
-    where,
-    include: {
-      assignedTo: { select: { id: true, name: true } },
-      whatsAppNumber: { select: { displayName: true, label: true } },
-      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { content: true, createdAt: true } },
-    },
-  });
+  const [leads, owner] = await Promise.all([
+    prisma.lead.findMany({
+      where,
+      include: {
+        assignedTo: { select: { id: true, name: true } },
+        whatsAppNumber: { select: { displayName: true, label: true } },
+        messages: { orderBy: { createdAt: "desc" }, take: 1, select: { content: true, createdAt: true } },
+      },
+    }),
+    // Meta de SLA é do dono (conta). null = sem meta → slaState nunca marca estouro.
+    prisma.user.findUnique({ where: { id: tenantUserId }, select: { inboxSlaMinutes: true } }),
+  ]);
+  const targetMinutes = owner?.inboxSlaMinutes ?? null;
+  const now = new Date();
 
   // Última INBOUND por lead (uma query) p/ calcular não-lidas.
   const ids = leads.map((l) => l.id);
@@ -134,13 +145,26 @@ export async function listConversations(
       unread: !!lastIn && lastIn.getTime() > readAt,
       whatsAppNumber: l.whatsAppNumber?.displayName?.trim() || l.whatsAppNumber?.label || null,
       queuedAt: l.queuedAt,
+      firstResponseAt: l.firstResponseAt,
+      sla: slaState({ queuedAt: l.queuedAt, firstResponseAt: l.firstResponseAt, targetMinutes, now }),
       optOut: l.optOut,
     };
   });
 
-  // Ordem cronológica pura (última mensagem mais recente no topo), como no WhatsApp.
-  // "não-lida" é só destaque visual na lista, não altera a posição.
-  rows.sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
+  if (filter === "fila") {
+    // Na fila, prioridade é atender o mais antigo primeiro (SLA). Sem queuedAt vai
+    // pro fim. Empate desfaz por mensagem mais recente.
+    rows.sort((a, b) => {
+      const qa = a.queuedAt?.getTime() ?? Infinity;
+      const qb = b.queuedAt?.getTime() ?? Infinity;
+      if (qa !== qb) return qa - qb;
+      return (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0);
+    });
+  } else {
+    // Ordem cronológica pura (última mensagem mais recente no topo), como no WhatsApp.
+    // "não-lida" é só destaque visual na lista, não altera a posição.
+    rows.sort((a, b) => (b.lastMessageAt?.getTime() ?? 0) - (a.lastMessageAt?.getTime() ?? 0));
+  }
   return rows;
 }
 
