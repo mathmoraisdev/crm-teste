@@ -1,5 +1,6 @@
 import { formatCentsBRL } from "@/lib/money";
 import { listCatalogItems } from "@/server/services/catalog.service";
+import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
 import { sendWhatsAppMessage } from "@/server/services/messaging";
 import { renderCatalogForTools } from "../attendance-context";
 import type { ToolDef, ToolResult } from "../provider";
@@ -107,11 +108,103 @@ function enviarCatalogo(ctx: AttendanceToolCtx): ToolDef {
   };
 }
 
+/** Lê `{ itens: [{ catalogItemId, quantidade? }] }` de um args cru, tolerante. */
+function readItens(args: unknown): { catalogItemId: string; quantidade: number }[] {
+  const raw =
+    args && typeof args === "object" && "itens" in args
+      ? (args as { itens?: unknown }).itens
+      : undefined;
+  if (!Array.isArray(raw)) return [];
+  const out: { catalogItemId: string; quantidade: number }[] = [];
+  for (const it of raw) {
+    if (!it || typeof it !== "object") continue;
+    const id = (it as { catalogItemId?: unknown }).catalogItemId;
+    if (typeof id !== "string" || !id.trim()) continue;
+    const q = (it as { quantidade?: unknown }).quantidade;
+    const quantidade = typeof q === "number" && q >= 1 ? Math.floor(q) : 1;
+    out.push({ catalogItemId: id.trim(), quantidade });
+  }
+  return out;
+}
+
+/**
+ * Handler `criar_comanda` (Fase 3): ABRE uma comanda (ou reusa a ABERTA do lead)
+ * e adiciona os itens que a IA referenciou por id. NÃO fecha nem cobra (pagamento
+ * fora do escopo v1). Idempotente por turno: reusa a comanda ABERTA mais recente
+ * do lead p/ não duplicar quando a IA chama a tool duas vezes.
+ */
+function criarComanda(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "criar_comanda",
+    description:
+      "Abre uma comanda para o cliente e adiciona itens do catálogo (referenciados pelo id de " +
+      "consultar_estoque). Use quando o cliente pedir/confirmar itens para consumo ou pedido. " +
+      "Não cobra nem fecha a conta — só registra o pedido em aberto.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        itens: {
+          type: "array",
+          description: "Itens a adicionar na comanda.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              catalogItemId: { type: "string", description: "id do item (de consultar_estoque)." },
+              quantidade: { type: "number", description: "quantidade (inteiro >= 1; default 1)." },
+            },
+            required: ["catalogItemId"],
+          },
+        },
+      },
+      required: ["itens"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const itens = readItens(args);
+      if (!itens.length) return { content: "Nenhum item informado para a comanda." };
+
+      // Idempotência: reusa a comanda ABERTA mais recente do lead, se houver.
+      const open = await listOpenOrders(ctx.accountId);
+      const existing = open.find((o) => o.leadId === ctx.lead.id);
+      const reused = !!existing;
+      const order =
+        existing ??
+        (await openOrder(ctx.accountId, { openedById: ctx.accountId, leadId: ctx.lead.id }));
+
+      const naoEncontrados: string[] = [];
+      let dto = order;
+      for (const it of itens) {
+        try {
+          dto = await addItem(ctx.accountId, order.id, {
+            catalogItemId: it.catalogItemId,
+            quantity: it.quantidade,
+          });
+        } catch {
+          // id inexistente / de outra conta → não estoura o loop; avisa amigável.
+          naoEncontrados.push(it.catalogItemId);
+        }
+      }
+
+      // Resumo a partir do estado final da comanda (sem "#nº": só no fechamento).
+      const linhas = dto.items.map((i) => `${i.quantity}× ${i.nameSnapshot}`);
+      const resumo = linhas.length
+        ? `${reused ? "Comanda atualizada" : "Comanda aberta"}: ${linhas.join(", ")} — total ${formatCentsBRL(dto.totalCents)}`
+        : "Não consegui adicionar nenhum item à comanda.";
+      const erro = naoEncontrados.length ? ` (não encontrei: ${naoEncontrados.join(", ")})` : "";
+      return { content: `${resumo}${erro}` };
+    },
+  };
+}
+
 /**
  * Fábrica das tools de atendimento. Decide INTERNAMENTE quais registrar a partir
- * do `ctx`. Nesta fase (2) devolve SEMPRE as duas read-only (não dependem de
- * flag); fases seguintes adicionam `criar_comanda`/`escalar_humano`/`enviar_midia`.
+ * do `ctx`. Read-only (consultar/enviar catálogo) sempre entram; `criar_comanda`
+ * só quando a conta usa o módulo de comanda (tem CatalogItem — `hasCatalog`).
+ * Fases seguintes adicionam `escalar_humano`/`enviar_midia`.
  */
 export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
-  return [consultarEstoque(ctx), enviarCatalogo(ctx)];
+  const tools = [consultarEstoque(ctx), enviarCatalogo(ctx)];
+  if (ctx.hasCatalog) tools.push(criarComanda(ctx));
+  return tools;
 }

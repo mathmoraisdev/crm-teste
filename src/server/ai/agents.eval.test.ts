@@ -168,4 +168,55 @@ describe.skipIf(!enabled)("eval: attendance tool-calling", () => {
     });
     expect(r.toolsUsed.includes("enviar_catalogo") || sent.length > 0).toBe(true);
   }, EVAL_TIMEOUT);
+
+  it("'anota 2 x-burguer e uma coca' → abre comanda com os ids certos", async () => {
+    const ai = await loadAi();
+    const generateAgenticReply = await loadAgentic();
+    const captured: { catalogItemId: string; quantidade?: number }[] = [];
+    const tools = [
+      {
+        name: "consultar_estoque",
+        description: "Consulta o catálogo e o estoque ao vivo; devolve o id de cada item.",
+        jsonSchema: { type: "object", additionalProperties: false, properties: { query: { type: "string" } } },
+        handler: async () => ({
+          content: "id=ci_burger | X-Burguer | R$ 25,00 | estoque=—\nid=ci_coca | Coca-Cola | R$ 7,00 | estoque=—",
+        }),
+      },
+      {
+        name: "criar_comanda",
+        description: "Abre uma comanda e adiciona itens do catálogo (por id de consultar_estoque).",
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            itens: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: { catalogItemId: { type: "string" }, quantidade: { type: "number" } },
+                required: ["catalogItemId"],
+              },
+            },
+          },
+          required: ["itens"],
+        },
+        handler: async (args: unknown) => {
+          const itens = (args as { itens?: { catalogItemId: string; quantidade?: number }[] }).itens ?? [];
+          captured.push(...itens);
+          return { content: "Comanda aberta: 2× X-Burguer, 1× Coca-Cola — total R$ 57,00" };
+        },
+      },
+    ];
+    const r = await generateAgenticReply({
+      ai,
+      company: { displayName: "Lanchonete do Zé" },
+      conversation: [{ direction: "INBOUND", content: "anota aí 2 x-burguer e uma coca, por favor" }],
+      tools,
+    });
+    expect(r.toolsUsed).toContain("criar_comanda");
+    const ids = captured.map((i) => i.catalogItemId);
+    expect(ids).toContain("ci_burger");
+    expect(ids).toContain("ci_coca");
+  }, EVAL_TIMEOUT);
 });
