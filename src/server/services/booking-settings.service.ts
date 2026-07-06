@@ -129,6 +129,45 @@ export async function setBookingSettings(
   return toSettings(u);
 }
 
+export interface BookingReadiness {
+  hasProfessionalWithHours: boolean; // ao menos 1 profissional ativo com expediente (próprio ou padrão)
+  hasBookableService: boolean; // ao menos 1 serviço ativo com durationMinutes > 0
+  ready: boolean; // ambos → o link tem o que oferecer
+}
+
+/**
+ * Diz se a conta tem chão para ligar o booking: um profissional ativo cujo dia
+ * tem expediente (grade própria OU padrão da conta) e um serviço com duração.
+ * Alimenta o aviso inline nas Configurações — não bloqueia, só orienta.
+ */
+export async function getBookingReadiness(accountId: string): Promise<BookingReadiness> {
+  const [activePros, anyHours, hasDefaultHours, bookableService] = await Promise.all([
+    prisma.professional.count({ where: { accountId, active: true } }),
+    // Expediente de algum profissional (linha com professionalId != null).
+    prisma.workingHours.findFirst({
+      where: { accountId, professionalId: { not: null }, professional: { active: true } },
+      select: { id: true },
+    }),
+    // Expediente PADRÃO da conta (professionalId null) — vale p/ qualquer profissional ativo.
+    prisma.workingHours.findFirst({
+      where: { accountId, professionalId: null },
+      select: { id: true },
+    }),
+    prisma.catalogItem.findFirst({
+      where: { accountId, active: true, kind: "SERVICO", durationMinutes: { gt: 0 } },
+      select: { id: true },
+    }),
+  ]);
+  const hasProfessionalWithHours =
+    activePros > 0 && (anyHours != null || hasDefaultHours != null);
+  const hasBookableService = bookableService != null;
+  return {
+    hasProfessionalWithHours,
+    hasBookableService,
+    ready: hasProfessionalWithHours && hasBookableService,
+  };
+}
+
 /**
  * Garante que a conta tem um `publicSlug`. Já tem → devolve o atual (idempotente).
  * Senão gera de `appName` (branding) ou do nome do dono, resolvendo colisão com

@@ -18,6 +18,9 @@ import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
 import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
 import { MediaLibrarySettings } from "@/components/app/MediaLibrarySettings";
+import { BookingSettings } from "@/components/app/BookingSettings";
+import { getBookingSettings, getBookingReadiness } from "@/server/services/booking-settings.service";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +42,7 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla] = await Promise.all([
+  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
@@ -47,7 +50,12 @@ export default async function ConfiguracoesPage() {
     getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
     getPosSettings(ownerId), // config de impressão de cupom (só o dono edita)
     getInboxSlaMinutes(ownerId), // meta de SLA do inbox (só o dono edita)
+    getBookingSettings(ownerId), // agendamento online (só o dono edita)
+    getBookingReadiness(ownerId), // se há profissional c/ expediente + serviço c/ duração
   ]);
+  const bookingPublicUrl = bookingSettings.publicSlug
+    ? `${env.APP_URL}/agendar/${bookingSettings.publicSlug}`
+    : null;
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -109,6 +117,16 @@ export default async function ConfiguracoesPage() {
       {(isOwner || canSettings) && (
         <div className="mt-6">
           <ProfessionalsSettings canEdit={canSettings} />
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="mt-6">
+          <BookingSettings
+            initial={{ ...bookingSettings, publicUrl: bookingPublicUrl }}
+            readiness={bookingReadiness}
+            canEdit={canSettings}
+          />
         </div>
       )}
 
