@@ -40,8 +40,8 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 4 | Estorno / reabertura de comanda (reverte baixa de estoque) | B | **P1** | `2026-07-06-estorno-comanda.md` — **FEITO (PROD ✅ 2026-07-05)** |
 
 > **Ondas A e B aplicadas em PROD em 2026-07-05** (`onda-a.sql` + `onda-b.sql` rodados no Supabase; código deployado via Vercel CLI). NÃO reaplicar o SQL.
-| 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` |
-| 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` |
+| 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **plano escrito, pronto p/ executar** |
+| 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **plano escrito, pronto p/ executar** |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` |
 | 8 | Auto-agendamento online (link público) | F | **P2** | `2026-07-09-agendamento-online.md` |
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` |
