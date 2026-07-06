@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import type { OrderPayment } from "@prisma/client";
+import { orderTotalCents } from "./order.service";
 
 export interface SalesSummary { totalCents: number; orderCount: number; avgTicketCents: number; }
 
@@ -20,16 +21,27 @@ export async function salesSummary(accountId: string, from: Date, to: Date): Pro
   return { totalCents, orderCount, avgTicketCents: Math.round(totalCents / orderCount) };
 }
 
+/** Receita por meio de pagamento no período. Agrega por OrderTender (uma comanda
+ * com 2 meios aparece nos dois). Retrocompat: comanda fechada antes dos tenders
+ * (sem linhas) cai no `Order.payment` único, com o total derivado. */
 export async function revenueByPayment(accountId: string, from: Date, to: Date): Promise<{ payment: OrderPayment; totalCents: number }[]> {
   const orders = await prisma.order.findMany({
     where: { accountId, status: "FECHADA", closedAt: { gte: from, lte: to } },
-    select: { payment: true, items: { select: { unitPriceCents: true, quantity: true } } },
+    select: {
+      payment: true,
+      discountCents: true, surchargeCents: true, tipCents: true,
+      tenders: { select: { method: true, amountCents: true } },
+      items: { select: { unitPriceCents: true, quantity: true } },
+    },
   });
   const map = new Map<OrderPayment, number>();
+  const add = (method: OrderPayment, cents: number) => map.set(method, (map.get(method) ?? 0) + cents);
   for (const o of orders) {
-    if (!o.payment) continue;
-    const t = o.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
-    map.set(o.payment, (map.get(o.payment) ?? 0) + t);
+    if (o.tenders.length > 0) {
+      for (const t of o.tenders) add(t.method, t.amountCents);
+    } else if (o.payment) {
+      add(o.payment, orderTotalCents(o)); // legado: meio único + total derivado
+    }
   }
   return [...map.entries()].map(([payment, totalCents]) => ({ payment, totalCents }));
 }

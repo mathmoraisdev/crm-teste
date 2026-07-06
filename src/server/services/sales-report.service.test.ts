@@ -38,6 +38,38 @@ describe("sales-report.service", () => {
     expect(top[0].totalCents).toBe(12000);
   });
 
+  it("revenueByPayment soma por tender: comanda com 2 meios aparece nos dois", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: 9850 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "M" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, {
+      tenders: [{ method: "PIX", amountCents: 5000 }, { method: "DINHEIRO", amountCents: 4850 }],
+      closedById: acc,
+    });
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+    const byPay = await revenueByPayment(acc, from, to);
+    expect(byPay.find((p) => p.payment === "PIX")?.totalCents).toBe(5000);
+    expect(byPay.find((p) => p.payment === "DINHEIRO")?.totalCents).toBe(4850);
+  });
+
+  it("revenueByPayment: comanda legada (sem tenders) cai no payment + total derivado", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Item", priceCents: 4000 });
+    const o = await openOrder(acc, { openedById: acc, customerName: "L" });
+    await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "CARTAO", closedById: acc });
+    // Simula comanda fechada antes dos tenders: apaga as linhas, mantém Order.payment.
+    await prisma.orderTender.deleteMany({ where: { orderId: o.id } });
+
+    const from = new Date(Date.now() - 3600_000);
+    const to = new Date(Date.now() + 3600_000);
+    const byPay = await revenueByPayment(acc, from, to);
+    expect(byPay.find((p) => p.payment === "CARTAO")?.totalCents).toBe(4000);
+  });
+
   it("revenueByOperator soma por quem lançou e ordena por receita", async () => {
     const acc = await makeOwner();
     const op = await prisma.user.create({ data: { email: `repop_${Math.round(performance.now())}_${Math.random()}@t.test`, name: "Op", passwordHash: "x", ownerId: acc, role: "OPERADOR" } });
