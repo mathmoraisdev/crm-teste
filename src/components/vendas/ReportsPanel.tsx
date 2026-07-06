@@ -36,7 +36,7 @@ const VIEWS: { value: View; label: string }[] = [
   { value: "sessoes", label: "Sessões" },
 ];
 
-export function ReportsPanel() {
+export function ReportsPanel({ canEdit = false }: { canEdit?: boolean }) {
   const [view, setView] = useState<View>("resumo");
   const [period, setPeriod] = useState<Period>("hoje");
   const [data, setData] = useState<ReportData | null>(null);
@@ -80,7 +80,7 @@ export function ReportsPanel() {
       </div>
 
       {view === "extrato" ? (
-        <SalesHistoryPanel />
+        <SalesHistoryPanel canEdit={canEdit} />
       ) : view === "sessoes" ? (
         <SessionsView />
       ) : (

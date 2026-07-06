@@ -51,7 +51,7 @@ export function VendasWorkspace({
       {tab === "catalogo" && <CatalogManager canEdit={canEdit} accountBusinessId={accountBusinessId} />}
       {tab === "estoque" && canEdit && <StockPanel />}
       {tab === "despesas" && canEdit && <ExpensesPanel />}
-      {tab === "relatorios" && <ReportsPanel />}
+      {tab === "relatorios" && <ReportsPanel canEdit={canEdit} />}
     </div>
   );
 }

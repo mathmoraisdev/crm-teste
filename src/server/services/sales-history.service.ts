@@ -26,7 +26,7 @@ export async function listSalesHistory(
     // Extrato = comandas FECHADA. Canceladas ficam fora por padrão; `includeCanceled`
     // as traz (view-only, marcadas/riscadas na UI). Canceladas mantêm `closedAt`, então
     // o filtro por período continua valendo.
-    status: opts.includeCanceled ? { in: ["FECHADA", "CANCELADA"] as const } : ("FECHADA" as const),
+    status: opts.includeCanceled ? { in: ["FECHADA", "CANCELADA"] as OrderStatus[] } : ("FECHADA" as const),
     closedAt: { gte: opts.from, lte: opts.to },
     ...(opts.operatorId ? { openedById: opts.operatorId } : {}),
     ...(opts.query?.trim()

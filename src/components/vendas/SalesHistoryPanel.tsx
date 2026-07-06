@@ -1,18 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Printer } from "lucide-react";
+import { Loader2, Printer, Ban } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 import { formatCentsBRL } from "@/lib/money";
 import { printReceipt } from "@/lib/receipt/print-client";
 import { PAYMENT_LABEL, PAYMENT_TONE, type Payment } from "./payment-labels";
 
 type Period = "hoje" | "7d" | "mes" | "custom";
+type OrderStatus = "ABERTA" | "FECHADA" | "CANCELADA";
 
 interface Row {
   id: string;
+  status: OrderStatus;
   closedAt: string;
   customerName: string | null;
   leadId: string | null;
@@ -21,6 +25,7 @@ interface Row {
   discountCents: number | null;
   surchargeCents: number | null;
   totalCents: number;
+  canceledReason: string | null;
 }
 interface HistoryResponse {
   items: Row[];
@@ -41,16 +46,19 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
-export function SalesHistoryPanel() {
+export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
   const [period, setPeriod] = useState<Period>("mes");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [operatorId, setOperatorId] = useState("");
   const [q, setQ] = useState("");
+  const [showCanceled, setShowCanceled] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [operators, setOperators] = useState<{ id: string; name: string }[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [voidTarget, setVoidTarget] = useState<Row | null>(null);
 
   // debounce da busca por nome
   const [qDebounced, setQDebounced] = useState("");
@@ -70,11 +78,12 @@ export function SalesHistoryPanel() {
       }
       if (operatorId) sp.set("operatorId", operatorId);
       if (qDebounced.trim()) sp.set("q", qDebounced.trim());
+      if (showCanceled) sp.set("includeCanceled", "1");
       sp.set("skip", String(skip));
       sp.set("take", String(TAKE));
       return sp.toString();
     },
-    [period, from, to, operatorId, qDebounced],
+    [period, from, to, operatorId, qDebounced, showCanceled],
   );
 
   // guarda a requisição mais recente para evitar corrida entre respostas
@@ -117,6 +126,9 @@ export function SalesHistoryPanel() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <p className="rounded-lg bg-danger-surface px-3 py-2 text-xs text-danger">{error}</p>
+      )}
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
@@ -174,13 +186,23 @@ export function SalesHistoryPanel() {
           placeholder="Buscar cliente…"
           className="min-w-[180px] flex-1 rounded-lg border border-line-default bg-inset px-3 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
+
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={showCanceled}
+            onChange={(e) => setShowCanceled(e.target.checked)}
+            className="h-4 w-4 rounded border-line-default text-brand-500 focus:ring-brand-100"
+          />
+          Mostrar estornadas
+        </label>
       </div>
 
       {/* Tabela */}
       <Card>
         <CardHeader
           title="Extrato de vendas"
-          subtitle={total > 0 ? `${total} comanda${total === 1 ? "" : "s"} fechada${total === 1 ? "" : "s"}` : undefined}
+          subtitle={total > 0 ? `${total} comanda${total === 1 ? "" : "s"}` : undefined}
         />
         {loading && rows.length === 0 ? (
           <div className="flex items-center gap-2 px-5 py-6 text-xs text-slate-400">
@@ -198,44 +220,73 @@ export function SalesHistoryPanel() {
                   <Th>Operador</Th>
                   <Th>Pagamento</Th>
                   <Th className="text-right">Total</Th>
-                  <Th className="text-right">Cupom</Th>
+                  <Th className="text-right">Ações</Th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <Td className="whitespace-nowrap text-slate-600">{fmtDate(r.closedAt)}</Td>
-                    <Td className="text-ink">{r.customerName ?? "—"}</Td>
-                    <Td className="text-slate-600">{r.operatorName}</Td>
-                    <Td>
-                      {r.payment ? (
-                        <Badge tone={PAYMENT_TONE[r.payment]}>{PAYMENT_LABEL[r.payment]}</Badge>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </Td>
-                    <Td className="whitespace-nowrap text-right font-medium text-ink">
-                      {formatCentsBRL(r.totalCents)}
-                      {(!!r.discountCents || !!r.surchargeCents) && (
-                        <div className="text-xs font-normal text-slate-400">
-                          {!!r.discountCents && <span className="text-danger">− {formatCentsBRL(r.discountCents)}</span>}
-                          {!!r.discountCents && !!r.surchargeCents && " · "}
-                          {!!r.surchargeCents && <span>+ {formatCentsBRL(r.surchargeCents)}</span>}
+                {rows.map((r) => {
+                  const canceled = r.status === "CANCELADA";
+                  return (
+                    <tr key={r.id} className={canceled ? "bg-danger-surface/30" : undefined}>
+                      <Td className="whitespace-nowrap text-slate-600">{fmtDate(r.closedAt)}</Td>
+                      <Td className="text-ink">
+                        <span className={canceled ? "text-slate-400 line-through" : undefined}>
+                          {r.customerName ?? "—"}
+                        </span>
+                        {canceled && (
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <Badge tone="red">Estornada</Badge>
+                            {r.canceledReason && (
+                              <span className="text-xs text-slate-500">{r.canceledReason}</span>
+                            )}
+                          </div>
+                        )}
+                      </Td>
+                      <Td className="text-slate-600">{r.operatorName}</Td>
+                      <Td>
+                        {r.payment ? (
+                          <Badge tone={PAYMENT_TONE[r.payment]} className={canceled ? "opacity-60" : undefined}>
+                            {PAYMENT_LABEL[r.payment]}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </Td>
+                      <Td className={`whitespace-nowrap text-right font-medium ${canceled ? "text-slate-400 line-through" : "text-ink"}`}>
+                        {formatCentsBRL(r.totalCents)}
+                        {!canceled && (!!r.discountCents || !!r.surchargeCents) && (
+                          <div className="text-xs font-normal text-slate-400">
+                            {!!r.discountCents && <span className="text-danger">− {formatCentsBRL(r.discountCents)}</span>}
+                            {!!r.discountCents && !!r.surchargeCents && " · "}
+                            {!!r.surchargeCents && <span>+ {formatCentsBRL(r.surchargeCents)}</span>}
+                          </div>
+                        )}
+                      </Td>
+                      <Td className="text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => printReceipt(r.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-600"
+                            title="Reimprimir cupom"
+                          >
+                            <Printer size={14} /> Reimprimir
+                          </button>
+                          {canEdit && !canceled && (
+                            <button
+                              type="button"
+                              onClick={() => setVoidTarget(r)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-danger hover:text-danger"
+                              title="Estornar (anula a venda)"
+                            >
+                              <Ban size={14} /> Estornar
+                            </button>
+                          )}
                         </div>
-                      )}
-                    </Td>
-                    <Td className="text-right">
-                      <button
-                        type="button"
-                        onClick={() => printReceipt(r.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-default bg-card px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-600"
-                        title="Reimprimir cupom"
-                      >
-                        <Printer size={14} /> Reimprimir
-                      </button>
-                    </Td>
-                  </tr>
-                ))}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </Table>
 
@@ -255,6 +306,87 @@ export function SalesHistoryPanel() {
           </>
         )}
       </Card>
+
+      {voidTarget && (
+        <VoidModal
+          row={voidTarget}
+          onClose={() => setVoidTarget(null)}
+          onError={setError}
+          onDone={() => {
+            setVoidTarget(null);
+            setError(null);
+            setShowCanceled(true); // revela a linha estornada (riscada) no lugar
+            load(0, false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function VoidModal({
+  row,
+  onClose,
+  onDone,
+  onError,
+}: {
+  row: Row;
+  onClose: () => void;
+  onDone: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const r = reason.trim();
+    if (!r) return onError("Informe o motivo do estorno.");
+    setBusy(true);
+    onError(null);
+    try {
+      const res = await fetch(`/api/vendas/orders/${row.id}/void`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: r }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao estornar a comanda.");
+      onDone();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Erro ao estornar a comanda.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Estornar comanda">
+      <div className="space-y-4">
+        <div className="rounded-lg bg-danger-surface px-3 py-2 text-xs text-danger">
+          Isso <strong>anula a venda</strong> ({formatCentsBRL(row.totalCents)}) e <strong>devolve o
+          estoque</strong> dos produtos rastreados. A comanda some do faturamento. Ação registrada com
+          seu nome — não pode ser desfeita.
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">Motivo do estorno</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            autoFocus
+            rows={3}
+            placeholder="ex.: valor lançado errado, cliente desistiu, item trocado…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={submit} loading={busy} disabled={!reason.trim()}>
+            Estornar venda
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

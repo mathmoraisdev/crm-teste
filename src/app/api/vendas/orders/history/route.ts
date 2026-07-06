@@ -25,9 +25,10 @@ export async function GET(req: NextRequest) {
   const q = sp.get("q") || undefined;
   const skip = Number(sp.get("skip") ?? 0) || 0;
   const take = Math.min(Number(sp.get("take") ?? 50) || 50, 100);
+  const includeCanceled = sp.get("includeCanceled") === "1";
 
   const [page, operators] = await Promise.all([
-    listSalesHistory(ctx.tenantUserId, { from, to, operatorId, query: q, skip, take }),
+    listSalesHistory(ctx.tenantUserId, { from, to, operatorId, query: q, skip, take, includeCanceled }),
     listSalesOperators(ctx.tenantUserId),
   ]);
   return NextResponse.json({ ...page, operators });
