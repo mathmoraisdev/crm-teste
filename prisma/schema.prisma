@@ -215,6 +215,7 @@ model User {
   cashSessionsClosed       CashSession[]            @relation("CashSessionClosedBy")
   cashMovementsCreated     CashMovement[]           @relation("CashMovementCreatedBy")
   quickReplies             QuickReply[]             @relation("QuickReplyAccount")
+  internalNotes            InternalNote[]           @relation("InternalNoteAuthor")
 }
 
 // Resposta rápida (snippet) da CONTA, compartilhada pela equipe. Corpo aceita
@@ -231,6 +232,20 @@ model QuickReply {
 
   @@unique([userId, shortcut])
   @@index([userId])
+}
+
+// Nota interna de operador na conversa. NUNCA é enviada ao cliente — vive e
+// renderiza separada do histórico de WhatsApp. Ligada ao Lead + autor.
+model InternalNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("InternalNoteAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
 }
 
 // Ledger de receita: cada pagamento lançado pelo admin é um registro imutável.
@@ -628,6 +643,7 @@ model Lead {
   queuedAt          DateTime? // entrou na FILA (base do SLA)
   firstResponseAt   DateTime? // 1ª resposta humana após a fila (fecha o SLA)
   lastReadAt        DateTime? // leitura (inbox compartilhado)
+  internalNotes     InternalNote[]
   outboundJobs      OutboundJob[]
   // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
   whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])

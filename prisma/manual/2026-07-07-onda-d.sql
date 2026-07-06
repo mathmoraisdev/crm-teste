@@ -24,3 +24,17 @@ DO $$ BEGIN ALTER TABLE "QuickReply" ADD CONSTRAINT "QuickReply_userId_fkey" FOR
 -- ── Fase 2: Meta de SLA do inbox (no dono) ───────────────────────────────────
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "inboxSlaMinutes" INTEGER;
 -- Conferir: select column_name from information_schema.columns where table_name='User' and column_name='inboxSlaMinutes';
+
+-- ── Fase 3: Notas internas (InternalNote) ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS "InternalNote" (
+    "id" TEXT NOT NULL,
+    "leadId" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "InternalNote_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "InternalNote_leadId_createdAt_idx" ON "InternalNote"("leadId", "createdAt");
+DO $$ BEGIN ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE CASCADE ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- Validar: select to_regclass('public."InternalNote"');
