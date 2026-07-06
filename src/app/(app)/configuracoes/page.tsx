@@ -13,6 +13,7 @@ import { getBranding } from "@/server/services/branding.service";
 import { PosPrintSettings } from "@/components/app/PosPrintSettings";
 import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
+import { VerticalOnboardingWizard } from "@/components/VerticalOnboardingWizard";
 import { getBusinessTemplateId, getInboxSlaMinutes, getLifecycleAutomationEnabled } from "@/server/services/account.service";
 import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
 import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
@@ -88,6 +89,12 @@ export default async function ConfiguracoesPage() {
       {isOwner && (
         <div className="mt-6">
           <BusinessCategorySettings canEdit={canSettings} initial={businessTemplateId} />
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="mt-6">
+          <VerticalOnboardingWizard initial={businessTemplateId} canEdit={canSettings} />
         </div>
       )}
 
