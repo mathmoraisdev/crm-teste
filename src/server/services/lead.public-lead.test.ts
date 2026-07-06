@@ -76,18 +76,28 @@ describe("resolveOrCreatePublicLead", () => {
     expect(db.lead.create).not.toHaveBeenCalled();
   });
 
-  it("sem chip: deduplica por (userId, phone) e cria com whatsAppNumberId null", async () => {
+  it("sem chip: deduplica por (userId, phone) e reusa lead pré-existente", async () => {
     db.whatsAppNumber.findFirst.mockResolvedValue(null); // nenhum chip (conectado ou não)
-    db.lead.findFirst.mockResolvedValue(null);
-    unlimitedAccount();
-    db.lead.create.mockResolvedValue({ id: "L2", name: "Bea" });
+    db.lead.findFirst.mockResolvedValue({ id: "L7", name: "Bea" }); // lead antigo (import)
+    db.lead.findUniqueOrThrow.mockResolvedValue({ id: "L7", name: "Bea" });
 
     const fn = await subject();
     const lead = await fn("acc1", { name: "Bea", phone: PHONE });
 
     expect(db.lead.findFirst.mock.calls[0][0].where).toMatchObject({ userId: "acc1", phone: PHONE });
-    expect(lead).toMatchObject({ id: "L2" });
-    expect(db.lead.create.mock.calls[0][0].data.whatsAppNumberId).toBeNull();
+    expect(lead).toMatchObject({ id: "L7" });
+    expect(db.lead.create).not.toHaveBeenCalled();
+  });
+
+  it("sem chip e sem lead pré-existente → null (walk-in), sem criar contato", async () => {
+    db.whatsAppNumber.findFirst.mockResolvedValue(null);
+    db.lead.findFirst.mockResolvedValue(null);
+
+    const fn = await subject();
+    const lead = await fn("acc1", { name: "Bea", phone: PHONE });
+
+    expect(lead).toBeNull();
+    expect(db.lead.create).not.toHaveBeenCalled();
   });
 
   it("teto de contatos estourado → null (sinal de walk-in), sem criar lead", async () => {

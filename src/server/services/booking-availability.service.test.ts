@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import {
@@ -13,7 +13,12 @@ import {
   listBookableServices,
   listBookableProfessionals,
   getAvailableSlots,
+  confirmBooking,
 } from "./booking-availability.service";
+import { sendWhatsAppMessage } from "./messaging";
+
+// Não dispara WhatsApp de verdade nos testes — só verifica se foi chamado.
+vi.mock("./messaging", () => ({ sendWhatsAppMessage: vi.fn() }));
 
 const TZ = env.SCHEDULING_TIMEZONE;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,10 +29,24 @@ async function makeOwner() {
       email: `bavail_${Math.round(performance.now())}_${Math.random()}@t.test`,
       name: "Dono",
       passwordHash: "x",
+      bookingEnabled: true, // confirmBooking exige a conta ligada
       bookingSlotStep: 30, // grade de 30min p/ asserções limpas
     },
   });
   return u.id;
+}
+
+async function makeChip(accountId: string, status: "CONNECTED" | "PAUSED" = "CONNECTED") {
+  const n = await prisma.whatsAppNumber.create({
+    data: {
+      userId: accountId,
+      label: "chip",
+      phone: `+55119${Math.floor(Math.random() * 100000000)}`,
+      sessionDir: `sess_${Math.round(performance.now())}_${Math.random()}`,
+      status,
+    },
+  });
+  return n.id;
 }
 
 /** Um dia-calendário local seguro (dentro de lead+horizonte) e seus insumos. */
@@ -161,5 +180,106 @@ describe("booking-availability.service — getAvailableSlots", () => {
     // nenhuma WorkingHours cadastrada
     const slots = await getAvailableSlots(acc, { catalogItemId: svc.id, professionalId: pro.id, fromUtc, toUtc });
     expect(slots).toEqual([]);
+  });
+});
+
+describe("booking-availability.service — confirmBooking", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  /** Conta pronta: profissional c/ expediente 09–12 no dia-alvo + serviço 60min. */
+  async function readyAccount() {
+    const acc = await makeOwner();
+    const pro = await createProfessional(acc, { name: "Ana" });
+    const svc = await createCatalogItem(acc, { name: "Corte", priceCents: 5000, kind: "SERVICO", durationMinutes: 60 });
+    const { target } = pickTargetDay();
+    await setWorkingHours(acc, pro.id, [{ weekday: target.weekday, startMinute: H(9), endMinute: H(12) }]);
+    const startISO = zonedWallTimeToUtc(target.year, target.month, target.day, H(10), TZ).toISOString();
+    return { acc, pro, svc, target, startISO };
+  }
+
+  it("cria Appointment ligado ao lead leve e envia confirmação (conta com chip)", async () => {
+    const { acc, pro, svc, startISO } = await readyAccount();
+    await makeChip(acc); // há chip → cria lead + confirma
+
+    const res = await confirmBooking(acc, {
+      catalogItemId: svc.id,
+      professionalId: pro.id,
+      startISO,
+      customerName: "Cliente Fulano",
+      customerPhone: "+5511987654321",
+    });
+
+    expect(res.isWalkIn).toBe(false);
+    expect(res.leadId).toBeTruthy();
+    const appt = await prisma.appointment.findUnique({ where: { id: res.appointmentId } });
+    expect(appt?.leadId).toBe(res.leadId);
+    expect(appt?.professionalId).toBe(pro.id);
+    expect(appt?.scheduledAt.toISOString()).toBe(startISO);
+    // lead leve com a origem correta
+    const lead = await prisma.lead.findUnique({ where: { id: res.leadId! } });
+    expect(lead?.consentSource).toBe("public_booking");
+    // confirmação enviada (mock)
+    expect(sendWhatsAppMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("slot ocupado → CONFLICT e não cria novo agendamento", async () => {
+    const { acc, pro, svc, startISO } = await readyAccount();
+    // ocupa o slot por dentro
+    await createAppointment(acc, {
+      customerName: "Já marcado",
+      scheduledAt: new Date(startISO),
+      professionalId: pro.id,
+      durationMinutes: 60,
+      createdById: acc,
+      force: true,
+    });
+    const before = await prisma.appointment.count({ where: { professionalId: pro.id } });
+
+    await expect(
+      confirmBooking(acc, {
+        catalogItemId: svc.id,
+        professionalId: pro.id,
+        startISO,
+        customerName: "Novo",
+        customerPhone: "+5511911112222",
+      }),
+    ).rejects.toThrow(/CONFLICT/);
+
+    const after = await prisma.appointment.count({ where: { professionalId: pro.id } });
+    expect(after).toBe(before); // nada criado
+  });
+
+  it("fora do horizonte → erro", async () => {
+    const { acc, pro, svc } = await readyAccount();
+    const far = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString(); // 120 dias
+    await expect(
+      confirmBooking(acc, {
+        catalogItemId: svc.id,
+        professionalId: pro.id,
+        startISO: far,
+        customerName: "Zé",
+        customerPhone: "+5511933334444",
+      }),
+    ).rejects.toThrow(/janela/i);
+  });
+
+  it("conta sem chip → walk-in (sem lead) e SEM confirmação", async () => {
+    const { acc, pro, svc, startISO } = await readyAccount();
+    // sem makeChip → sem chip
+
+    const res = await confirmBooking(acc, {
+      catalogItemId: svc.id,
+      professionalId: pro.id,
+      startISO,
+      customerName: "Walk Inn",
+      customerPhone: "+5511955556666",
+    });
+
+    expect(res.isWalkIn).toBe(true);
+    expect(res.leadId).toBeNull();
+    const appt = await prisma.appointment.findUnique({ where: { id: res.appointmentId } });
+    expect(appt?.leadId).toBeNull();
+    expect(appt?.customerName).toBe("Walk Inn");
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled();
   });
 });

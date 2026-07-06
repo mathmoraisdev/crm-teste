@@ -1,11 +1,15 @@
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
+import { formatSlot } from "@/lib/utils";
 import {
   appointmentEnd,
   computeDaySlots,
   enumerateLocalDates,
 } from "@/lib/agenda/availability";
 import { resolveWorkingWindows } from "./professional.service";
+import { conflictsFor, createAppointment } from "./appointment.service";
+import { resolveOrCreatePublicLead } from "./lead.service";
+import { sendWhatsAppMessage } from "./messaging";
 
 /**
  * Disponibilidade pública do auto-agendamento (Onda F). Monta os insumos do banco
@@ -196,4 +200,120 @@ export async function getAvailableSlots(
     return [...byTime.values()];
   }
   return out;
+}
+
+export interface ConfirmBookingInput {
+  catalogItemId: string;
+  professionalId: string; // o slot ofertado sempre carrega um profissional concreto
+  startISO: string;
+  customerName: string;
+  customerPhone: string;
+}
+
+export interface ConfirmBookingResult {
+  appointmentId: string;
+  leadId: string | null;
+  isWalkIn: boolean;
+}
+
+/**
+ * Confirma um agendamento vindo do link público. Revalida no SERVIDOR (não confia
+ * no cliente): conta ligada, serviço com duração, `startISO` dentro de
+ * [notBefore, horizonte]. A criação corre sob `pg_advisory_xact_lock` por
+ * (profissional | horário): dois estranhos disputando o mesmo slot serializam — o
+ * 2º vê o conflito e recebe **CONFLICT:**. Resolve o cliente (lead leve com chip
+ * OU walk-in) e cria pelo MESMO `createAppointment` interno (sem allowOverlap/force
+ * → conflito/expediente continuam barrados no serviço). Se criou lead com chip,
+ * dispara a confirmação por WhatsApp; o lembrete véspera/1h sai depois pelo worker.
+ */
+export async function confirmBooking(
+  accountId: string,
+  input: ConfirmBookingInput,
+): Promise<ConfirmBookingResult> {
+  // 1. revalida conta + serviço + janela temporal
+  const acct = await prisma.user.findUniqueOrThrow({
+    where: { id: accountId },
+    select: { bookingEnabled: true, bookingLeadMinutes: true, bookingHorizonDays: true },
+  });
+  if (!acct.bookingEnabled) throw new Error("Agendamento indisponível.");
+  const service = await resolveBookableService(accountId, input.catalogItemId);
+
+  const start = new Date(input.startISO);
+  if (Number.isNaN(start.getTime())) throw new Error("Horário inválido.");
+  const now = new Date();
+  const notBefore = new Date(now.getTime() + acct.bookingLeadMinutes * 60_000);
+  const horizonEnd = new Date(now.getTime() + acct.bookingHorizonDays * DAY_MS);
+  if (start.getTime() < notBefore.getTime()) {
+    throw new Error("CONFLICT: Esse horário já não está disponível.");
+  }
+  if (start.getTime() > horizonEnd.getTime()) {
+    throw new Error("Fora da janela de agendamento.");
+  }
+
+  // posse do profissional (ativo) — o slot público sempre vem com um profissional.
+  const pro = await prisma.professional.findFirst({
+    where: { id: input.professionalId, accountId, active: true },
+    select: { id: true },
+  });
+  if (!pro) throw new Error("Profissional não encontrado.");
+
+  // 2. guarda anti-corrida + 3./4. resolve cliente e cria — tudo sob a trava do slot.
+  const lockKey = `booking|${input.professionalId}|${input.startISO}`;
+  const created = await prisma.$transaction(async (tx) => {
+    // A trava vive até o fim da transação: enquanto este confirm roda, outro no
+    // MESMO slot fica bloqueado aqui — quando destrava, já vê o agendamento e cai
+    // no CONFLICT. `hashtext` → int4 (cabe no bigint do advisory lock).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+    // Pré-checa o conflito ANTES de resolver o cliente (evita lead órfão no slot tomado).
+    const end = appointmentEnd(start, service.durationMinutes);
+    const conflicts = await conflictsFor(accountId, input.professionalId, start, end);
+    if (conflicts.length > 0) {
+      throw new Error("CONFLICT: Esse horário acabou de ser preenchido.");
+    }
+
+    const lead = await resolveOrCreatePublicLead(accountId, {
+      name: input.customerName,
+      phone: input.customerPhone,
+    });
+
+    const appt = await createAppointment(accountId, {
+      ...(lead
+        ? { leadId: lead.id }
+        : { customerName: input.customerName, customerPhone: input.customerPhone }),
+      scheduledAt: start,
+      catalogItemId: service.id,
+      professionalId: input.professionalId,
+      createdById: accountId, // autoatendimento: a própria conta é a autora
+    });
+    return { appt, lead };
+  });
+
+  // 5. confirmação por WhatsApp — só p/ lead COM chip. Falha aqui não derruba a marcação.
+  if (created.lead?.whatsAppNumberId) {
+    const quando = formatSlot(input.startISO, TZ);
+    try {
+      await sendWhatsAppMessage(
+        {
+          id: created.lead.id,
+          phone: created.lead.phone,
+          userId: accountId,
+          whatsAppNumberId: created.lead.whatsAppNumberId,
+        },
+        `Agendamento confirmado: ${service.name} em ${quando} 😊`,
+        { source: "SYSTEM" },
+      );
+    } catch (e) {
+      console.error(
+        `[booking] confirmação WhatsApp falhou (appt=${created.appt.id}):`,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
+  return {
+    appointmentId: created.appt.id,
+    leadId: created.lead?.id ?? null,
+    isWalkIn: !created.lead,
+  };
 }
