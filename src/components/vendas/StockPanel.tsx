@@ -26,6 +26,11 @@ interface Movement {
   createdAt: string;
 }
 
+interface Valuation {
+  totalValueCents: number;
+  withoutCostCount: number;
+}
+
 const KIND_LABEL: Record<Movement["kind"], string> = {
   ENTRADA: "Entrada",
   SAIDA: "Saída",
@@ -50,12 +55,16 @@ function formatDateTime(iso: string): string {
  */
 export function StockPanel() {
   const [items, setItems] = useState<StockItem[] | null>(null);
+  const [valuation, setValuation] = useState<Valuation | null>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/vendas/stock", { cache: "no-store" });
       const data = await res.json();
-      if (res.ok) setItems(data.items as StockItem[]);
+      if (res.ok) {
+        setItems(data.items as StockItem[]);
+        setValuation((data.valuation ?? null) as Valuation | null);
+      }
     } catch {
       /* mantém estado anterior */
     }
@@ -85,6 +94,20 @@ export function StockPanel() {
           </p>
         ) : (
           <>
+            {valuation && (
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-lg border border-line-default bg-inset px-3 py-2.5">
+                <span className="text-sm text-slate-500">
+                  Valor em estoque{" "}
+                  <span className="font-semibold text-ink">{formatCentsBRL(valuation.totalValueCents)}</span>
+                </span>
+                {valuation.withoutCostCount > 0 && (
+                  <span className="text-xs text-slate-400">
+                    {valuation.withoutCostCount}{" "}
+                    {valuation.withoutCostCount === 1 ? "item sem custo" : "itens sem custo"} — valor parcial
+                  </span>
+                )}
+              </div>
+            )}
             {lowCount > 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
                 <AlertTriangle size={16} className="shrink-0" />
