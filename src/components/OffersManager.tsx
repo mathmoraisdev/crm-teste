@@ -27,6 +27,11 @@ export function OffersManager({ numberId }: { numberId: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sugestão de ofertas do ramo (seed inativo a partir do template).
+  const [seeding, setSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
+
   // Edição inline de uma oferta existente.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -71,6 +76,25 @@ export function OffersManager({ numberId }: { numberId: string }) {
       setError(e instanceof Error ? e.message : "Erro ao criar oferta.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function seedPreset() {
+    setSeedError(null);
+    setSeedMessage(null);
+    setSeeding(true);
+    try {
+      const res = await fetch(`/api/numbers/${numberId}/offers/seed-preset`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Não foi possível sugerir ofertas.");
+      const created = Number(data?.created ?? 0);
+      const skipped = Number(data?.skipped ?? 0);
+      setSeedMessage(`${created} oferta(s) criada(s), ${skipped} já existente(s). Revise e ative.`);
+      await load();
+    } catch (e) {
+      setSeedError(e instanceof Error ? e.message : "Não foi possível sugerir ofertas.");
+    } finally {
+      setSeeding(false);
     }
   }
 
@@ -255,6 +279,21 @@ export function OffersManager({ numberId }: { numberId: string }) {
       <div className="flex justify-end">
         <Button onClick={addOffer} loading={saving} disabled={!name.trim() || !price.trim()}>
           Adicionar oferta
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-default pt-2.5">
+        <div className="min-w-0 text-xs">
+          {seedError ? (
+            <span className="text-danger">{seedError}</span>
+          ) : seedMessage ? (
+            <span className="text-slate-500">{seedMessage}</span>
+          ) : (
+            <span className="text-slate-400">Comece pelo catálogo típico do seu ramo (entram inativas).</span>
+          )}
+        </div>
+        <Button variant="secondary" size="sm" onClick={seedPreset} loading={seeding}>
+          Sugerir ofertas do meu ramo
         </Button>
       </div>
     </div>
