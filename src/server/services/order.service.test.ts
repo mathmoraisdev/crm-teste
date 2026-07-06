@@ -4,6 +4,7 @@ import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
 import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData } from "./order.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
+import { openSession } from "./cash-session.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({
@@ -387,5 +388,25 @@ describe("customFields por item da comanda", () => {
     const withItem = await addItem(acc, o.id, { catalogItemId: veiculo.id, quantity: 1 });
     await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
     await expect(setOrderItemCustomFields(acc, o.id, withItem.items[0].id, { placa: "X" })).rejects.toThrow(/fechada/i);
+  });
+});
+
+describe("closeOrder — carimbo da sessão de caixa", () => {
+  it("com sessão ABERTA, a comanda referencia o cashSessionId", async () => {
+    const acc = await makeOwner();
+    const s = await openSession(acc, acc, 10000);
+    const o = await openOrder(acc, { openedById: acc, customerName: "A" });
+    await addItem(acc, o.id, { name: "X", unitPriceCents: 4000, quantity: 1 });
+    await closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 4000 }], closedById: acc });
+    expect((await prisma.order.findUnique({ where: { id: o.id } }))!.cashSessionId).toBe(s.id);
+  });
+
+  it("sem sessão aberta, fecha igual com cashSessionId=null (fora de sessão)", async () => {
+    const acc = await makeOwner();
+    const o = await openOrder(acc, { openedById: acc, customerName: "B" });
+    await addItem(acc, o.id, { name: "Y", unitPriceCents: 4000, quantity: 1 });
+    const full = await closeOrder(acc, o.id, { tenders: [{ method: "DINHEIRO", amountCents: 4000 }], closedById: acc });
+    expect(full.status).toBe("FECHADA");
+    expect((await prisma.order.findUnique({ where: { id: o.id } }))!.cashSessionId).toBeNull();
   });
 });

@@ -276,6 +276,14 @@ export async function closeOrder(
   for (let attempt = 0; ; attempt++) {
     try {
       await prisma.$transaction(async (tx) => {
+        // Sessão de caixa: a comanda carimba a sessão ABERTA da conta (se houver);
+        // sem sessão, fecha igual com cashSessionId=null ("fora de sessão") — dinheiro
+        // nunca é bloqueado ([[caixa-despesas-reposicionamento]]). O lookup fica na tx.
+        const openSession = await tx.cashSession.findFirst({
+          where: { accountId, status: "ABERTA" },
+          select: { id: true },
+        });
+
         // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
         // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
         // e aborta ANTES da baixa/tenders, evitando decremento/SAIDA/tender em dobro.
@@ -284,6 +292,7 @@ export async function closeOrder(
           data: {
             status: "FECHADA", payment, note: data.note?.trim() || null, closedAt: new Date(),
             amountTenderedCents: amountTendered, changeCents,
+            cashSessionId: openSession?.id ?? null,
           },
         });
         if (res.count === 0) throw new Error("Comanda já fechada.");
