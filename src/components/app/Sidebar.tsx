@@ -3,28 +3,22 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, UsersRound, Contact, Send, Building2, CalendarClock, Smartphone, Settings, LogOut, Wallet, Menu, X, LayoutDashboard, Inbox, Headset, Receipt } from "lucide-react";
+import { Smartphone, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
-
-// Menu dividido por categorias. `show` (opcional) esconde o item;
-// grupo sem itens visíveis não renderiza o cabeçalho.
-type NavItem = {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  badge?: "inbox" | "financeiro" | "consultores" | "agenda"; // qual contador alimenta o badge deste item
-  show?: boolean;
-};
+import { buildNav } from "@/lib/nav";
+import type { BusinessCategory } from "@/lib/business-templates";
 
 export function Sidebar({
   isAdmin = false,
   isAccountAdmin = false,
+  category = null,
   branding,
 }: {
-  isAdmin?: boolean; // admin DA PLATAFORMA (Financeiro)
+  isAdmin?: boolean; // admin DA PLATAFORMA (Administração)
   isAccountAdmin?: boolean; // dono/ADMIN DA CONTA (Equipe)
+  category?: BusinessCategory | null; // ramo da conta (Fase 3); null = mostra tudo
   branding?: { logoUrl: string | null; appName: string }; // marca da conta (null = padrão)
 }) {
   const pathname = usePathname();
@@ -120,38 +114,9 @@ export function Sidebar({
       clearInterval(t);
     };
   }, [isAdmin, pathname]);
-  // Equipe é do dono da conta; Financeiro é do admin da plataforma.
-  const navGroups = ([
-    {
-      title: "Atendimento",
-      items: [
-        { href: "/painel", label: "Painel", icon: LayoutDashboard },
-        { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
-        { href: "/leads", label: "Leads", icon: Users },
-        { href: "/clientes", label: "Clientes", icon: Contact },
-      ],
-    },
-    {
-      title: "Crescimento",
-      items: [
-        { href: "/campaigns", label: "Campanhas", icon: Send },
-        { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda" },
-      ],
-    },
-    {
-      title: "Gestão",
-      items: [
-        { href: "/empresas", label: "Empresas", icon: Building2 },
-        { href: "/caixa", label: "Caixa", icon: Receipt },
-        { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
-        { href: "/consultores", label: "Consultores", icon: Headset, badge: "consultores", show: isAdmin },
-        { href: "/financeiro", label: "Financeiro", icon: Wallet, badge: "financeiro", show: isAdmin },
-        { href: "/configuracoes", label: "Configurações", icon: Settings },
-      ],
-    },
-  ] as { title: string; items: NavItem[] }[])
-    .map((g) => ({ ...g, items: g.items.filter((i) => i.show !== false) }))
-    .filter((g) => g.items.length > 0);
+  // Estrutura de navegação vem de `buildNav` (dado puro, testável). Equipe é do
+  // dono da conta; Administração é do admin da plataforma.
+  const navGroups = buildNav({ isAdmin, isAccountAdmin, category });
 
   // Fecha o drawer ao navegar (mobile).
   useEffect(() => {
