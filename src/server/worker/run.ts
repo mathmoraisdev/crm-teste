@@ -8,6 +8,7 @@ import { dispatchDueReminders } from "@/server/services/meeting-reminders";
 import { dispatchDueAppointmentReminders } from "@/server/services/appointment-reminders";
 import { purgeExpiredMedia } from "@/server/services/media-retention";
 import { dispatchLifecycleAutomations } from "@/server/services/lifecycle-automation";
+import { dispatchPendingFiscalEmissions } from "@/server/services/fiscal-emission";
 import { reconcileAiResume } from "@/server/services/conversation.service";
 import { scheduleResponse } from "./respond-queue";
 import { sleep } from "@/lib/humanize";
@@ -147,6 +148,7 @@ async function main() {
   let lastAiResume = 0;
   let lastRetention = 0;
   let lastLifecycle = 0;
+  let lastFiscal = 0;
   while (true) {
     // Heartbeat: prova de vida do worker p/ a rota de health (deploy travado/crash).
     const beat = new Date();
@@ -228,6 +230,20 @@ async function main() {
         logger.error({ err }, "[worker] dispatchLifecycleAutomations falhou");
       }
       lastLifecycle = Date.now();
+    }
+
+    // Emissão fiscal (NFC-e). No-op se FISCAL_EMISSION=false (kill-switch) — sobe
+    // inerte. Throttle próprio (default 1 min): SEFAZ é lento, não precisa a cada
+    // poll. Try/catch próprio: falha aqui não derruba os outros ticks. Roda nos dois
+    // modos (baileys/cloud).
+    if (Date.now() - lastFiscal >= env.FISCAL_EVERY_MS) {
+      try {
+        const n = await dispatchPendingFiscalEmissions(new Date());
+        if (n > 0) logger.info({ resolved: n }, "[worker] emissões fiscais resolvidas");
+      } catch (err) {
+        logger.error({ err }, "[worker] dispatchPendingFiscalEmissions falhou");
+      }
+      lastFiscal = Date.now();
     }
 
     // Devolve a IA à conversa quando o operador retoma (handback/resolve) ou o
