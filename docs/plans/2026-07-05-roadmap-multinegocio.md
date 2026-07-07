@@ -49,6 +49,13 @@ não paga o cheque. Este roadmap fecha essa distância.
 > `CustomFieldDef`, `CatalogItem`, `Offer`). **Sem `prisma/manual/*.sql`, sem `db push` — PROD = só deploy de código.**
 >
 > ² **Iniciativa 10 = FEITO em dev** (`db push` local + testes verdes + E2E do toggle). **PROD pendente**: aplicar a seção da iniciativa 10 do `onda-e.sql` no Supabase (idempotente, `IF NOT EXISTS` — pode aplicar o arquivo inteiro), deploy web (leva a toggle) + `git pull`/restart do worker (leva o tick, sobe inerte). Ligar **gradual**: `LIFECYCLE_AUTOMATION=true` + `LIFECYCLE_POSTSALE_HOURS=2` numa conta piloto com opt-in → depois NPS → **reengajamento por último** (cold-ish).
+>
+> ⁴ **Iniciativa 12 = plano escrito** (`2026-07-11-catalogo-estoque-avancado.md`). **Onda G composta**: além do previsto
+> `CatalogItem.barcode` (12.2), o plano resolve a variação como **SKU flat** — `CatalogItem.variantGroup` (rótulo de
+> grade; **`ItemVariant` relacional ADIADO** por reuso total do estoque/venda por linha) — e adiciona **`OrderItem.unitCostCents`**
+> (*desvio consciente:* snapshot de custo por linha p/ a **margem realizada**, no mesmo padrão de `commissionCents`, já que
+> o custo do catálogo muda e o item pode ser excluído). Valorização/margem potencial reusam `CatalogItem.costCents` (**sem
+> schema**). Um único `prisma/manual/2026-07-11-onda-g.sql` idempotente; PROD = SQL + deploy de código.
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
@@ -56,7 +63,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **FEITO (dev)** ² (motor puro + serviço idempotente + tick no worker + opt-in por conta na UI; `onda-e.sql` composto/append, PROD a aplicar; sobe **inerte** — off até `LIFECYCLE_AUTOMATION`=true **e** opt-in da conta) |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D (**sem schema**) | **P3** | `2026-07-10-verticais-unificadas.md` — **FEITO (dev)** ³ (conteúdo + wizard de orquestração; 10 commits em master; gate verde 780 testes; **PROD = só deploy de código**) |
-| 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` |
+| 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` — **plano escrito, pronto p/ executar** ⁴ |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
 
 ---
@@ -101,8 +108,14 @@ tocam o schema **compõem** o mesmo arquivo (como estoque×despesas já fizeram)
   (profissional creditado por linha) — sem ele o relatório teria de re-derivar o profissional do
   agendamento em leitura (frágil: agendamento pode sumir; comanda avulsa não tem agendamento). Depende
   de `Professional`/`WorkingHours`/`durationMinutes` (Onda C).
-- **Onda G** (iniciativa 12): `CatalogItem.barcode String?`; model **`ItemVariant`** (grade/tamanho)
-  ou manter SKU flat (decisão no plano filho).
+- **Onda G** (iniciativa 12): **um** `prisma/manual/2026-07-11-onda-g.sql` idempotente e composto pelas 3 fases.
+  `CatalogItem.barcode String?` (**`@@unique([accountId, barcode])`** — NULLs coexistem, padrão de `Order.number`).
+  **Decisão do plano filho: SKU flat** — `CatalogItem.variantGroup String?` (rótulo de grade; variação = outra
+  `CatalogItem` agrupada) — o model **`ItemVariant`** relacional fica **ADIADO** (reusa 100% do estoque/venda/barcode
+  por linha; promover só se surgir demanda por matriz cor×tamanho). *Desvio consciente:* também **`OrderItem.unitCostCents`**
+  (snapshot de custo por linha no fechamento, p/ a **margem realizada** — o mestre não previa, mas segue o padrão de
+  `commissionCents`/`professionalId`: custo do catálogo muda e o item pode ser excluído, então re-derivar ao vivo é frágil).
+  A **valorização** e a **margem potencial** reusam `CatalogItem.costCents` já existente — sem schema.
 - **Onda H** (iniciativa 13): `Order.fiscalStatus`, `Order.fiscalDocId`, credenciais do emissor
   cifradas em `User` (padrão BYOK — [[strong-model-byok-only]]).
 
@@ -293,12 +306,20 @@ Destrava **beleza, saúde, fitness** (a maior fatia dos 63 modelos):
 - **Schema:** nenhum (é conteúdo em `src/lib/business-templates.ts` + `src/lib/theme/presets.ts`).
 - **Dependência:** independe; melhor **depois** de POS/Agenda (os presets referenciam campos reais).
 
-### 12. Catálogo/estoque++
-- **Fases:** (12.1) valorização de estoque (Σ qtd×custo) e relatório de margem (dados `costCents`/
-  `unitCostCents` já existem, nunca exibidos) → (12.2) código de barras/EAN + busca por código no
-  caixa → (12.3) variações/grade (tamanho/cor) — decidir model `ItemVariant` vs SKU flat.
-- **Schema (Onda G):** `CatalogItem.barcode`; opcional `ItemVariant`.
-- **Dependência:** independe; alto valor pra varejo.
+### 12. Catálogo/estoque++ — **plano completo em `2026-07-11-catalogo-estoque-avancado.md`**
+- **Fases:** (12.1) valorização de estoque (Σ qtd×custo) + **margem** — potencial no catálogo (preço−custo, %,
+  reusa `costCents`, **sem schema**) e **realizada** por período (snapshot `OrderItem.unitCostCents` no
+  fechamento) → (12.2) código de barras/EAN (`CatalogItem.barcode` único por conta) + **bipar** no caixa
+  (lookup → adiciona à comanda) → (12.3) variações/grade via **SKU flat** (`CatalogItem.variantGroup` agrupa;
+  cada variação continua uma `CatalogItem` com estoque/preço/barcode próprios).
+- **Schema (Onda G):** `CatalogItem.barcode` (+`@@unique([accountId, barcode])`), `CatalogItem.variantGroup`,
+  `OrderItem.unitCostCents`. **`ItemVariant` relacional ADIADO** (decisão travada no plano filho). Um único
+  `prisma/manual/2026-07-11-onda-g.sql` composto.
+- **Arquivos-chave:** novo `src/lib/margin.ts` (puro), novo `stock-valuation.service.ts`, `sales-report.service.ts`
+  (`salesMargin`), `order.service.ts` (snapshot no `closeOrder`), `catalog.service.ts` (barcode/variantGroup +
+  `findByBarcode`), `CatalogManager.tsx`/`OrderBoard.tsx`/`StockPanel.tsx`/`ReportsPanel.tsx`.
+- **Dependência:** independe; alto valor pra varejo. **Custo ausente** conta como 0 mas é **exibido** como
+  parcial (nunca margem/valor otimista silencioso).
 
 ### 13. Fiscal NFC-e (emissor terceiro)
 - **Objetivo:** emissão fiscal **opt-in por conta**, sem construir SEFAZ do zero.
