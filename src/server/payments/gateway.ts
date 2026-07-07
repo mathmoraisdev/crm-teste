@@ -1,6 +1,7 @@
 import type { PaymentProvider } from "@prisma/client";
 import { asaasGateway } from "./asaas";
 import { mercadoPagoGateway } from "./mercadopago";
+import { pagBankGateway } from "./pagbank";
 
 export interface CreatePixChargeInput {
   apiKey: string;
@@ -28,5 +29,13 @@ export interface PaymentGateway {
 }
 
 export function gatewayFor(provider: PaymentProvider): PaymentGateway {
-  return provider === "ASAAS" ? asaasGateway : mercadoPagoGateway;
+  switch (provider) {
+    case "ASAAS":
+      return asaasGateway;
+    case "PAGBANK":
+      return pagBankGateway;
+    case "MERCADO_PAGO":
+    default:
+      return mercadoPagoGateway;
+  }
 }

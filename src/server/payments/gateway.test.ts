@@ -30,8 +30,10 @@ describe("gatewayFor", () => {
     const { gatewayFor } = await import("./gateway");
     const { asaasGateway } = await import("./asaas");
     const { mercadoPagoGateway } = await import("./mercadopago");
+    const { pagBankGateway } = await import("./pagbank");
     expect(gatewayFor("ASAAS")).toBe(asaasGateway);
     expect(gatewayFor("MERCADO_PAGO")).toBe(mercadoPagoGateway);
+    expect(gatewayFor("PAGBANK")).toBe(pagBankGateway);
   });
 });
 
