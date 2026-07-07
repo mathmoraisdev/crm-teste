@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Smartphone, LogOut, Menu, X, ChevronRight } from "lucide-react";
+import { LogOut, Menu, X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
@@ -246,18 +246,6 @@ export function Sidebar({
         </nav>
 
         <div className="mt-3 flex flex-none flex-col gap-2.5 border-t border-white/[.06] pt-3">
-          <Link
-            href="/empresas"
-            className="rounded-2xl border border-white/[.07] bg-white/[.04] p-3.5 transition-colors hover:bg-white/[.07]"
-          >
-            <span className="flex items-center gap-2 text-[12.5px] font-bold text-white">
-              <Smartphone size={14} className="text-mint" /> Empresas &amp; atendimentos
-            </span>
-            <span className="mt-1 block font-mono text-[11.5px] text-white/70">
-              Conectar &amp; gerenciar chips
-            </span>
-          </Link>
-
           <ThemeToggle />
 
           <button
