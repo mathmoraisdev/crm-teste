@@ -11,19 +11,9 @@ import { CustomFieldsManager } from "@/components/CustomFieldsManager";
 import { PipelineLabelsManager } from "@/components/PipelineLabelsManager";
 import { BrandingSettings } from "@/components/app/BrandingSettings";
 import { getBranding } from "@/server/services/branding.service";
-import { PosPrintSettings } from "@/components/app/PosPrintSettings";
-import { getPosSettings } from "@/server/services/pos-settings.service";
 import { BusinessCategorySettings } from "@/components/app/BusinessCategorySettings";
 import { VerticalOnboardingWizard } from "@/components/VerticalOnboardingWizard";
-import { getBusinessTemplateId, getInboxSlaMinutes, getLifecycleAutomationEnabled } from "@/server/services/account.service";
-import { QuickRepliesSettings } from "@/components/inbox/QuickRepliesSettings";
-import { InboxSlaSettings } from "@/components/inbox/InboxSlaSettings";
-import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
-import { CommissionSettings } from "@/components/app/CommissionSettings";
-import { MediaLibrarySettings } from "@/components/app/MediaLibrarySettings";
-import { BookingSettings } from "@/components/app/BookingSettings";
-import { getBookingSettings, getBookingReadiness } from "@/server/services/booking-settings.service";
-import { LifecycleSettings } from "@/components/app/LifecycleSettings";
+import { getBusinessTemplateId } from "@/server/services/account.service";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -46,28 +36,22 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, fiscalKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness, lifecycleEnabled] = await Promise.all([
+  const [aiUsage, paymentKey, fiscalKey, salesAllowed, branding, businessTemplateId] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
-    getFiscalCredentialStatus(ownerId), // credencial/perfil fiscal é do dono
+    getFiscalCredentialStatus(ownerId), // credencial/perfil fiscal é do dono (BYOK dentro de AccountSettings)
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
     getBranding(ownerId), // identidade visual da conta (só o dono edita)
     getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
-    getPosSettings(ownerId), // config de impressão de cupom (só o dono edita)
-    getInboxSlaMinutes(ownerId), // meta de SLA do inbox (só o dono edita)
-    getBookingSettings(ownerId), // agendamento online (só o dono edita)
-    getBookingReadiness(ownerId), // se há profissional c/ expediente + serviço c/ duração
-    getLifecycleAutomationEnabled(ownerId), // opt-in das automações de ciclo de vida (só o dono edita)
   ]);
-  const bookingPublicUrl = bookingSettings.publicSlug
-    ? `${env.APP_URL}/agendar/${bookingSettings.publicSlug}`
-    : null;
 
   return (
     <div className="mx-auto max-w-[720px]">
       <header className="mb-7">
         <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink sm:text-[26px]">Configurações</h1>
-        <p className="mt-1 text-sm text-slate-500">Gerencie sua conta, seus dados e suas preferências.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Config global da conta. A config de cada módulo mora dentro dele (Agenda, Atendimento, Caixa).
+        </p>
       </header>
 
       <AccountSettings
@@ -114,12 +98,6 @@ export default async function ConfiguracoesPage() {
         </div>
       )}
 
-      {isOwner && (
-        <div className="mt-6">
-          <PosPrintSettings initial={posSettings} />
-        </div>
-      )}
-
       <div className="mt-6">
         <CustomFieldsManager canEdit={canSettings} businessTemplateId={businessTemplateId} />
       </div>
@@ -127,51 +105,6 @@ export default async function ConfiguracoesPage() {
       <div className="mt-6">
         <PipelineLabelsManager canEdit={canSettings} />
       </div>
-
-      {(isOwner || canSettings) && (
-        <div className="mt-6">
-          <ProfessionalsSettings canEdit={canSettings} />
-        </div>
-      )}
-
-      {/* Comissão é dado de dono (gate canSettings na API); só aparece pra quem edita. */}
-      {canSettings && (
-        <div className="mt-6">
-          <CommissionSettings canEdit={canSettings} />
-        </div>
-      )}
-
-      {isOwner && (
-        <div className="mt-6">
-          <BookingSettings
-            initial={{ ...bookingSettings, publicUrl: bookingPublicUrl }}
-            readiness={bookingReadiness}
-            canEdit={canSettings}
-          />
-        </div>
-      )}
-
-      <div className="mt-6">
-        <QuickRepliesSettings canEdit={canSettings} />
-      </div>
-
-      {(isOwner || canSettings) && (
-        <div className="mt-6">
-          <MediaLibrarySettings canEdit={canSettings} />
-        </div>
-      )}
-
-      {isOwner && (
-        <div className="mt-6">
-          <InboxSlaSettings initial={inboxSla} canEdit={canSettings} />
-        </div>
-      )}
-
-      {isOwner && (
-        <div className="mt-6">
-          <LifecycleSettings initial={lifecycleEnabled} canEdit={canSettings} />
-        </div>
-      )}
     </div>
   );
 }
