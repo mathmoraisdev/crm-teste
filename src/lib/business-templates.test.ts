@@ -187,7 +187,7 @@ describe("customFieldsPreset", () => {
   it("todo item de preset é bem-formado (scope/label/type)", () => {
     for (const t of withPreset) {
       for (const f of t.customFieldsPreset!) {
-        expect(["ORDER", "ORDER_ITEM"], `scope inválido em ${t.id}`).toContain(f.scope);
+        expect(["ORDER", "ORDER_ITEM", "PRODUCT"], `scope inválido em ${t.id}`).toContain(f.scope);
         expect(["TEXT", "NUMBER", "DATE", "SELECT", "BOOLEAN"], `type inválido em ${t.id}`).toContain(f.type);
         expect(f.label.trim(), `label vazio em ${t.id}`).not.toBe("");
         if (f.type === "SELECT") expect(f.options?.length, `SELECT sem options em ${t.id}`).toBeGreaterThan(0);
@@ -267,5 +267,13 @@ describe("catalogPreset (estruturado)", () => {
   it("sem catalogPreset, a heurística segue valendo (salao-beleza scrape)", () => {
     const names = catalogSeedItems(getTemplate("salao-beleza")!).map((i) => i.name);
     expect(names.length).toBeGreaterThan(0);
+  });
+
+  it("revenda-veiculos e imobiliaria têm ficha técnica (PRODUCT)", () => {
+    for (const id of ["revenda-veiculos", "imobiliaria"]) {
+      const tpl = BUSINESS_TEMPLATES.find((t) => t.id === id)!;
+      const prod = (tpl.customFieldsPreset ?? []).filter((f) => f.scope === "PRODUCT");
+      expect(prod.length).toBeGreaterThan(0);
+    }
   });
 });

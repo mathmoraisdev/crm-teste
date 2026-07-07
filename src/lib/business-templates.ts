@@ -65,7 +65,7 @@ export interface BusinessTemplate {
   // Campos personalizados sugeridos pelo ramo (semeados na comanda do Caixa via
   // seedCustomFieldPreset). Escopo ORDER (comanda) ou ORDER_ITEM (por item).
   customFieldsPreset?: {
-    scope: "ORDER" | "ORDER_ITEM";
+    scope: "ORDER" | "ORDER_ITEM" | "PRODUCT";
     label: string;
     type: "TEXT" | "NUMBER" | "DATE" | "SELECT" | "BOOLEAN";
     options?: string[];
@@ -662,6 +662,14 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
       { scope: "ORDER_ITEM", label: "Ano/Modelo", type: "TEXT" },
       { scope: "ORDER_ITEM", label: "KM", type: "NUMBER" },
       { scope: "ORDER_ITEM", label: "Cor", type: "TEXT" },
+      // Ficha técnica do anúncio (galeria + specs do item de catálogo).
+      { scope: "PRODUCT", label: "Marca", type: "TEXT" },
+      { scope: "PRODUCT", label: "Modelo", type: "TEXT" },
+      { scope: "PRODUCT", label: "Ano", type: "NUMBER" },
+      { scope: "PRODUCT", label: "KM", type: "NUMBER" },
+      { scope: "PRODUCT", label: "Cor", type: "TEXT" },
+      { scope: "PRODUCT", label: "Câmbio", type: "SELECT", options: ["Manual", "Automático"] },
+      { scope: "PRODUCT", label: "Combustível", type: "SELECT", options: ["Flex", "Gasolina", "Diesel", "Elétrico", "Híbrido"] },
     ],
   },
   {
@@ -1867,6 +1875,13 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
       { scope: "ORDER_ITEM", label: "Código do imóvel", type: "TEXT" },
       { scope: "ORDER_ITEM", label: "Endereço", type: "TEXT" },
       { scope: "ORDER_ITEM", label: "Finalidade", type: "SELECT", options: ["Venda", "Aluguel"] },
+      // Ficha técnica do anúncio (galeria + specs do imóvel no catálogo).
+      { scope: "PRODUCT", label: "Tipo", type: "SELECT", options: ["Casa", "Apartamento", "Terreno", "Comercial"] },
+      { scope: "PRODUCT", label: "Quartos", type: "NUMBER" },
+      { scope: "PRODUCT", label: "Banheiros", type: "NUMBER" },
+      { scope: "PRODUCT", label: "Área (m²)", type: "NUMBER" },
+      { scope: "PRODUCT", label: "Vagas", type: "NUMBER" },
+      { scope: "PRODUCT", label: "Cidade/Bairro", type: "TEXT" },
     ],
     pipelineLabels: { OFERTA_ENVIADA: "Proposta enviada", PAGO: "Negócio fechado" },
   },
