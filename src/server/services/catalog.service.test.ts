@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
-import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode } from "./catalog.service";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode, setCatalogItemCustomFields } from "./catalog.service";
+import { createDef } from "@/server/services/custom-field.service";
 
 // Cria um usuário-dono descartável por teste (isolamento).
 async function makeOwner() {
@@ -145,5 +146,28 @@ describe("catalog.service", () => {
     expect(p.variantGroup).toBe("Camiseta");
     const cleared = await updateCatalogItem(acc, p.id, { variantGroup: null });
     expect(cleared.variantGroup).toBeNull();
+  });
+
+  it("grava specs (PRODUCT) no item e valida chave desconhecida", async () => {
+    const a = await makeOwner();
+    await createDef(a, { label: "Ano", type: "NUMBER", scope: "PRODUCT" });
+    await createDef(a, { label: "Cor", type: "TEXT", scope: "PRODUCT" });
+    const item = await createCatalogItem(a, { name: "Onix 2019", priceCents: 5490000, kind: "PRODUTO" });
+
+    const upd = await setCatalogItemCustomFields(a, item.id, { ano: 2019, cor: "Prata" });
+    expect(upd.customFields).toEqual({ ano: 2019, cor: "Prata" });
+
+    // chave desconhecida (não existe def PRODUCT com essa key) → erro
+    await expect(
+      setCatalogItemCustomFields(a, item.id, { placa: "ABC1D23" }),
+    ).rejects.toThrow();
+  });
+
+  it("não deixa gravar specs em item de outra conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createDef(a, { label: "Ano", type: "NUMBER", scope: "PRODUCT" });
+    const item = await createCatalogItem(a, { name: "Carro", priceCents: 100, kind: "PRODUTO" });
+    await expect(setCatalogItemCustomFields(b, item.id, { ano: 2020 })).rejects.toThrow();
   });
 });

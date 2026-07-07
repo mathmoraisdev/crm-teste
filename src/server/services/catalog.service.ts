@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import type { CatalogItemKind } from "@prisma/client";
 import { getTemplate, catalogSeedItems } from "@/lib/business-templates";
+import { mergeCustomFields } from "@/server/services/custom-field.service";
 
 export interface CatalogItemDTO {
   id: string;
@@ -19,6 +20,7 @@ export interface CatalogItemDTO {
   costCents: number | null;
   printSector: string | null;
   durationMinutes: number | null;
+  customFields: Record<string, unknown> | null;
 }
 
 const upsertSchema = z.object({
@@ -52,12 +54,13 @@ function rethrowCatalog(e: unknown): never {
 function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
   trackStock: boolean; sku: string | null; barcode: string | null; variantGroup: string | null; stockQty: number; minStock: number; costCents: number | null;
-  printSector: string | null; durationMinutes: number | null;
+  printSector: string | null; durationMinutes: number | null; customFields: Prisma.JsonValue | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
     trackStock: o.trackStock, sku: o.sku, barcode: o.barcode, variantGroup: o.variantGroup, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
     printSector: o.printSector, durationMinutes: o.durationMinutes,
+    customFields: (o.customFields as Record<string, unknown> | null) ?? null,
   };
 }
 
@@ -182,4 +185,30 @@ export async function seedCatalogFromTemplate(accountId: string, templateId: str
     data: seeds.map((s) => ({ accountId, name: s.name, priceCents: priceByName.get(s.name) ?? 0, kind: s.kind })),
   });
   return listCatalogItems(accountId);
+}
+
+// Grava a ficha técnica (specs) do item — valores dos CustomFieldDef scope=PRODUCT.
+// Valida posse, mescla/coage via mergeCustomFields (chave desconhecida → erro;
+// valor vazio → remove a chave). Retorna o DTO atualizado.
+export async function setCatalogItemCustomFields(
+  accountId: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<CatalogItemDTO> {
+  const owned = await prisma.catalogItem.findFirst({
+    where: { id, accountId },
+    select: { id: true, customFields: true },
+  });
+  if (!owned) throw new Error("Item não encontrado.");
+  const merged = await mergeCustomFields(
+    accountId,
+    owned.customFields ?? null,
+    patch,
+    "PRODUCT",
+  );
+  const row = await prisma.catalogItem.update({
+    where: { id },
+    data: { customFields: merged as Prisma.InputJsonValue },
+  });
+  return toDTO(row);
 }
