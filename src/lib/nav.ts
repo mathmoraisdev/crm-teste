@@ -47,7 +47,10 @@ export type NavCtx = {
 
 // Descreve um item com o papel/condição que o torna visível. `show`
 // undefined ⇒ sempre visível. O filtro por papel vive DENTRO de buildNav.
-type NavItemSpec = NavItem & { show?: boolean };
+// `show` = gate por papel/ramo hard (item some se false). `key` = módulo
+// "primário" cuja relevância varia por ramo: se não visível, o item não some —
+// cai no grupo "Mais" (colapsável). Os dois campos são internos ao buildNav.
+type NavItemSpec = NavItem & { show?: boolean; key?: string };
 
 // Regra de visibilidade por ramo (Fase 3). Só os módulos "primários" cujo uso
 // varia por ramo têm regra; os demais (sem entrada aqui) aparecem sempre.
@@ -94,7 +97,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
       items: [
         { href: "/painel", label: "Painel", icon: LayoutDashboard },
         { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
-        { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda" },
+        { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda", key: "agenda" },
         { href: "/caixa", label: "Caixa", icon: Receipt },
         { href: "/producao", label: "Produção", icon: ChefHat, show: isFood },
       ],
@@ -112,7 +115,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
       title: "Catálogo & Estoque",
       items: [
         { href: "/catalogo", label: "Catálogo", icon: Package },
-        { href: "/estoque", label: "Estoque", icon: Boxes },
+        { href: "/estoque", label: "Estoque", icon: Boxes, key: "estoque" },
       ],
     },
     {
@@ -133,10 +136,27 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
     },
   ];
 
-  return groups
+  // Itens de módulo fora do ramo não somem: são coletados aqui e reaparecem no
+  // grupo "Mais" (colapsável na UI). Itens de papel (show) e sem key nunca vão.
+  const mais: NavItem[] = [];
+  const strip = ({ show: _show, key: _key, ...item }: NavItemSpec): NavItem => item;
+
+  const built = groups
     .map((g) => ({
       title: g.title,
-      items: g.items.filter((i) => i.show !== false).map(({ show: _show, ...item }) => item),
+      items: g.items
+        .filter((i) => i.show !== false)
+        .filter((i) => {
+          if (i.key && !moduleVisibleFor(category, i.key)) {
+            mais.push(strip(i));
+            return false;
+          }
+          return true;
+        })
+        .map(strip),
     }))
     .filter((g) => g.items.length > 0);
+
+  if (mais.length > 0) built.push({ title: "Mais", items: mais });
+  return built;
 }

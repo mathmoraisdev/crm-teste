@@ -49,3 +49,17 @@ describe("moduleVisibleFor", () => {
     expect(moduleVisibleFor(null, "producao")).toBe(true);
   });
 });
+
+describe("buildNav — adaptação por ramo", () => {
+  it("módulo fora do ramo vai para 'Mais', não some", () => {
+    const groups = buildNav({ isAdmin: false, isAccountAdmin: false, category: "servicos-pro" });
+    const principais = groups.filter((g) => g.title !== "Mais").flatMap((g) => g.items);
+    expect(principais.some((i) => i.href === "/estoque")).toBe(false);
+    const mais = groups.find((g) => g.title === "Mais");
+    expect(mais?.items.some((i) => i.href === "/estoque")).toBe(true);
+  });
+  it("categoria null (fail-open) → sem grupo 'Mais'", () => {
+    const groups = buildNav({ isAdmin: false, isAccountAdmin: false, category: null });
+    expect(groups.some((g) => g.title === "Mais")).toBe(false);
+  });
+});
