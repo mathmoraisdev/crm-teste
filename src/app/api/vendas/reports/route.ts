@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
   ]);
 
   const base = { period, summary, byPayment, byOperator, topItems: top };
-  // Despesas/saldo são de DONO. Operador recebe só as vendas (sem os campos de despesa).
-  if (!ctx.perms.canSettings) return NextResponse.json(base);
+  // Despesas/saldo/margem/comissão são financeiros. Operador sem canFinance recebe só as vendas.
+  if (!ctx.perms.canFinance) return NextResponse.json(base);
 
   const [expTotal, expByCat, commissions, margin] = await Promise.all([
     expensesTotal(ctx.tenantUserId, from, to),

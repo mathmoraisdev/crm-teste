@@ -5,13 +5,13 @@ import { voidOrder } from "@/server/services/order.service";
 
 export const dynamic = "force-dynamic";
 
-// Estorno: anula uma comanda FECHADA. Motivo obrigatório. Ação sensível → canSettings.
+// Estorno: anula uma comanda FECHADA. Motivo obrigatório. Ação financeira sensível → canFinance.
 const voidSchema = z.object({ reason: z.string().min(1) });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = voidSchema.safeParse(body);

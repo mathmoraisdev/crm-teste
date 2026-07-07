@@ -37,7 +37,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  if (!ctx.perms.canSettings) {
+  if (!ctx.perms.canFinance) {
     return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
   }
   const parsed = saveSchema.safeParse(await req.json().catch(() => null));
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  if (!ctx.perms.canSettings) {
+  if (!ctx.perms.canFinance) {
     return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
   }
   const parsed = profileSchema.safeParse(await req.json().catch(() => null));
@@ -84,7 +84,7 @@ export async function PATCH(req: Request) {
 export async function DELETE() {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  if (!ctx.perms.canSettings) {
+  if (!ctx.perms.canFinance) {
     return NextResponse.json({ error: NO_SETTINGS_PERM }, { status: 403 });
   }
   await removeFiscalCredential(ctx.tenantUserId);

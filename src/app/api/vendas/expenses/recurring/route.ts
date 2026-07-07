@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const recurring = await listRecurring(ctx.tenantUserId);
   return NextResponse.json({ recurring });
 }
@@ -23,7 +23,7 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });

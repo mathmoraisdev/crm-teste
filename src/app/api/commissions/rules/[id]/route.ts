@@ -14,7 +14,7 @@ const patchSchema = z.object({
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await params;
   try {
     const rule = await deactivateCommissionRule(ctx.tenantUserId, id);

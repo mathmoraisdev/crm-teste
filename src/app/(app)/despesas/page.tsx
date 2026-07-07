@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export default async function DespesasPage() {
   const ctx = await getTenantContext();
   if (!ctx) redirect("/login");
-  // Despesas é do dono/gerente (mesmo gate da aba no Caixa); operador não acessa.
-  if (!ctx.perms.canSettings) redirect("/caixa");
+  // Despesas é financeiro (dono/gerente); operador sem canFinance não acessa.
+  if (!ctx.perms.canFinance) redirect("/caixa");
   return (
     <div className="mx-auto max-w-[960px]">
       <header className="mb-6">

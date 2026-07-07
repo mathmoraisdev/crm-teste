@@ -10,7 +10,7 @@ const closeSchema = z.object({
 });
 
 // Fechar caixa (conferência cega): grava o contado e revela esperado/diferença.
-// Fechar a sessão de OUTRO operador exige canSettings; a própria, qualquer operador.
+// Fechar a sessão de OUTRO operador exige canFinance; a própria, qualquer operador.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const session = await getSession(ctx.tenantUserId, id);
   if (!session) return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
-  if (session.openedById !== ctx.sessionUserId && !ctx.perms.canSettings) {
+  if (session.openedById !== ctx.sessionUserId && !ctx.perms.canFinance) {
     return NextResponse.json({ error: "Sem permissão para fechar o caixa de outro operador" }, { status: 403 });
   }
 

@@ -5,11 +5,11 @@ import { listCommissionRules, createCommissionRule } from "@/server/services/com
 
 export const dynamic = "force-dynamic";
 
-// Comissão é dado de DONO (quanto cada profissional ganha): gate canSettings.
+// Comissão é dado de DONO (quanto cada profissional ganha): gate canFinance.
 export async function GET() {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const rules = await listCommissionRules(ctx.tenantUserId);
   return NextResponse.json({ rules });
 }
@@ -24,7 +24,7 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const ctx = await getTenantContext();
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-  if (!ctx.perms.canSettings) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function RelatoriosPage() {
   const ctx = await getTenantContext();
   if (!ctx) redirect("/login");
-  const canEdit = ctx.perms.canSettings; // saldo/despesas nos relatórios dependem de canSettings
+  const canEdit = ctx.perms.canFinance; // saldo/despesas/margem nos relatórios dependem de canFinance
   return (
     <div className="mx-auto max-w-[960px]">
       <header className="mb-6">
