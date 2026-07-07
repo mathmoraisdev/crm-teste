@@ -119,9 +119,19 @@ function rangeLabel(view: ApptView, date: Date): string {
   });
 }
 
-export function AgendaView({ config }: { config?: AgendaConfig }) {
-  const [tab, setTab] = useState<Tab>("meetings");
+export function AgendaView({
+  config,
+  initialTab,
+}: {
+  config?: AgendaConfig;
+  initialTab?: Tab;
+}) {
   const showConfig = !!config?.canSettings;
+  // `initialTab` deixa a página abrir direto na aba certa (ex.: o CTA do gate
+  // "Configurar agenda" chega em ?config=1). "config" só vale se há permissão.
+  const [tab, setTab] = useState<Tab>(
+    initialTab === "config" && !showConfig ? "meetings" : initialTab ?? "meetings",
+  );
   const [meetings, setMeetings] = useState<AgendaItem[] | null>(null);
   const [appointments, setAppointments] = useState<AppointmentDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
