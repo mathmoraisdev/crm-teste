@@ -20,17 +20,19 @@ const TYPE_LABEL: Record<CustomFieldType, string> = {
 
 const TYPES = Object.keys(TYPE_LABEL) as CustomFieldType[];
 
-type Scope = "LEAD" | "ORDER" | "ORDER_ITEM";
-const SCOPES: Scope[] = ["LEAD", "ORDER", "ORDER_ITEM"];
+type Scope = "LEAD" | "ORDER" | "ORDER_ITEM" | "PRODUCT";
+const SCOPES: Scope[] = ["LEAD", "ORDER", "ORDER_ITEM", "PRODUCT"];
 const SCOPE_LABEL: Record<Scope, string> = {
   LEAD: "Lead",
   ORDER: "Comanda",
   ORDER_ITEM: "Item da comanda",
+  PRODUCT: "Ficha do produto",
 };
 const SCOPE_SUBTITLE: Record<Scope, string> = {
   LEAD: "Campos extras exibidos no cadastro e no detalhe de cada lead.",
   ORDER: "Campos extras exibidos na comanda do Caixa.",
   ORDER_ITEM: "Campos extras exibidos em cada item da comanda (ex.: placa, chassi).",
+  PRODUCT: "Ficha técnica (specs) do anúncio de um item do catálogo (ex.: ano, cor, quartos).",
 };
 
 const inputClass =
