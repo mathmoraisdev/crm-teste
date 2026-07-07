@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Printer, Ban, RotateCcw } from "lucide-react";
+import { Loader2, Printer, Ban, RotateCcw, FileText } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Table, Th, Td } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
@@ -13,6 +13,7 @@ import { PAYMENT_LABEL, PAYMENT_TONE, type Payment } from "./payment-labels";
 
 type Period = "hoje" | "7d" | "mes" | "custom";
 type OrderStatus = "ABERTA" | "FECHADA" | "CANCELADA";
+type FiscalStatus = "PENDENTE" | "PROCESSANDO" | "EMITIDA" | "ERRO" | "CANCELADA";
 
 interface Row {
   id: string;
@@ -26,6 +27,11 @@ interface Row {
   surchargeCents: number | null;
   totalCents: number;
   canceledReason: string | null;
+  fiscalStatus: FiscalStatus | null;
+  fiscalKey: string | null;
+  fiscalDanfeUrl: string | null;
+  fiscalError: string | null;
+  fiscalAttempts: number;
 }
 interface HistoryResponse {
   items: Row[];
@@ -224,6 +230,7 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
                   <Th>Cliente</Th>
                   <Th>Operador</Th>
                   <Th>Pagamento</Th>
+                  <Th>Nota</Th>
                   <Th className="text-right">Total</Th>
                   <Th className="text-right">Ações</Th>
                 </tr>
@@ -256,6 +263,9 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
+                      </Td>
+                      <Td>
+                        <FiscalCell row={r} onRetried={(msg) => { setNotice(msg); load(0, false); }} onError={setError} />
                       </Td>
                       <Td className={`whitespace-nowrap text-right font-medium ${canceled ? "text-slate-400 line-through" : "text-ink"}`}>
                         {formatCentsBRL(r.totalCents)}
@@ -350,6 +360,79 @@ export function SalesHistoryPanel({ canEdit = false }: { canEdit?: boolean }) {
             load(0, false);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+const FISCAL_MAX_ATTEMPTS = 5; // espelha env.FISCAL_MAX_ATTEMPTS (default)
+
+/** Badge de status fiscal + DANFE (reimpressão) + retry em ERRO. `null` = não-fiscal. */
+function FiscalCell({
+  row,
+  onRetried,
+  onError,
+}: {
+  row: Row;
+  onRetried: (msg: string) => void;
+  onError: (m: string | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const s = row.fiscalStatus;
+  if (!s) return <span className="text-slate-400">—</span>;
+
+  if (s === "PENDENTE" || s === "PROCESSANDO") {
+    return <Badge tone="slate">emitindo…</Badge>;
+  }
+  if (s === "EMITIDA") {
+    return row.fiscalDanfeUrl ? (
+      <a
+        href={row.fiscalDanfeUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={row.fiscalKey ?? "NFC-e emitida"}
+        className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-bold text-brand-700 hover:underline"
+      >
+        <FileText size={12} /> DANFE
+      </a>
+    ) : (
+      <Badge tone="green">emitida</Badge>
+    );
+  }
+  if (s === "CANCELADA") {
+    return <Badge tone="slate" className="line-through">cancelada</Badge>;
+  }
+  // ERRO
+  async function retry() {
+    setBusy(true);
+    onError(null);
+    try {
+      const res = await fetch(`/api/vendas/orders/${row.id}/fiscal`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao reemitir.");
+      onRetried("Nota reenfileirada — o worker vai tentar de novo.");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Erro ao reemitir.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <span className="cursor-help" title={row.fiscalError ?? "Rejeitada pelo emissor."}>
+        <Badge tone="red">erro</Badge>
+      </span>
+      {row.fiscalAttempts < FISCAL_MAX_ATTEMPTS ? (
+        <button
+          type="button"
+          onClick={retry}
+          disabled={busy}
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline disabled:opacity-60"
+        >
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Tentar de novo
+        </button>
+      ) : (
+        <span className="text-xs text-slate-400">limite atingido</span>
       )}
     </div>
   );

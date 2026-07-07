@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { OrderPayment, OrderStatus } from "@prisma/client";
+import type { OrderPayment, OrderStatus, FiscalStatus } from "@prisma/client";
 import { orderTotalCents } from "./order.service";
 
 export interface SalesHistoryRow {
@@ -14,6 +14,12 @@ export interface SalesHistoryRow {
   surchargeCents: number | null;
   totalCents: number;
   canceledReason: string | null;
+  // Fiscal (Onda H): null = comanda não-fiscal. O worker resolve para EMITIDA/ERRO.
+  fiscalStatus: FiscalStatus | null;
+  fiscalKey: string | null;
+  fiscalDanfeUrl: string | null;
+  fiscalError: string | null;
+  fiscalAttempts: number;
 }
 export interface SalesHistoryPage { items: SalesHistoryRow[]; total: number; }
 
@@ -49,6 +55,7 @@ export async function listSalesHistory(
       select: {
         id: true, status: true, closedAt: true, customerName: true, leadId: true, payment: true,
         discountCents: true, surchargeCents: true, tipCents: true, canceledReason: true,
+        fiscalStatus: true, fiscalKey: true, fiscalDanfeUrl: true, fiscalError: true, fiscalAttempts: true,
         openedBy: { select: { name: true } },
         items: { select: { unitPriceCents: true, quantity: true } },
       },
@@ -67,6 +74,11 @@ export async function listSalesHistory(
     surchargeCents: o.surchargeCents,
     totalCents: orderTotalCents(o),
     canceledReason: o.canceledReason,
+    fiscalStatus: o.fiscalStatus,
+    fiscalKey: o.fiscalKey,
+    fiscalDanfeUrl: o.fiscalDanfeUrl,
+    fiscalError: o.fiscalError,
+    fiscalAttempts: o.fiscalAttempts,
   }));
   return { items, total };
 }
