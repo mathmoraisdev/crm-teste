@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Loader2, Pencil, Check, X, Sparkles } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -36,6 +36,18 @@ const SEED_GROUPS: { category: BusinessCategory; label: string; templates: { id:
         .filter((t) => t.count > 0),
     }))
     .filter((g) => g.templates.length > 0);
+
+/** Campo com rótulo persistente acima do input — evita depender do placeholder,
+ * que some ao preencher (aí "camisa-p" e "500" ficam sem dizer o que são). O
+ * wrapper carrega a largura (flex-1 / sm:w-*) quando os campos ficam em linha. */
+function Field({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={`flex flex-col gap-1 ${className ?? ""}`}>
+      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 /**
  * Gestão do catálogo (serviços/produtos com preço) da conta. Fala com
@@ -362,57 +374,71 @@ export function CatalogManager({
                 // ── Modo edição ──────────────────────────────────────────
                 <li className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="Nome"
-                      className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                    />
-                    <select
-                      value={editKind}
-                      onChange={(e) => setEditKind(e.target.value as "SERVICO" | "PRODUTO")}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-                    >
-                      <option value="SERVICO">Serviço</option>
-                      <option value="PRODUTO">Produto</option>
-                    </select>
-                    <input
-                      value={editPrice}
-                      onChange={(e) => setEditPrice(e.target.value)}
-                      placeholder="Preço (R$)"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-                    />
+                    <Field label="Nome" className="flex-1">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="ex.: Corte"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
+                    <Field label="Tipo" className="sm:w-32">
+                      <select
+                        value={editKind}
+                        onChange={(e) => setEditKind(e.target.value as "SERVICO" | "PRODUTO")}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      >
+                        <option value="SERVICO">Serviço</option>
+                        <option value="PRODUTO">Produto</option>
+                      </select>
+                    </Field>
+                    <Field label="Preço (R$)" className="sm:w-32">
+                      <input
+                        value={editPrice}
+                        onChange={(e) => setEditPrice(e.target.value)}
+                        placeholder="0,00"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
                   </div>
-                  <input
-                    value={editSector}
-                    onChange={(e) => setEditSector(e.target.value)}
-                    placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                  />
-                  {editKind === "SERVICO" && (
+                  <Field label="Setor de produção">
                     <input
-                      value={editDuration}
-                      onChange={(e) => setEditDuration(e.target.value)}
-                      inputMode="numeric"
-                      placeholder="Duração (min) — opcional"
+                      value={editSector}
+                      onChange={(e) => setEditSector(e.target.value)}
+                      placeholder="ex.: cozinha, bar — opcional"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
+                  </Field>
+                  {editKind === "SERVICO" && (
+                    <Field label="Duração (min)">
+                      <input
+                        value={editDuration}
+                        onChange={(e) => setEditDuration(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="opcional"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
                   )}
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                          value={editBarcode}
-                          onChange={(e) => setEditBarcode(e.target.value)}
-                          placeholder="Código de barras (EAN) — opcional"
-                          className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                        />
-                        <input
-                          value={editVariantGroup}
-                          onChange={(e) => setEditVariantGroup(e.target.value)}
-                          placeholder="Grupo/grade (ex.: Camiseta) — opcional"
-                          className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                        />
+                        <Field label="Código de barras (EAN)" className="flex-1">
+                          <input
+                            value={editBarcode}
+                            onChange={(e) => setEditBarcode(e.target.value)}
+                            placeholder="opcional"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </Field>
+                        <Field label="Grupo/grade" className="flex-1">
+                          <input
+                            value={editVariantGroup}
+                            onChange={(e) => setEditVariantGroup(e.target.value)}
+                            placeholder="ex.: Camiseta — opcional"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                          />
+                        </Field>
                       </div>
                       <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                         <input
@@ -425,25 +451,31 @@ export function CatalogManager({
                       </label>
                       {editTrackStock && (
                         <div className="flex flex-col gap-2 sm:flex-row">
-                          <input
-                            value={editSku}
-                            onChange={(e) => setEditSku(e.target.value)}
-                            placeholder="SKU"
-                            className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                          />
-                          <input
-                            value={editMinStock}
-                            onChange={(e) => setEditMinStock(e.target.value)}
-                            inputMode="numeric"
-                            placeholder="Mínimo"
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-28"
-                          />
-                          <input
-                            value={editCost}
-                            onChange={(e) => setEditCost(e.target.value)}
-                            placeholder="Custo (R$)"
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-                          />
+                          <Field label="SKU" className="flex-1">
+                            <input
+                              value={editSku}
+                              onChange={(e) => setEditSku(e.target.value)}
+                              placeholder="ex.: CAM-P"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                            />
+                          </Field>
+                          <Field label="Estoque mínimo" className="sm:w-28">
+                            <input
+                              value={editMinStock}
+                              onChange={(e) => setEditMinStock(e.target.value)}
+                              inputMode="numeric"
+                              placeholder="0"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                            />
+                          </Field>
+                          <Field label="Custo (R$)" className="sm:w-32">
+                            <input
+                              value={editCost}
+                              onChange={(e) => setEditCost(e.target.value)}
+                              placeholder="0,00"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                            />
+                          </Field>
                         </div>
                       )}
                       <p className="text-[11px] text-slate-400">O saldo só muda pela aba Estoque (entrada/ajuste).</p>
@@ -535,57 +567,71 @@ export function CatalogManager({
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-semibold text-slate-600">Adicionar item</p>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nome (ex.: Corte)"
-                className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-              />
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as "SERVICO" | "PRODUTO")}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-              >
-                <option value="SERVICO">Serviço</option>
-                <option value="PRODUTO">Produto</option>
-              </select>
-              <input
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="Preço (R$)"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-              />
+              <Field label="Nome" className="flex-1">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="ex.: Corte"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+              </Field>
+              <Field label="Tipo" className="sm:w-32">
+                <select
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value as "SERVICO" | "PRODUTO")}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                >
+                  <option value="SERVICO">Serviço</option>
+                  <option value="PRODUTO">Produto</option>
+                </select>
+              </Field>
+              <Field label="Preço (R$)" className="sm:w-32">
+                <input
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+              </Field>
             </div>
-            <input
-              value={sector}
-              onChange={(e) => setSector(e.target.value)}
-              placeholder="Setor de produção (ex.: cozinha, bar) — opcional"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            />
-            {kind === "SERVICO" && (
+            <Field label="Setor de produção">
               <input
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                inputMode="numeric"
-                placeholder="Duração (min) — opcional"
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+                placeholder="ex.: cozinha, bar — opcional"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
+            </Field>
+            {kind === "SERVICO" && (
+              <Field label="Duração (min)">
+                <input
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="opcional"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                />
+              </Field>
             )}
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    placeholder="Código de barras (EAN) — opcional"
-                    className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                  />
-                  <input
-                    value={variantGroup}
-                    onChange={(e) => setVariantGroup(e.target.value)}
-                    placeholder="Grupo/grade (ex.: Camiseta) — opcional"
-                    className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                  />
+                  <Field label="Código de barras (EAN)" className="flex-1">
+                    <input
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      placeholder="opcional"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                  </Field>
+                  <Field label="Grupo/grade" className="flex-1">
+                    <input
+                      value={variantGroup}
+                      onChange={(e) => setVariantGroup(e.target.value)}
+                      placeholder="ex.: Camiseta — opcional"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                  </Field>
                 </div>
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                   <input
@@ -598,32 +644,40 @@ export function CatalogManager({
                 </label>
                 {trackStock && (
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={sku}
-                      onChange={(e) => setSku(e.target.value)}
-                      placeholder="SKU"
-                      className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                    />
-                    <input
-                      value={initialQty}
-                      onChange={(e) => setInitialQty(e.target.value)}
-                      inputMode="numeric"
-                      placeholder="Estoque inicial"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-                    />
-                    <input
-                      value={minStock}
-                      onChange={(e) => setMinStock(e.target.value)}
-                      inputMode="numeric"
-                      placeholder="Mínimo"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-24"
-                    />
-                    <input
-                      value={costStr}
-                      onChange={(e) => setCostStr(e.target.value)}
-                      placeholder="Custo (R$)"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-                    />
+                    <Field label="SKU" className="flex-1">
+                      <input
+                        value={sku}
+                        onChange={(e) => setSku(e.target.value)}
+                        placeholder="ex.: CAM-P"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
+                    <Field label="Estoque inicial" className="sm:w-32">
+                      <input
+                        value={initialQty}
+                        onChange={(e) => setInitialQty(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="0"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
+                    <Field label="Estoque mínimo" className="sm:w-28">
+                      <input
+                        value={minStock}
+                        onChange={(e) => setMinStock(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="0"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
+                    <Field label="Custo (R$)" className="sm:w-32">
+                      <input
+                        value={costStr}
+                        onChange={(e) => setCostStr(e.target.value)}
+                        placeholder="0,00"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      />
+                    </Field>
                   </div>
                 )}
               </div>
