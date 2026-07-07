@@ -21,6 +21,7 @@ import {
   Boxes,
   BarChart3,
   TrendingDown,
+  ChefHat,
 } from "lucide-react";
 import type { BusinessCategory } from "@/lib/business-templates";
 
@@ -49,7 +50,9 @@ export type NavCtx = {
 type NavItemSpec = NavItem & { show?: boolean };
 
 export function buildNav(ctx: NavCtx): NavGroup[] {
-  const { isAdmin, isAccountAdmin } = ctx;
+  const { isAdmin, isAccountAdmin, category } = ctx;
+  // Produção (comanda de cozinha) só faz sentido em ramos de alimentação.
+  const isFood = category === "alimentacao";
 
   const groups: { title: string; items: NavItemSpec[] }[] = [
     {
@@ -59,6 +62,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
         { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
         { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda" },
         { href: "/caixa", label: "Caixa", icon: Receipt },
+        { href: "/producao", label: "Produção", icon: ChefHat, show: isFood },
       ],
     },
     {

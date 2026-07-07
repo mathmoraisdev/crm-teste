@@ -24,4 +24,10 @@ describe("buildNav", () => {
     expect(buildNav({ ...base, isAccountAdmin: true }).flatMap((g) => g.items)
       .some((i) => i.href === "/equipe")).toBe(true);
   });
+  it("Produção (cozinha) na Operação só para ramos de alimentação", () => {
+    const opAlim = buildNav({ ...base, category: "alimentacao" }).find((g) => g.title === "Operação")!;
+    expect(opAlim.items.some((i) => i.href === "/producao")).toBe(true);
+    const opBeleza = buildNav(base).find((g) => g.title === "Operação")!;
+    expect(opBeleza.items.some((i) => i.href === "/producao")).toBe(false);
+  });
 });
