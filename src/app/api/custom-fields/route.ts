@@ -7,7 +7,7 @@ import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 const NO_SETTINGS_PERM =
   "Seu usuário não tem permissão para alterar as configurações da conta.";
 
-const scopeSchema = z.enum(["LEAD", "ORDER", "ORDER_ITEM"]).catch("LEAD");
+const scopeSchema = z.enum(["LEAD", "ORDER", "ORDER_ITEM", "PRODUCT"]).catch("LEAD");
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   label: z.string().min(1, "Rótulo obrigatório"),
   type: z.nativeEnum(CustomFieldType),
-  scope: z.enum(["LEAD", "ORDER", "ORDER_ITEM"]).default("LEAD"),
+  scope: z.enum(["LEAD", "ORDER", "ORDER_ITEM", "PRODUCT"]).default("LEAD"),
   options: z.array(z.string()).optional(),
   order: z.number().int().optional(),
 });
