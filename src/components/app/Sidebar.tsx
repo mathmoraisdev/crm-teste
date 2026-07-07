@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Smartphone, LogOut, Menu, X } from "lucide-react";
+import { Smartphone, LogOut, Menu, X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
-import { buildNav } from "@/lib/nav";
+import { buildNav, type NavItem } from "@/lib/nav";
 import type { BusinessCategory } from "@/lib/business-templates";
 
 export function Sidebar({
@@ -118,6 +118,40 @@ export function Sidebar({
   // dono da conta; Administração é do admin da plataforma.
   const navGroups = buildNav({ isAdmin, isAccountAdmin, category });
 
+  // Render de um item de nav (reusado nos grupos normais e no "Mais").
+  const renderNavItem = ({ href, label, icon: Icon, badge }: NavItem) => {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    const badgeCount =
+      badge === "inbox"
+        ? inboxBadge
+        : badge === "financeiro"
+          ? financeiroBadge
+          : badge === "consultores"
+            ? consultoresBadge
+            : badge === "agenda"
+              ? agendaBadge
+              : 0;
+    const showBadge = !!badge && badgeCount > 0;
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={cn(
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+          active ? "bg-brand-300/12 text-white" : "text-white/70 hover:bg-white/5 hover:text-white",
+        )}
+      >
+        <Icon size={17} className={active ? "text-mint" : ""} />
+        <span className="flex-1">{label}</span>
+        {showBadge && (
+          <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">
+            {badgeCount}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
   // Fecha o drawer ao navegar (mobile).
   useEffect(() => {
     setOpen(false);
@@ -181,47 +215,34 @@ export function Sidebar({
         </div>
 
         <nav className="flex flex-col gap-5">
-          {navGroups.map((group) => (
-            <div key={group.title} className="flex flex-col gap-1">
-              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
-                {group.title}
-              </p>
-              {group.items.map(({ href, label, icon: Icon, badge }) => {
-                const active = pathname === href || pathname.startsWith(href + "/");
-                const badgeCount =
-                  badge === "inbox"
-                    ? inboxBadge
-                    : badge === "financeiro"
-                      ? financeiroBadge
-                      : badge === "consultores"
-                        ? consultoresBadge
-                        : badge === "agenda"
-                          ? agendaBadge
-                          : 0;
-                const showBadge = !!badge && badgeCount > 0;
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                      active
-                        ? "bg-brand-300/12 text-white"
-                        : "text-white/70 hover:bg-white/5 hover:text-white",
-                    )}
-                  >
-                    <Icon size={17} className={active ? "text-mint" : ""} />
-                    <span className="flex-1">{label}</span>
-                    {showBadge && (
-                      <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">
-                        {badgeCount}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          {navGroups.map((group) =>
+            // "Mais" (módulos fora do ramo) = seção colapsada por padrão. Nada
+            // some: fica a um clique. Demais grupos renderizam abertos.
+            group.title === "Mais" ? (
+              <details
+                key={group.title}
+                // Colapsado por padrão; abre sozinho se a rota atual está aqui
+                // dentro (senão o item ativo ficaria escondido).
+                open={group.items.some(
+                  (i) => pathname === i.href || pathname.startsWith(i.href + "/"),
+                )}
+                className="group/mais flex flex-col gap-1"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-1 px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 transition-colors hover:text-white/70 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight size={12} className="transition-transform group-open/mais:rotate-90" />
+                  {group.title}
+                </summary>
+                <div className="flex flex-col gap-1">{group.items.map(renderNavItem)}</div>
+              </details>
+            ) : (
+              <div key={group.title} className="flex flex-col gap-1">
+                <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
+                  {group.title}
+                </p>
+                {group.items.map(renderNavItem)}
+              </div>
+            ),
+          )}
         </nav>
 
         <div className="mt-auto flex flex-col gap-2.5">
