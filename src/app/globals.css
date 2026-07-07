@@ -119,6 +119,31 @@ body {
   @apply rounded-full bg-slate-300;
 }
 
+/* Scrollbar overlay minimalista (estilo macOS) para áreas ESCURAS (sidebar):
+   trilho invisível, thumb fino translúcido branco, arredondado, sem setas —
+   quase imperceptível parado, ganha contraste no hover. */
+.scroll-overlay {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.scroll-overlay::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-overlay::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+}
+.scroll-overlay:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+.scroll-overlay::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Barras de abas/setores roláveis na horizontal: trilho visível para deixar
    claro que dá para deslizar (o strip é baixo, então a barra padrão some). */
 .scroll-tabs {
