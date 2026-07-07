@@ -120,6 +120,7 @@ const schema = z.object({
   // Base URLs dos gateways (default sandbox no Asaas, prod no Mercado Pago).
   ASAAS_BASE_URL: z.string().default("https://api-sandbox.asaas.com"),
   MERCADOPAGO_BASE_URL: z.string().default("https://api.mercadopago.com"),
+  PAGBANK_BASE_URL: z.string().default("https://sandbox.api.pagseguro.com"),
   // Base pública do app p/ montar a notification_url dos webhooks de pagamento.
   APP_PUBLIC_URL: z.string().default("http://localhost:3000"),
 
