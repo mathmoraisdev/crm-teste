@@ -37,6 +37,14 @@ describe("POST /api/webhooks/payment/[provider]", () => {
     expect(confirm).toHaveBeenCalledWith("ASAAS", "pay_9");
   });
 
+  it("PagBank: extrai id do pedido (root) e confirma", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(req({ id: "ORDE_ABC", charges: [{ status: "PAID" }] }), ctx("pagbank"));
+    expect(res.status).toBe(200);
+    const confirm = await confirmMock();
+    expect(confirm).toHaveBeenCalledWith("PAGBANK", "ORDE_ABC");
+  });
+
   it("corpo inválido → 200 sem efeito", async () => {
     const { POST } = await import("./route");
     const res = await POST(req(null), ctx("asaas"));

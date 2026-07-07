@@ -22,7 +22,9 @@ export async function POST(
   { params }: { params: Promise<{ provider: string }> },
 ) {
   const { provider: raw } = await params;
-  const provider: PaymentProvider = raw.toUpperCase() === "ASAAS" ? "ASAAS" : "MERCADO_PAGO";
+  const KEY = raw.toUpperCase();
+  const provider: PaymentProvider =
+    KEY === "ASAAS" ? "ASAAS" : KEY === "PAGBANK" ? "PAGBANK" : "MERCADO_PAGO";
 
   const body = await req.json().catch(() => null);
   const chargeId = gatewayFor(provider).parseWebhookChargeId(body);
