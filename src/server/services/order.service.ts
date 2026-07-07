@@ -2,6 +2,9 @@ import { prisma } from "@/server/db/client";
 import { Prisma } from "@prisma/client";
 import type { OrderPayment, OrderStatus } from "@prisma/client";
 import { applyOrderStockExit, reverseOrderStockExit } from "./stock.service";
+import { fiscalEmitterFor } from "@/server/fiscal/emitter";
+import { decryptSecret } from "@/server/crypto";
+import { logger } from "@/lib/logger";
 import { pickCommissionRule, commissionForLine } from "@/lib/commission";
 import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
@@ -408,6 +411,39 @@ export async function voidOrder(accountId: string, orderId: string, reason: stri
     // comanda CANCELADA some sozinha; o snapshot fica no item p/ auditoria (inofensivo).
     await reverseOrderStockExit(tx, accountId, orderId, byId);
   });
+
+  // Fiscal (Onda H): se a comanda tinha nota EMITIDA, tenta cancelá-la no emissor —
+  // best-effort SÍNCRONO, FORA da tx (o estorno já commitou). A janela legal é curta
+  // (~30 min NFC-e); se passou, a nota fica EMITIDA com aviso e o contador resolve.
+  // Falha aqui NUNCA desfaz o estorno. Nunca loga o token.
+  const fiscal = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { fiscalStatus: true, fiscalDocId: true },
+  });
+  if (fiscal?.fiscalStatus === "EMITIDA" && fiscal.fiscalDocId) {
+    try {
+      const acct = await prisma.user.findUnique({
+        where: { id: accountId },
+        select: { fiscalProvider: true, fiscalKeyEnc: true, fiscalEnv: true },
+      });
+      if (acct?.fiscalProvider && acct.fiscalKeyEnc) {
+        const r = await fiscalEmitterFor(acct.fiscalProvider).cancelNfce(
+          decryptSecret(acct.fiscalKeyEnc), acct.fiscalEnv, fiscal.fiscalDocId, trimmed,
+        );
+        // cancelNfce sinaliza sucesso reusando status "EMITIDA" (janela ok) → CANCELADA;
+        // qualquer outra coisa (janela passou/erro) mantém EMITIDA com o motivo.
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            fiscalStatus: r.status === "EMITIDA" ? "CANCELADA" : "EMITIDA",
+            fiscalError: r.status === "EMITIDA" ? null : (r.error ?? "Não foi possível cancelar a NFC-e (janela?)."),
+          },
+        });
+      }
+    } catch (err) {
+      logger.error({ orderId, err }, "[fiscal] cancelamento no estorno falhou (janela?)");
+    }
+  }
   return toDTO(await loadOwned(accountId, orderId));
 }
 

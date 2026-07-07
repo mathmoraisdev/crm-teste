@@ -1,5 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { prisma } from "@/server/db/client";
+
+// Fiscal (13.3.3): mock do emissor/cripto p/ o cancelamento best-effort no estorno.
+// Inerte nos demais testes (o branch só roda p/ comanda com nota EMITIDA).
+const { cancelNfce } = vi.hoisted(() => ({ cancelNfce: vi.fn() }));
+vi.mock("@/server/fiscal/emitter", () => ({ fiscalEmitterFor: () => ({ cancelNfce }) }));
+vi.mock("@/server/crypto", () => ({
+  decryptSecret: (s: string) => s,
+  encryptSecret: (s: string) => s,
+}));
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
 import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, voidOrder, reopenOrder } from "./order.service";
@@ -701,5 +710,53 @@ describe("fiscal (carimbo no fechamento)", () => {
     const reopened = await prisma.order.findUnique({ where: { id: o.id } });
     expect(reopened!.fiscalStatus).toBe("EMITIDA");
     expect(reopened!.fiscalKey).toBe("k");
+  });
+});
+
+describe("fiscal (cancelamento best-effort no estorno)", () => {
+  async function emittedOrder() {
+    const acc = await makeOwner();
+    await prisma.user.update({
+      where: { id: acc },
+      data: { fiscalProvider: "FOCUS_NFE", fiscalKeyEnc: "tok-plano", fiscalEnabled: true },
+    });
+    const prod = await createCatalogItem(acc, { name: "Meia", priceCents: 3000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "C" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await prisma.order.update({ where: { id: o.id }, data: { fiscalStatus: "EMITIDA", fiscalDocId: "doc-1" } });
+    return { acc, orderId: o.id };
+  }
+
+  it("estornar comanda EMITIDA → chama cancelNfce e marca CANCELADA (janela ok)", async () => {
+    cancelNfce.mockReset();
+    cancelNfce.mockResolvedValue({ status: "EMITIDA", docId: "doc-1" }); // sucesso do cancelamento
+    const { acc, orderId } = await emittedOrder();
+    await voidOrder(acc, orderId, "cliente desistiu", acc);
+    expect(cancelNfce).toHaveBeenCalledWith("tok-plano", "HOMOLOGACAO", "doc-1", "cliente desistiu");
+    const r = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(r!.status).toBe("CANCELADA"); // estorno da comanda
+    expect(r!.fiscalStatus).toBe("CANCELADA"); // nota cancelada
+  });
+
+  it("falha do emissor (janela passou) NÃO desfaz o estorno; nota fica EMITIDA com aviso", async () => {
+    cancelNfce.mockReset();
+    cancelNfce.mockResolvedValue({ status: "ERRO", error: "fora da janela" });
+    const { acc, orderId } = await emittedOrder();
+    await voidOrder(acc, orderId, "erro de valor", acc);
+    const r = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(r!.status).toBe("CANCELADA"); // estorno commitou
+    expect(r!.fiscalStatus).toBe("EMITIDA"); // nota permanece
+    expect(r!.fiscalError).toContain("fora da janela");
+  });
+
+  it("exceção no emissor não derruba o estorno", async () => {
+    cancelNfce.mockReset();
+    cancelNfce.mockRejectedValue(new Error("timeout"));
+    const { acc, orderId } = await emittedOrder();
+    await voidOrder(acc, orderId, "teste", acc);
+    const r = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(r!.status).toBe("CANCELADA");
+    expect(r!.fiscalStatus).toBe("EMITIDA"); // inalterada
   });
 });
