@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, ExternalLink, Hand, RotateCcw } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Hand, RotateCcw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -22,7 +22,7 @@ import type {
 } from "@/server/services/inbox.service";
 import type { LeadDetail } from "@/server/services/lead.service";
 
-export function InboxView() {
+export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
   const [filter, setFilter] = useState<InboxFilter>("todas");
   // Seletor de número: null = todos os chips juntos; id = só aquele número.
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
@@ -214,13 +214,23 @@ export function InboxView() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
-          Atendimento
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Fila, atribuição e respostas — handoff IA ↔ humano.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
+            Atendimento
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Fila, atribuição e respostas — handoff IA ↔ humano.
+          </p>
+        </div>
+        {canSettings && (
+          <Link
+            href="/inbox/config"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            <Settings size={14} /> Configurar
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_330px]">

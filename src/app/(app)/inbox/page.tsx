@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
-import { getTenantUserId } from "@/lib/tenant";
+import { getTenantContext } from "@/lib/tenant";
 import { InboxView } from "@/components/inbox/InboxView";
 
 export const dynamic = "force-dynamic";
 
 export default async function InboxPage() {
-  const userId = await getTenantUserId();
-  if (!userId) redirect("/login");
+  const ctx = await getTenantContext();
+  if (!ctx) redirect("/login");
 
-  return <InboxView />;
+  return <InboxView canSettings={ctx.perms.canSettings} />;
 }
