@@ -645,11 +645,11 @@ function AppointmentRow({
     <li
       onClick={() => onOpen(item)}
       className={cn(
-        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 hover:bg-slate-50 sm:flex-nowrap",
+        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 transition-colors hover:bg-ink/[0.04] sm:flex-nowrap",
         review
           ? "-mx-1 rounded-lg border-l-2 border-warning bg-warning-surface pl-3"
           : relDay
-            ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3"
+            ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-500/10 pl-3"
             : "px-1",
       )}
     >
@@ -721,7 +721,7 @@ function AgendaRow({ item }: { item: AgendaItem }) {
     <li
       className={cn(
         "flex flex-wrap items-start gap-x-3 gap-y-2 py-3.5 pr-1 sm:flex-nowrap",
-        relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-50/40 pl-3" : "px-1",
+        relDay ? "-mx-1 rounded-lg border-l-2 border-brand-400 bg-brand-500/10 pl-3" : "px-1",
       )}
     >
       <span className="mt-0.5">{STATUS_ICON[status]}</span>

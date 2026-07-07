@@ -29,6 +29,8 @@ export function Sidebar({
   const [financeiroBadge, setFinanceiroBadge] = useState(0);
   const [consultoresBadge, setConsultoresBadge] = useState(0);
   const [agendaBadge, setAgendaBadge] = useState(0);
+  // Bolinha de notificação da Agenda: booking online ainda não confirmado.
+  const [agendaDot, setAgendaDot] = useState(0);
 
   // Badge de "Atendimento" = fila + não-lidas. Polling leve.
   useEffect(() => {
@@ -61,6 +63,7 @@ export function Sidebar({
         const res = await fetch("/api/appointments/review-count", { cache: "no-store" });
         const data = await res.json();
         if (active && typeof data.count === "number") setAgendaBadge(data.count);
+        if (active && typeof data.onlinePending === "number") setAgendaDot(data.onlinePending);
       } catch {
         // ignora
       }
@@ -132,6 +135,8 @@ export function Sidebar({
               ? agendaBadge
               : 0;
     const showBadge = !!badge && badgeCount > 0;
+    // Bolinha de notificação (só Agenda): booking online ainda não confirmado.
+    const showDot = badge === "agenda" && agendaDot > 0;
     return (
       <Link
         key={href}
@@ -141,7 +146,15 @@ export function Sidebar({
           active ? "bg-brand-300/12 text-white" : "text-white/70 hover:bg-white/5 hover:text-white",
         )}
       >
-        <Icon size={17} className={active ? "text-mint" : ""} />
+        <span className="relative flex-none">
+          <Icon size={17} className={active ? "text-mint" : ""} />
+          {showDot && (
+            <span
+              className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-mint ring-2 ring-forest"
+              aria-label="Agendamentos online aguardando confirmação"
+            />
+          )}
+        </span>
         <span className="flex-1">{label}</span>
         {showBadge && (
           <span className="rounded-full bg-mint px-2 py-0.5 text-[11px] font-bold text-forest">

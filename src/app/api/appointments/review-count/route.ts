@@ -5,15 +5,19 @@ import { getTenantContext } from "@/lib/tenant";
 export const dynamic = "force-dynamic";
 
 /**
- * Contador de agendamentos aguardando revisão (needsReview=true) da conta.
- * Alimenta o badge "Agenda" na Sidebar (polling). Mesmo escopo por conta
- * (`lead.userId = tenantUserId`) usado no restante das rotas de appointment.
+ * Contadores do badge "Agenda" na Sidebar (polling):
+ * - `count`: agendamentos aguardando revisão (needsReview=true) → badge numérico.
+ * - `onlinePending`: agendamentos vindos do link público ainda não confirmados
+ *   (source ONLINE + status AGENDADO) → alimenta a bolinha de "chegou booking novo".
+ * Escopo por conta (lead.userId OU accountId do walk-in), igual ao listAppointments.
  */
 export async function GET() {
   const ctx = await getTenantContext();
-  if (!ctx) return NextResponse.json({ count: 0 }, { status: 401 });
-  const count = await prisma.appointment.count({
-    where: { needsReview: true, lead: { userId: ctx.tenantUserId } },
-  });
-  return NextResponse.json({ count });
+  if (!ctx) return NextResponse.json({ count: 0, onlinePending: 0 }, { status: 401 });
+  const owned = { OR: [{ lead: { userId: ctx.tenantUserId } }, { accountId: ctx.tenantUserId }] };
+  const [count, onlinePending] = await Promise.all([
+    prisma.appointment.count({ where: { needsReview: true, ...owned } }),
+    prisma.appointment.count({ where: { source: "ONLINE", status: "AGENDADO", ...owned } }),
+  ]);
+  return NextResponse.json({ count, onlinePending });
 }
