@@ -6,6 +6,7 @@ import type { AccountRole, LeadsScope } from "@prisma/client";
 export interface OperatorPerms {
   canCampaigns: boolean;
   canSettings: boolean;
+  canFinance: boolean;
   leadsScope: LeadsScope;
 }
 
@@ -26,6 +27,7 @@ export async function resolveTenant(sessionUserId: string): Promise<TenantContex
       role: true,
       canCampaigns: true,
       canSettings: true,
+      canFinance: true,
       leadsScope: true,
     },
   });
@@ -33,8 +35,8 @@ export async function resolveTenant(sessionUserId: string): Promise<TenantContex
   // O dono/ADMIN ignora as flags e tem acesso total; só o OPERADOR é limitado.
   const perms: OperatorPerms =
     u.role === "ADMIN"
-      ? { canCampaigns: true, canSettings: true, leadsScope: "ALL" }
-      : { canCampaigns: u.canCampaigns, canSettings: u.canSettings, leadsScope: u.leadsScope };
+      ? { canCampaigns: true, canSettings: true, canFinance: true, leadsScope: "ALL" }
+      : { canCampaigns: u.canCampaigns, canSettings: u.canSettings, canFinance: u.canFinance, leadsScope: u.leadsScope };
   return { sessionUserId: u.id, tenantUserId: u.ownerId ?? u.id, role: u.role, perms };
 }
 

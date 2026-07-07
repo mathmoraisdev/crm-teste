@@ -16,6 +16,7 @@ describe("resolveTenant", () => {
       role: "ADMIN",
       canCampaigns: false,
       canSettings: false,
+      canFinance: false,
       leadsScope: "ASSIGNED",
     });
     const { resolveTenant } = await import("./tenant");
@@ -23,7 +24,7 @@ describe("resolveTenant", () => {
       sessionUserId: "dono-1",
       tenantUserId: "dono-1",
       role: "ADMIN",
-      perms: { canCampaigns: true, canSettings: true, leadsScope: "ALL" },
+      perms: { canCampaigns: true, canSettings: true, canFinance: true, leadsScope: "ALL" },
     });
   });
 
@@ -35,6 +36,7 @@ describe("resolveTenant", () => {
       role: "OPERADOR",
       canCampaigns: false,
       canSettings: true,
+      canFinance: false,
       leadsScope: "ASSIGNED",
     });
     const { resolveTenant } = await import("./tenant");
@@ -42,7 +44,7 @@ describe("resolveTenant", () => {
       sessionUserId: "op-1",
       tenantUserId: "dono-1",
       role: "OPERADOR",
-      perms: { canCampaigns: false, canSettings: true, leadsScope: "ASSIGNED" },
+      perms: { canCampaigns: false, canSettings: true, canFinance: false, leadsScope: "ASSIGNED" },
     });
   });
 
