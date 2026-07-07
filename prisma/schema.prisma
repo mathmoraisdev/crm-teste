@@ -22,6 +22,7 @@ enum AiProvider {
 enum PaymentProvider {
   MERCADO_PAGO
   ASAAS
+  PAGBANK
 }
 
 // Fiscal (Onda H): emissor terceiro de NFC-e (o cadastro tributário pesado mora
