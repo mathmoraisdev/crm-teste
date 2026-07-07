@@ -31,6 +31,20 @@ import {
 } from "@/components/agenda/appointment-labels";
 import { CalendarGrid } from "@/components/agenda/CalendarGrid";
 import { ScheduleModal } from "@/components/clientes/AppointmentSection";
+import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
+import { CommissionSettings } from "@/components/app/CommissionSettings";
+import {
+  BookingSettings,
+  type BookingSettingsInitial,
+  type BookingReadinessInitial,
+} from "@/components/app/BookingSettings";
+
+// Config da Agenda (relocada de Configurações). Carregada no server em
+// agenda/page.tsx e passada aqui; ausente = sem aba "Configurar".
+export interface AgendaConfig {
+  canSettings: boolean;
+  booking: { initial: BookingSettingsInitial; readiness: BookingReadinessInitial };
+}
 
 const STATUS_TONE = {
   CONFIRMED: "green",
@@ -65,7 +79,7 @@ function relativeDayLabel(iso: string): "Hoje" | "Amanhã" | null {
   return null;
 }
 
-type Tab = "meetings" | "appointments";
+type Tab = "meetings" | "appointments" | "config";
 type ApptView = "list" | "day" | "week";
 
 interface Professional {
@@ -105,8 +119,9 @@ function rangeLabel(view: ApptView, date: Date): string {
   });
 }
 
-export function AgendaView() {
+export function AgendaView({ config }: { config?: AgendaConfig }) {
   const [tab, setTab] = useState<Tab>("meetings");
+  const showConfig = !!config?.canSettings;
   const [meetings, setMeetings] = useState<AgendaItem[] | null>(null);
   const [appointments, setAppointments] = useState<AppointmentDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -307,11 +322,12 @@ export function AgendaView() {
         </div>
       )}
 
-      {/* Abas: reuniões (IA) x agendamentos de serviço */}
+      {/* Abas: reuniões (IA) x agendamentos de serviço x config do módulo */}
       <div className="inline-flex rounded-xl border border-line-default bg-card p-1">
         {([
           { value: "meetings", label: "Reuniões" },
           { value: "appointments", label: "Agendamentos" },
+          ...(showConfig ? [{ value: "config" as const, label: "Configurar" }] : []),
         ] as { value: Tab; label: string }[]).map((t) => (
           <button
             key={t.value}
@@ -329,7 +345,17 @@ export function AgendaView() {
         ))}
       </div>
 
-      {tab === "meetings" ? (
+      {tab === "config" && config ? (
+        <div className="space-y-6">
+          <ProfessionalsSettings canEdit={config.canSettings} />
+          <BookingSettings
+            initial={config.booking.initial}
+            readiness={config.booking.readiness}
+            canEdit={config.canSettings}
+          />
+          <CommissionSettings canEdit={config.canSettings} />
+        </div>
+      ) : tab === "meetings" ? (
         <>
       {/* Busca + filtro de status */}
       <div className="flex flex-wrap items-center gap-2">
