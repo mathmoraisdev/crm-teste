@@ -175,6 +175,7 @@ model User {
   // são ignoradas — ele sempre tem acesso total. Enforced no servidor (rotas de API).
   canCampaigns       Boolean         @default(true) // pode criar/disparar campanhas
   canSettings        Boolean         @default(true) // pode editar Configurações/IA da conta
+  canFinance         Boolean         @default(true) // pode ver/editar Financeiro & fiscal (despesas, estorno, chaves fiscais/pagamento, comissões)
   leadsScope         LeadsScope      @default(ALL) // ALL = todos os leads; ASSIGNED = só os atribuídos
   // Rótulos renomeados das etapas do funil (sobrepõem LEAD_STATUS_META.label).
   // Mapa { LeadStatus: "novo rótulo" }. O enum em si NÃO muda (a IA depende dele).
