@@ -692,6 +692,10 @@ export async function respondToLead(leadId: string): Promise<void> {
           ? await listActiveOffers(lead.whatsAppNumberId)
           : [];
       const offersBlock = offersForTools.length ? renderActiveOffers(offersForTools) : undefined;
+      // Conta tem alguma foto de anúncio? → habilita a tool enviar_fotos.
+      const productPhotoCount = await prisma.catalogItemPhoto.count({
+        where: { catalogItem: { accountId: lead.userId } },
+      });
       const tools = buildAttendanceTools({
         lead: {
           id: lead.id,
@@ -704,6 +708,7 @@ export async function respondToLead(leadId: string): Promise<void> {
         company,
         hasCatalog,
         hasMedia: mediaAssets.length > 0,
+        hasProductPhotos: productPhotoCount > 0,
       });
       const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock, offersBlock });
       if (!(await aiStillActive(lead.id))) return; // recheck preservado

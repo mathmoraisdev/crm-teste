@@ -1,5 +1,6 @@
 import { formatCentsBRL } from "@/lib/money";
 import { listCatalogItems } from "@/server/services/catalog.service";
+import { listCatalogItemPhotos } from "@/server/services/catalog-photo.service";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
 import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
@@ -34,6 +35,8 @@ export interface AttendanceToolCtx {
   hasCatalog: boolean;
   /** Conta tem MediaAsset → habilita `enviar_midia` (Fase 5). false por ora. */
   hasMedia: boolean;
+  /** Conta tem ao menos uma CatalogItemPhoto → habilita `enviar_fotos` (anúncios). */
+  hasProductPhotos: boolean;
 }
 
 /** Lê `query?: string` de um args cru sem estourar em formato inesperado. */
@@ -297,6 +300,81 @@ function enviarMidia(ctx: AttendanceToolCtx): ToolDef {
   };
 }
 
+/** Lê `{ itemId?: string }` de um args cru. */
+function readItemId(args: unknown): string | undefined {
+  if (args && typeof args === "object" && "itemId" in args) {
+    const i = (args as { itemId?: unknown }).itemId;
+    if (typeof i === "string" && i.trim()) return i.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Handler `enviar_fotos` (anúncios): envia ao cliente as FOTOS de um item do
+ * catálogo (id de `consultar_estoque`), com a ficha técnica na legenda da 1ª foto.
+ * `listCatalogItemPhotos` valida a posse (item de outra conta → sem fotos). Baixa
+ * cada binário do Storage e manda por `sendWhatsAppMedia`. Espelha `enviar_midia`.
+ */
+function enviarFotos(ctx: AttendanceToolCtx): ToolDef {
+  return {
+    name: "enviar_fotos",
+    description:
+      "Envia ao cliente as FOTOS de um item do catálogo (carro, imóvel, produto), com a ficha " +
+      "técnica na legenda. Use o id do item (de consultar_estoque). Só envie quando o cliente " +
+      "pedir fotos/mais detalhes de um item específico.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: { itemId: { type: "string", description: "id do item (de consultar_estoque)." } },
+      required: ["itemId"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const itemId = readItemId(args);
+      if (!itemId) return { content: "Nenhum item informado." };
+
+      let photos;
+      try {
+        photos = await listCatalogItemPhotos(ctx.accountId, itemId);
+      } catch {
+        return { content: "Esse item não tem fotos cadastradas." };
+      }
+      if (photos.length === 0) return { content: "Esse item não tem fotos cadastradas." };
+
+      // Legenda = nome + ficha técnica do item (se houver). Reusa o DTO do catálogo
+      // (já traz name + customFields) em vez de tocar no banco direto — mantém a tool
+      // como pura composição de serviços.
+      const item = (await listCatalogItems(ctx.accountId)).find((i) => i.id === itemId) ?? null;
+      const specs =
+        item?.customFields && typeof item.customFields === "object"
+          ? Object.entries(item.customFields)
+              .filter(([, v]) => v !== null && v !== undefined && v !== "")
+              .map(([k, v]) => `${k}: ${v}`)
+              .join("\n")
+          : "";
+      const caption = [item?.name, specs].filter(Boolean).join("\n");
+
+      let sent = 0;
+      for (let i = 0; i < photos.length; i++) {
+        const buffer = await downloadMediaBuffer(photos[i].mediaPath);
+        if (!buffer) continue;
+        await sendWhatsAppMedia(
+          ctx.lead,
+          {
+            mediaPath: photos[i].mediaPath,
+            mediaType: "image",
+            mediaMime: photos[i].mediaMime,
+            fileName: null,
+            buffer,
+          },
+          i === 0 && caption ? { caption } : undefined,
+        );
+        sent++;
+      }
+      return { content: sent > 0 ? `enviei ${sent} foto(s)` : "não consegui carregar as fotos" };
+    },
+  };
+}
+
 /** Lê `{ offerId?: string }` de um args cru. */
 function readOfferId(args: unknown): string | undefined {
   if (args && typeof args === "object" && "offerId" in args) {
@@ -378,6 +456,7 @@ export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
   const tools = [consultarEstoque(ctx), enviarCatalogo(ctx), escalarHumano(ctx)];
   if (ctx.hasCatalog) tools.push(criarComanda(ctx));
   if (ctx.hasMedia) tools.push(enviarMidia(ctx));
+  if (ctx.hasProductPhotos) tools.push(enviarFotos(ctx));
 
   const noFunnel = !(ctx.company?.qualifyEnabled ?? false);
   if (noFunnel && ctx.company?.scheduleEnabled) tools.push(agendar(ctx));

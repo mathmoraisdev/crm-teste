@@ -9,6 +9,7 @@ vi.mock("@/server/services/messaging", () => ({
   sendWhatsAppMedia: vi.fn(),
 }));
 vi.mock("@/server/services/media-asset.service", () => ({ getMediaAsset: vi.fn() }));
+vi.mock("@/server/services/catalog-photo.service", () => ({ listCatalogItemPhotos: vi.fn() }));
 vi.mock("@/server/storage/media-storage", () => ({ downloadMediaBuffer: vi.fn() }));
 vi.mock("@/server/services/sales.service", () => ({ sendOffer: vi.fn() }));
 vi.mock("@/server/services/scheduling.service", () => ({ proposeSlots: vi.fn() }));
@@ -30,6 +31,7 @@ import { addItem, listOpenOrders, openOrder } from "@/server/services/order.serv
 import { setHandoff } from "@/server/services/conversation.service";
 import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
+import { listCatalogItemPhotos } from "@/server/services/catalog-photo.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { sendOffer } from "@/server/services/sales.service";
 import { proposeSlots } from "@/server/services/scheduling.service";
@@ -44,6 +46,7 @@ const addItemMock = vi.mocked(addItem);
 const setHandoffMock = vi.mocked(setHandoff);
 const addNoteMock = vi.mocked(addNote);
 const getMediaAssetMock = vi.mocked(getMediaAsset);
+const listPhotosMock = vi.mocked(listCatalogItemPhotos);
 const downloadMock = vi.mocked(downloadMediaBuffer);
 const sendOfferMock = vi.mocked(sendOffer);
 const proposeSlotsMock = vi.mocked(proposeSlots);
@@ -55,6 +58,7 @@ function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
     company: { salesEnabled: false, scheduleEnabled: false, qualifyEnabled: false },
     hasCatalog: true,
     hasMedia: false,
+    hasProductPhotos: false,
     ...over,
   };
 }
@@ -81,6 +85,7 @@ beforeEach(() => {
   addNoteMock.mockReset();
   sendMediaMock.mockReset();
   getMediaAssetMock.mockReset();
+  listPhotosMock.mockReset();
   downloadMock.mockReset();
   sendOfferMock.mockReset();
   proposeSlotsMock.mockReset();
@@ -293,6 +298,56 @@ describe("enviar_midia", () => {
     const r = await midiaTool().handler({ assetId: "ma_1" });
     expect(sendMediaMock).not.toHaveBeenCalled();
     expect(r.content).toMatch(/não consegui carregar/i);
+  });
+});
+
+describe("enviar_fotos", () => {
+  const fotosTool = () => {
+    const t = buildAttendanceTools(ctx({ hasProductPhotos: true })).find((x) => x.name === "enviar_fotos");
+    if (!t) throw new Error("enviar_fotos não registrada");
+    return t;
+  };
+
+  it("registra enviar_fotos só quando hasProductPhotos", () => {
+    expect(buildAttendanceTools(ctx({ hasProductPhotos: true })).map((t) => t.name)).toContain("enviar_fotos");
+    expect(buildAttendanceTools(ctx({ hasProductPhotos: false })).map((t) => t.name)).not.toContain("enviar_fotos");
+  });
+
+  it("manda cada foto do item com a ficha na legenda da primeira", async () => {
+    listPhotosMock.mockResolvedValue([
+      { id: "p1", mediaPath: "acc_1/a.jpg", mediaMime: "image/jpeg", order: 0 },
+      { id: "p2", mediaPath: "acc_1/b.jpg", mediaMime: "image/jpeg", order: 1 },
+    ]);
+    listMock.mockResolvedValue([item({ id: "car_1", name: "Onix 2019", customFields: { ano: 2019, cor: "Prata" } })]);
+    downloadMock.mockResolvedValue(Buffer.from("img"));
+    sendMediaMock.mockResolvedValue();
+
+    const r = await fotosTool().handler({ itemId: "car_1" });
+
+    expect(listPhotosMock).toHaveBeenCalledWith("acc_1", "car_1");
+    expect(sendMediaMock).toHaveBeenCalledTimes(2);
+    const [, media0, opts0] = sendMediaMock.mock.calls[0];
+    expect(media0).toMatchObject({ mediaType: "image", mediaPath: "acc_1/a.jpg" });
+    expect(opts0?.caption).toContain("Onix 2019");
+    expect(opts0?.caption).toContain("ano: 2019");
+    expect(opts0?.caption).toContain("cor: Prata");
+    // a 2ª foto vai SEM legenda (evita repetir a ficha)
+    const [, , opts1] = sendMediaMock.mock.calls[1];
+    expect(opts1).toBeUndefined();
+    expect(r.content).toMatch(/2 foto/);
+  });
+
+  it("item sem fotos (ou de outra conta) → avisa e não envia", async () => {
+    listPhotosMock.mockResolvedValue([]);
+    const r = await fotosTool().handler({ itemId: "x" });
+    expect(sendMediaMock).not.toHaveBeenCalled();
+    expect(r.content).toMatch(/não tem fotos/i);
+  });
+
+  it("sem itemId → avisa sem consultar fotos", async () => {
+    const r = await fotosTool().handler({});
+    expect(listPhotosMock).not.toHaveBeenCalled();
+    expect(r.content).toMatch(/nenhum item/i);
   });
 });
 
