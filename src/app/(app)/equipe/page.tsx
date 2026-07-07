@@ -62,6 +62,7 @@ export default async function EquipePage() {
           email: m.email,
           canCampaigns: m.canCampaigns,
           canSettings: m.canSettings,
+          canFinance: m.canFinance,
           leadsScope: m.leadsScope,
           createdAt: m.createdAt.toISOString(),
         }))}

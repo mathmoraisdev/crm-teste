@@ -31,6 +31,8 @@ export default async function ConfiguracoesPage() {
 
   // Operador sem canSettings: vê as configs da conta, mas não edita IA/funil/campos.
   const canSettings = ctx?.perms.canSettings ?? true;
+  // Chaves de pagamento/fiscal são financeiras — gate separado (coerência com o servidor).
+  const canFinance = ctx?.perms.canFinance ?? true;
   // Só o dono/ADMIN exporta ou exclui a conta inteira.
   const isOwner = ctx?.role === "ADMIN";
 
@@ -71,6 +73,7 @@ export default async function ConfiguracoesPage() {
         fiscalEmissionGlobal={env.FISCAL_EMISSION}
         salesAllowed={salesAllowed}
         canSettings={canSettings}
+        canFinance={canFinance}
         isOwner={isOwner}
       />
 

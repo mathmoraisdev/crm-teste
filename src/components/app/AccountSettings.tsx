@@ -74,6 +74,7 @@ export function AccountSettings({
   fiscalEmissionGlobal = false,
   salesAllowed = false,
   canSettings = true,
+  canFinance = true,
   isOwner = true,
 }: {
   account: Account;
@@ -84,6 +85,7 @@ export function AccountSettings({
   fiscalEmissionGlobal?: boolean; // kill-switch global FISCAL_EMISSION (só p/ aviso na UI)
   salesAllowed?: boolean; // plano permite o funil de vendas (mostra o bloco de Pix)
   canSettings?: boolean;
+  canFinance?: boolean; // chaves de pagamento/fiscal são financeiras (gate separado)
   isOwner?: boolean; // dono/ADMIN — só ele exporta/exclui a conta
 }) {
   const router = useRouter();
@@ -563,12 +565,12 @@ export function AccountSettings({
             subtitle="Conecte seu Mercado Pago ou Asaas. A cobrança cai direto na sua conta — a plataforma não intermedia o dinheiro."
           />
           <div className="space-y-3 px-5 py-4">
-            {!canSettings ? (
+            {!canFinance ? (
               <p className="text-sm text-slate-600">
                 {payStatus.configured
                   ? `${payStatus.provider ? PAYMENT_PROVIDER_LABEL[payStatus.provider] : ""} • conectado ••••${payStatus.last4}.`
                   : "Nenhum gateway conectado."}{" "}
-                Apenas o administrador da conta pode conectar um gateway.
+                Você não tem permissão de Financeiro para conectar um gateway.
               </p>
             ) : payStatus.configured ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -621,12 +623,12 @@ export function AccountSettings({
             subtitle="Emita a nota do consumidor no fechamento da comanda via emissor terceiro. Você conecta o token do emissor; a assinatura e o cadastro tributário ficam com ele."
           />
           <div className="space-y-4 px-5 py-4">
-            {!canSettings ? (
+            {!canFinance ? (
               <p className="text-sm text-slate-600">
                 {fiscalStatus.configured
                   ? `${fiscalStatus.provider ? FISCAL_PROVIDER_LABEL[fiscalStatus.provider] : ""} • conectado ••••${fiscalStatus.last4}.`
                   : "Nenhum emissor conectado."}{" "}
-                Apenas o administrador da conta pode configurar a emissão fiscal.
+                Você não tem permissão de Financeiro para configurar a emissão fiscal.
               </p>
             ) : (
               <>
