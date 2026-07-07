@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   Check,
+  Store,
   MessageSquare,
   Upload,
   Megaphone,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/Card";
+import { HelpHint } from "@/components/ui/HelpHint";
 import { cn } from "@/lib/utils";
 import type {
   OnboardingState,
@@ -25,14 +27,23 @@ import type {
  */
 const STEP_META: Record<
   OnboardingStepKey,
-  { icon: LucideIcon; title: string; description: string; href: string; cta: string }
+  { icon: LucideIcon; title: string; description: string; href: string; cta: string; help: string }
 > = {
+  ramo: {
+    icon: Store,
+    title: "Escolha o seu ramo de negócio",
+    description: "1 clique configura tema, campos, catálogo, funil e a persona da IA de uma vez.",
+    href: "/configuracoes#configuracao-rapida-ramo",
+    cta: "Escolher ramo",
+    help: "O ramo molda o app inteiro: quais campos aparecem na comanda, o que a IA sabe responder e quais módulos ficam em destaque. Dá pra trocar depois — nada fica travado.",
+  },
   number: {
     icon: MessageSquare,
     title: "Conecte um número de WhatsApp",
     description: "Pareie um chip para começar a enviar e receber mensagens.",
     href: "/empresas",
     cta: "Conectar número",
+    help: "Sem um número conectado, o Atendimento e as Campanhas não têm por onde enviar mensagem. É o pré-requisito de quase tudo.",
   },
   leads: {
     icon: Upload,
@@ -40,6 +51,7 @@ const STEP_META: Record<
     description: "Suba um CSV de contatos pelo botão “Importar CSV” aqui em cima.",
     href: "/leads",
     cta: "Importar CSV",
+    help: "Aceita um CSV com nome e telefone. Contatos repetidos são ignorados — pode subir a lista inteira sem medo de duplicar.",
   },
   ai: {
     icon: Bot,
@@ -47,6 +59,7 @@ const STEP_META: Record<
     description: "Conecte sua chave para a IA qualificar leads automaticamente.",
     href: "/configuracoes",
     cta: "Configurar IA",
+    help: "A IA usa a persona e a base de conhecimento do seu ramo para responder no seu tom. Você revisa o texto antes de ligar.",
   },
   campaign: {
     icon: Megaphone,
@@ -54,6 +67,7 @@ const STEP_META: Record<
     description: "Monte a mensagem com {{nome}} e comece a falar com o funil.",
     href: "/campaigns",
     cta: "Criar campanha",
+    help: "Use {{nome}} para personalizar. O disparo respeita o número conectado e o ritmo de envio para proteger o chip.",
   },
   meeting: {
     icon: CalendarClock,
@@ -61,6 +75,7 @@ const STEP_META: Record<
     description: "Marque um agendamento na Agenda — o lead recebe lembrete no WhatsApp.",
     href: "/agenda",
     cta: "Abrir agenda",
+    help: "O lembrete sai automático pelo WhatsApp na véspera e perto da hora, reduzindo faltas. Só aparece para ramos que trabalham com hora marcada.",
   },
 };
 
@@ -110,11 +125,12 @@ export function OnboardingChecklist({ state }: { state: OnboardingState }) {
               <div className="min-w-0 flex-1">
                 <p
                   className={cn(
-                    "text-sm font-bold",
+                    "flex items-center gap-1.5 text-sm font-bold",
                     step.done ? "text-slate-400 line-through" : "text-ink",
                   )}
                 >
                   {meta.title}
+                  {!step.done && <HelpHint label={`Sobre: ${meta.title}`}>{meta.help}</HelpHint>}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">{meta.description}</p>
               </div>

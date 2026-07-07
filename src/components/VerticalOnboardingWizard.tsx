@@ -172,22 +172,25 @@ export function VerticalOnboardingWizard({
 
   if (!canEdit) {
     return (
-      <Card>
-        <CardHeader
-          title="Configuração rápida do ramo"
-          subtitle="Aplique o pacote completo do seu ramo (tema, campos, catálogo e atendimento) de uma vez."
-        />
-        <div className="px-4 py-3">
-          <p className="text-sm text-slate-500">
-            Apenas o administrador da conta pode aplicar a configuração de um ramo.
-          </p>
-        </div>
-      </Card>
+      <div id="configuracao-rapida-ramo">
+        <Card>
+          <CardHeader
+            title="Configuração rápida do ramo"
+            subtitle="Aplique o pacote completo do seu ramo (tema, campos, catálogo e atendimento) de uma vez."
+          />
+          <div className="px-4 py-3">
+            <p className="text-sm text-slate-500">
+              Apenas o administrador da conta pode aplicar a configuração de um ramo.
+            </p>
+          </div>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card>
+    <div id="configuracao-rapida-ramo">
+      <Card>
       <CardHeader
         title="Configuração rápida do ramo"
         subtitle="Aplique o pacote completo do seu ramo (tema, campos, catálogo e atendimento) de uma vez."
@@ -445,6 +448,7 @@ export function VerticalOnboardingWizard({
           </div>
         )}
       </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
