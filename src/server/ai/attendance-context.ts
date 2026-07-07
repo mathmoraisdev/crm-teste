@@ -1,4 +1,8 @@
 import { formatCentsBRL } from "@/lib/money";
+import type {
+  BookableProfessional,
+  BookableService,
+} from "@/server/services/booking-availability.service";
 
 /**
  * Monta (PURA) o bloco de contexto da empresa para o prompt de atendimento.
@@ -76,6 +80,41 @@ export function renderMediaAssetsForAI(assets: { id: string; label: string }[]):
   if (!assets.length) return "";
   const linhas = assets.map((a) => `- assetId=${a.id} | ${a.label}`);
   return `MÍDIAS DISPONÍVEIS (envie com enviar_midia usando o assetId):\n${linhas.join("\n")}`;
+}
+
+/**
+ * Renderiza (PURA) o bloco AGENDAMENTO da Agenda Pro para o prompt do loop — dá à
+ * IA os `serviceId`/`professionalId` REAIS que a tool `agendar` recebe (nunca
+ * inventar id) e, quando há, o link público de autoatendimento como caminho
+ * alternativo. Serviço traz preço + duração; profissional só id + nome. Vazio → ""
+ * (sem serviço agendável E sem link o chamador omite o bloco inteiro).
+ */
+export function renderBookingContext(opts: {
+  services: BookableService[];
+  professionals: BookableProfessional[];
+  bookingUrl?: string | null;
+}): string {
+  const { services, professionals, bookingUrl } = opts;
+  if (services.length === 0 && !bookingUrl) return "";
+
+  const parts: string[] = [
+    "AGENDAMENTO (marque com a tool agendar usando os ids abaixo; nunca invente id nem horário):",
+  ];
+  if (services.length) {
+    const linhas = services.map((s) => {
+      const price = s.priceCents > 0 ? formatCentsBRL(s.priceCents) : "sob consulta";
+      return `- serviceId=${s.id} | ${s.name} | ${price} | ${s.durationMinutes}min`;
+    });
+    parts.push(`Serviços agendáveis:\n${linhas.join("\n")}`);
+  }
+  if (professionals.length) {
+    const linhas = professionals.map((p) => `- professionalId=${p.id} | ${p.name}`);
+    parts.push(`Profissionais (opcional; ausente = sem preferência):\n${linhas.join("\n")}`);
+  }
+  if (bookingUrl) {
+    parts.push(`Link de autoatendimento: ${bookingUrl}`);
+  }
+  return parts.join("\n\n");
 }
 
 export interface CatalogItemForTools {

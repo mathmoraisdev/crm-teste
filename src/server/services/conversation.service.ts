@@ -15,10 +15,15 @@ import { decideInboundMode } from "./inbound-mode";
 import { decidePipeline } from "./pipeline";
 import { listActiveOffers } from "./offer.service";
 import { sendOffer } from "./sales.service";
-import { renderActiveOffers, renderCatalogForAI, renderMediaAssetsForAI } from "@/server/ai/attendance-context";
+import { renderActiveOffers, renderBookingContext, renderCatalogForAI, renderMediaAssetsForAI } from "@/server/ai/attendance-context";
 import { listCatalogItems } from "./catalog.service";
 import { listMediaAssets } from "./media-asset.service";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
+import {
+  listBookableProfessionals,
+  listBookableServices,
+} from "./booking-availability.service";
+import { interpretAndBookAppointment, isAppointmentSlots } from "./appointment-chat.service";
 import {
   sendWhatsAppMessage,
   enqueueManualReply,
@@ -541,7 +546,7 @@ export async function respondToLead(leadId: string): Promise<void> {
   // 3. Aguardando escolha de horário? Usa a mensagem inbound mais recente.
   const meeting = await prisma.meeting.findUnique({
     where: { leadId: lead.id },
-    select: { status: true },
+    select: { status: true, proposedSlots: true },
   });
   if (meeting?.status === "PROPOSED") {
     if (!(await aiStillActive(lead.id))) return; // operador assumiu durante o debounce
@@ -553,7 +558,15 @@ export async function respondToLead(leadId: string): Promise<void> {
       orderBy: { createdAt: "desc" },
       select: { content: true },
     });
-    if (lastInbound) await interpretAndBook(lead.id, lastInbound.content);
+    // Discrimina pela FORMA de proposedSlots: objetos = proposta de Agenda Pro
+    // (fluxo novo), strings ISO = reunião de venda (fluxo antigo). Retrocompat.
+    if (lastInbound) {
+      if (isAppointmentSlots(meeting.proposedSlots)) {
+        await interpretAndBookAppointment(lead.id, lastInbound.content);
+      } else {
+        await interpretAndBook(lead.id, lastInbound.content);
+      }
+    }
     return;
   }
   if (status === "REUNIAO_AGENDADA") {
@@ -696,6 +709,29 @@ export async function respondToLead(leadId: string): Promise<void> {
       const productPhotoCount = await prisma.catalogItemPhoto.count({
         where: { catalogItem: { accountId: lead.userId } },
       });
+      // Agenda Pro in-chat — SÓ em número sem funil (o funil marca reunião de venda
+      // pelo fluxo Meeting; evita disparo duplo). Carrega serviços/profissionais para
+      // gate + ids da tool `agendar`, e o link público como caminho alternativo.
+      const scheduleOn = (company?.scheduleEnabled ?? false) && !(company?.qualifyEnabled ?? false);
+      const bookableServices = scheduleOn ? await listBookableServices(lead.userId) : [];
+      let bookingBlock: string | undefined;
+      if (scheduleOn) {
+        const bookableProfessionals = bookableServices.length
+          ? await listBookableProfessionals(lead.userId)
+          : [];
+        const acct = await prisma.user.findUnique({
+          where: { id: lead.userId },
+          select: { publicSlug: true, bookingEnabled: true },
+        });
+        const bookingUrl =
+          acct?.bookingEnabled && acct.publicSlug ? `${env.APP_URL}/agendar/${acct.publicSlug}` : null;
+        bookingBlock =
+          renderBookingContext({
+            services: bookableServices,
+            professionals: bookableProfessionals,
+            bookingUrl,
+          }) || undefined;
+      }
       const tools = buildAttendanceTools({
         lead: {
           id: lead.id,
@@ -709,8 +745,9 @@ export async function respondToLead(leadId: string): Promise<void> {
         hasCatalog,
         hasMedia: mediaAssets.length > 0,
         hasProductPhotos: productPhotoCount > 0,
+        bookableServices,
       });
-      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock, offersBlock });
+      const r = await generateAgenticReply({ ai, company: companyForReply, catalogBlock, conversation, tools, mediaBlock, offersBlock, bookingBlock });
       if (!(await aiStillActive(lead.id))) return; // recheck preservado
       if (r.stopped) return; // uma tool já encerrou o turno (ex.: escalar)
       if (r.text) await sendWhatsAppMessage(lead, r.text);

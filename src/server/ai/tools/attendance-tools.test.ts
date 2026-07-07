@@ -12,7 +12,7 @@ vi.mock("@/server/services/media-asset.service", () => ({ getMediaAsset: vi.fn()
 vi.mock("@/server/services/catalog-photo.service", () => ({ listCatalogItemPhotos: vi.fn() }));
 vi.mock("@/server/storage/media-storage", () => ({ downloadMediaBuffer: vi.fn() }));
 vi.mock("@/server/services/sales.service", () => ({ sendOffer: vi.fn() }));
-vi.mock("@/server/services/scheduling.service", () => ({ proposeSlots: vi.fn() }));
+vi.mock("@/server/services/appointment-chat.service", () => ({ proposeAppointmentSlots: vi.fn() }));
 vi.mock("@/server/services/order.service", () => ({
   listOpenOrders: vi.fn(),
   openOrder: vi.fn(),
@@ -34,7 +34,7 @@ import { getMediaAsset } from "@/server/services/media-asset.service";
 import { listCatalogItemPhotos } from "@/server/services/catalog-photo.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { sendOffer } from "@/server/services/sales.service";
-import { proposeSlots } from "@/server/services/scheduling.service";
+import { proposeAppointmentSlots } from "@/server/services/appointment-chat.service";
 import { buildAttendanceTools, type AttendanceToolCtx } from "./attendance-tools";
 
 const listMock = vi.mocked(listCatalogItems);
@@ -49,7 +49,10 @@ const getMediaAssetMock = vi.mocked(getMediaAsset);
 const listPhotosMock = vi.mocked(listCatalogItemPhotos);
 const downloadMock = vi.mocked(downloadMediaBuffer);
 const sendOfferMock = vi.mocked(sendOffer);
-const proposeSlotsMock = vi.mocked(proposeSlots);
+const proposeApptMock = vi.mocked(proposeAppointmentSlots);
+
+// Serviço agendável de exemplo (gate + ids de `agendar`).
+const svc = { id: "svc_1", name: "Corte", priceCents: 5000, durationMinutes: 30 };
 
 function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
   return {
@@ -59,6 +62,7 @@ function ctx(over: Partial<AttendanceToolCtx> = {}): AttendanceToolCtx {
     hasCatalog: true,
     hasMedia: false,
     hasProductPhotos: false,
+    bookableServices: [],
     ...over,
   };
 }
@@ -88,7 +92,7 @@ beforeEach(() => {
   listPhotosMock.mockReset();
   downloadMock.mockReset();
   sendOfferMock.mockReset();
-  proposeSlotsMock.mockReset();
+  proposeApptMock.mockReset();
 });
 
 // OrderDTO mínimo p/ os stubs de comanda.
@@ -119,14 +123,20 @@ describe("buildAttendanceTools (gating)", () => {
 
   it("agendar/enviar_oferta só em número SEM funil (!qualifyEnabled)", () => {
     const semFunil = buildAttendanceTools(
-      ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true } }),
+      ctx({
+        company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true },
+        bookableServices: [svc],
+      }),
     ).map((t) => t.name);
     expect(semFunil).toContain("agendar");
     expect(semFunil).toContain("enviar_oferta");
 
     // Com o funil ligado, NENHUMA das duas (evita disparo duplo com a qualificação).
     const comFunil = buildAttendanceTools(
-      ctx({ company: { qualifyEnabled: true, scheduleEnabled: true, salesEnabled: true } }),
+      ctx({
+        company: { qualifyEnabled: true, scheduleEnabled: true, salesEnabled: true },
+        bookableServices: [svc],
+      }),
     ).map((t) => t.name);
     expect(comFunil).not.toContain("agendar");
     expect(comFunil).not.toContain("enviar_oferta");
@@ -134,10 +144,23 @@ describe("buildAttendanceTools (gating)", () => {
 
   it("agendar só com scheduleEnabled; enviar_oferta só com salesEnabled", () => {
     const soAgenda = buildAttendanceTools(
-      ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: false } }),
+      ctx({
+        company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: false },
+        bookableServices: [svc],
+      }),
     ).map((t) => t.name);
     expect(soAgenda).toContain("agendar");
     expect(soAgenda).not.toContain("enviar_oferta");
+  });
+
+  it("agendar NÃO registra sem serviço agendável (mesmo com scheduleEnabled sem funil)", () => {
+    const semServico = buildAttendanceTools(
+      ctx({
+        company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: false },
+        bookableServices: [],
+      }),
+    ).map((t) => t.name);
+    expect(semServico).not.toContain("agendar");
   });
 });
 
@@ -351,8 +374,12 @@ describe("enviar_fotos", () => {
   });
 });
 
-// Tools do funil (Fase 6): registradas só com o company certo (sem qualifyEnabled).
-const funilCtx = ctx({ company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true } });
+// Tools do funil (Fase 6): registradas só com o company certo (sem qualifyEnabled)
+// e, p/ agendar, com serviço agendável.
+const funilCtx = ctx({
+  company: { qualifyEnabled: false, scheduleEnabled: true, salesEnabled: true },
+  bookableServices: [svc],
+});
 function funilTool(name: string) {
   const t = buildAttendanceTools(funilCtx).find((x) => x.name === name);
   if (!t) throw new Error(`tool ${name} não registrada`);
@@ -360,11 +387,30 @@ function funilTool(name: string) {
 }
 
 describe("agendar", () => {
-  it("dispara proposeSlots e encerra o turno (stop)", async () => {
-    proposeSlotsMock.mockResolvedValue(undefined);
-    const r = await funilTool("agendar").handler({});
-    expect(proposeSlotsMock).toHaveBeenCalledWith("lead_1");
+  it("propõe horários REAIS (serviceId + professionalId) e encerra o turno (stop)", async () => {
+    proposeApptMock.mockResolvedValue(undefined);
+    const r = await funilTool("agendar").handler({ serviceId: "svc_1", professionalId: "pro_1" });
+    expect(proposeApptMock).toHaveBeenCalledWith("lead_1", "acc_1", {
+      serviceId: "svc_1",
+      professionalId: "pro_1",
+    });
     expect(r.stop).toBe(true);
+  });
+
+  it("sem professionalId → passa undefined (sem preferência)", async () => {
+    proposeApptMock.mockResolvedValue(undefined);
+    await funilTool("agendar").handler({ serviceId: "svc_1" });
+    expect(proposeApptMock).toHaveBeenCalledWith("lead_1", "acc_1", {
+      serviceId: "svc_1",
+      professionalId: undefined,
+    });
+  });
+
+  it("sem serviceId → avisa e NÃO propõe", async () => {
+    const r = await funilTool("agendar").handler({});
+    expect(proposeApptMock).not.toHaveBeenCalled();
+    expect(r.stop).toBeFalsy();
+    expect(r.content).toMatch(/serviço/i);
   });
 });
 

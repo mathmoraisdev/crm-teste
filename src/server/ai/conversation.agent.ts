@@ -201,13 +201,20 @@ export async function generateAgenticReply(opts: {
   mediaBlock?: string;
   /** Bloco de ofertas ativas (offerId + preço) p/ a IA escolher em enviar_oferta. */
   offersBlock?: string;
+  /** Bloco AGENDAMENTO (serviceId/professionalId + link) p/ a IA usar em agendar. */
+  bookingBlock?: string;
 }): Promise<AgenticReplyResult> {
   const { system: baseSystem, contextPrefix } = buildAttendancePrompt(opts);
   const contextBlock = contextPrefix.trimEnd();
   const offers = opts.offersBlock?.trim() ? `\n\n${opts.offersBlock.trim()}` : "";
   const media = opts.mediaBlock?.trim() ? `\n\n${opts.mediaBlock.trim()}` : "";
+  const booking = opts.bookingBlock?.trim() ? `\n\n${opts.bookingBlock.trim()}` : "";
   const system =
-    `${baseSystem}\n\n${brazilTodayLine()}` + (contextBlock ? `\n\n${contextBlock}` : "") + offers + media;
+    `${baseSystem}\n\n${brazilTodayLine()}` +
+    (contextBlock ? `\n\n${contextBlock}` : "") +
+    offers +
+    media +
+    booking;
   const messages = conversationToLoopMessages(opts.conversation);
   const result = await opts.ai.runToolLoop({
     tier: "cheap",

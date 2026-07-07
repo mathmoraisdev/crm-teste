@@ -7,7 +7,8 @@ import { getMediaAsset } from "@/server/services/media-asset.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { sendWhatsAppMessage, sendWhatsAppMedia } from "@/server/services/messaging";
 import { sendOffer } from "@/server/services/sales.service";
-import { proposeSlots } from "@/server/services/scheduling.service";
+import { proposeAppointmentSlots } from "@/server/services/appointment-chat.service";
+import type { BookableService } from "@/server/services/booking-availability.service";
 import { renderCatalogForTools } from "../attendance-context";
 import type { ToolDef, ToolResult } from "../provider";
 
@@ -37,6 +38,8 @@ export interface AttendanceToolCtx {
   hasMedia: boolean;
   /** Conta tem ao menos uma CatalogItemPhoto → habilita `enviar_fotos` (anúncios). */
   hasProductPhotos: boolean;
+  /** Serviços agendáveis da Agenda Pro — gate + ids que a IA usa em `agendar`. */
+  bookableServices: BookableService[];
 }
 
 /** Lê `query?: string` de um args cru sem estourar em formato inesperado. */
@@ -384,20 +387,49 @@ function readOfferId(args: unknown): string | undefined {
   return undefined;
 }
 
+/** Lê `{ serviceId?: string, professionalId?: string }` de um args cru, tolerante. */
+function readAgendarArgs(args: unknown): { serviceId?: string; professionalId?: string } {
+  if (!args || typeof args !== "object") return {};
+  const s = (args as { serviceId?: unknown }).serviceId;
+  const p = (args as { professionalId?: unknown }).professionalId;
+  return {
+    serviceId: typeof s === "string" && s.trim() ? s.trim() : undefined,
+    professionalId: typeof p === "string" && p.trim() ? p.trim() : undefined,
+  };
+}
+
 /**
- * Handler `agendar` (Fase 6): a IA decide propor horários. `proposeSlots` monta e
- * envia os slots (o subfluxo PROPOSED assume a partir daí), então o turno encerra
- * (`stop:true`). Só registrada em número SEM funil de qualificação — ver o gating.
+ * Handler `agendar`: propõe horários REAIS da Agenda Pro pelo chat. Recebe o
+ * `serviceId` (do bloco AGENDAMENTO) e opcionalmente o `professionalId` (ausente =
+ * sem preferência). `proposeAppointmentSlots` busca a disponibilidade, grava a
+ * proposta e envia os horários numerados — o subfluxo PROPOSED assume a partir daí,
+ * então o turno encerra (`stop:true`). Serviço/profissional inválido vira mensagem
+ * legível ao cliente dentro do serviço. Só registrada em número SEM funil de
+ * qualificação e com serviço agendável — ver o gating.
  */
 function agendar(ctx: AttendanceToolCtx): ToolDef {
   return {
     name: "agendar",
     description:
-      "Propõe horários de agendamento ao cliente. Use quando ele quiser marcar um horário/atendimento. " +
-      "Você não escolhe o horário — apenas dispara a oferta de horários disponíveis.",
-    jsonSchema: { type: "object", additionalProperties: false, properties: {} },
-    handler: async (): Promise<ToolResult> => {
-      await proposeSlots(ctx.lead.id);
+      "Propõe horários REAIS de agendamento ao cliente. Use quando ele quiser marcar um serviço. " +
+      "Informe o serviceId (da lista AGENDAMENTO) e, se o cliente escolheu um profissional, o " +
+      "professionalId. Você não escolhe o horário — apenas dispara a oferta dos horários livres.",
+    jsonSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        serviceId: { type: "string", description: "id do serviço (de AGENDAMENTO)." },
+        professionalId: {
+          type: "string",
+          description: "id do profissional (opcional; ausente = sem preferência).",
+        },
+      },
+      required: ["serviceId"],
+    },
+    handler: async (args): Promise<ToolResult> => {
+      const { serviceId, professionalId } = readAgendarArgs(args);
+      if (!serviceId) return { content: "Preciso saber qual serviço agendar." };
+      await proposeAppointmentSlots(ctx.lead.id, ctx.accountId, { serviceId, professionalId });
       return { content: "horários propostos ao cliente", stop: true };
     },
   };
@@ -447,10 +479,11 @@ function enviarOferta(ctx: AttendanceToolCtx): ToolDef {
  * entram; `criar_comanda` só quando a conta usa o módulo de comanda (`hasCatalog`);
  * `enviar_midia` só quando a conta tem biblioteca de mídia (`hasMedia`).
  *
- * `agendar`/`enviar_oferta` (Fase 6) só entram em número SEM o funil de
- * qualificação (`!qualifyEnabled`): com o funil ligado, a qualificação
- * determinística já dispara `proposeSlots`/`sendOffer` ANTES do branch agêntico —
- * registrar as tools aqui faria a MESMA ação sair pelos dois caminhos (disparo duplo).
+ * `agendar`/`enviar_oferta` só entram em número SEM o funil de qualificação
+ * (`!qualifyEnabled`): com o funil ligado, a qualificação determinística já dispara
+ * `proposeSlots`/`sendOffer` ANTES do branch agêntico — registrar as tools aqui faria
+ * a MESMA ação sair pelos dois caminhos (disparo duplo). `agendar` religa a Agenda Pro
+ * real, então também exige serviço agendável (`bookableServices.length > 0`).
  */
 export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
   const tools = [consultarEstoque(ctx), enviarCatalogo(ctx), escalarHumano(ctx)];
@@ -459,7 +492,10 @@ export function buildAttendanceTools(ctx: AttendanceToolCtx): ToolDef[] {
   if (ctx.hasProductPhotos) tools.push(enviarFotos(ctx));
 
   const noFunnel = !(ctx.company?.qualifyEnabled ?? false);
-  if (noFunnel && ctx.company?.scheduleEnabled) tools.push(agendar(ctx));
+  // `agendar` liga a Agenda Pro real: sem serviço agendável não há o que propor.
+  if (noFunnel && ctx.company?.scheduleEnabled && ctx.bookableServices.length > 0) {
+    tools.push(agendar(ctx));
+  }
   if (noFunnel && ctx.company?.salesEnabled) tools.push(enviarOferta(ctx));
   return tools;
 }
