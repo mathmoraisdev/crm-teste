@@ -29,7 +29,7 @@ type AiUsage =
   | { unlimited: true; reason: "byok" | "grandfather" | "admin" }
   | { unlimited: false; used: number; quota: number; month: string };
 
-type PaymentProvider = "MERCADO_PAGO" | "ASAAS";
+type PaymentProvider = "MERCADO_PAGO" | "ASAAS" | "PAGBANK";
 
 type PaymentKeyStatus = {
   configured: boolean;
@@ -41,6 +41,7 @@ type PaymentKeyStatus = {
 const PAYMENT_PROVIDER_LABEL: Record<PaymentProvider, string> = {
   MERCADO_PAGO: "Mercado Pago",
   ASAAS: "Asaas",
+  PAGBANK: "PagBank",
 };
 
 type FiscalProvider = "FOCUS_NFE" | "PLUGNOTAS" | "TECNOSPEED";
@@ -593,12 +594,19 @@ export function AccountSettings({
                   >
                     <option value="MERCADO_PAGO">Mercado Pago</option>
                     <option value="ASAAS">Asaas</option>
+                    <option value="PAGBANK">PagBank</option>
                   </select>
                   <input
                     type="password"
                     value={payKeyInput}
                     onChange={(e) => setPayKeyInput(e.target.value)}
-                    placeholder={payProvider === "MERCADO_PAGO" ? "Access Token (APP_USR-...)" : "API Key ($aact_...)"}
+                    placeholder={
+                      payProvider === "MERCADO_PAGO"
+                        ? "Access Token (APP_USR-...)"
+                        : payProvider === "PAGBANK"
+                          ? "Token PagBank (Bearer)"
+                          : "API Key ($aact_...)"
+                    }
                     className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
                 </div>
