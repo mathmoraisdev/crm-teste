@@ -123,6 +123,9 @@ const schema = z.object({
   // Base pública do app p/ montar a notification_url dos webhooks de pagamento.
   APP_PUBLIC_URL: z.string().default("http://localhost:3000"),
 
+  // ── Fiscal (NFC-e via emissor terceiro, Onda H) ─────────────────────────────
+  FISCAL_MOCK: z.coerce.boolean().default(false), // dev/teste: emissor determinístico, não toca SEFAZ
+
   // ── Transcrição de áudio (fala→texto) — chave SEMPRE de plataforma ──────────
   TRANSCRIBE_ENABLED: z.coerce.boolean().default(false),
   TRANSCRIBE_PROVIDER: z.enum(["groq", "openai"]).default("groq"),
