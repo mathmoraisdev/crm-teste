@@ -85,6 +85,7 @@ function consultarEstoque(ctx: AttendanceToolCtx): ToolDef {
           kind: i.kind,
           trackStock: i.trackStock,
           stockQty: i.stockQty,
+          customFields: i.customFields,
         })),
       );
       return {

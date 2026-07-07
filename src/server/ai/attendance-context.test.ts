@@ -123,6 +123,23 @@ describe("renderCatalogForTools", () => {
     expect(out).toMatch(/id=ci_2.*sob consulta/);
   });
 
+  it("inclui a ficha técnica (specs) quando presente", () => {
+    const out = renderCatalogForTools([
+      {
+        id: "abc",
+        name: "Onix 2019",
+        kind: "PRODUTO",
+        priceCents: 5490000,
+        trackStock: true,
+        stockQty: 1,
+        customFields: { ano: 2019, cor: "Prata" },
+      },
+    ]);
+    expect(out).toContain("Onix 2019");
+    expect(out).toContain("ano: 2019");
+    expect(out).toContain("cor: Prata");
+  });
+
   it("sem controle de estoque → estoque=— e nunca INDISPONÍVEL", () => {
     const out = renderCatalogForTools([
       { id: "ci_3", name: "Consultoria", priceCents: 9700, kind: "SERVICO", trackStock: false, stockQty: 0 },

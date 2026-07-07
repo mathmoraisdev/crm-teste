@@ -86,6 +86,8 @@ export interface CatalogItemForTools {
   /** Opcionais: quando ausentes, o item é sempre tratado como disponível (retrocompat). */
   trackStock?: boolean;
   stockQty?: number;
+  /** Ficha técnica (specs) do anúncio — valores dos CustomFieldDef scope=PRODUCT. */
+  customFields?: Record<string, unknown> | null;
 }
 
 /**
@@ -104,7 +106,17 @@ export function renderCatalogForTools(items: CatalogItemForTools[]): string {
     const stock = tracks ? String(i.stockQty ?? 0) : "—";
     const soldOut = tracks && (i.stockQty ?? 0) <= 0;
     const mark = soldOut ? " — INDISPONÍVEL" : "";
-    return `id=${i.id} | ${i.name} | ${price} | estoque=${stock}${mark}`;
+    // Ficha técnica (specs) do anúncio, só no caminho ativo da tool (custo por token
+    // sob demanda, não no bloco passivo). Ausente/vazia → não anexa nada.
+    const specs =
+      i.customFields && typeof i.customFields === "object"
+        ? Object.entries(i.customFields)
+            .filter(([, v]) => v !== null && v !== undefined && v !== "")
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ")
+        : "";
+    const ficha = specs ? ` | ficha: ${specs}` : "";
+    return `id=${i.id} | ${i.name} | ${price} | estoque=${stock}${mark}${ficha}`;
   });
   return lines.join("\n");
 }
