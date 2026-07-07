@@ -12,6 +12,8 @@ function resolveTranscribeClient():
       client: new OpenAI({
         apiKey: env.GROQ_API_KEY,
         baseURL: "https://api.groq.com/openai/v1",
+        timeout: env.AI_REQUEST_TIMEOUT_MS,
+        maxRetries: env.AI_MAX_RETRIES,
       }),
       model: env.TRANSCRIBE_MODEL_GROQ,
     };
@@ -22,7 +24,11 @@ function resolveTranscribeClient():
 function openaiFallback(): { client: OpenAI; model: string } | null {
   if (!env.OPENAI_API_KEY) return null;
   return {
-    client: new OpenAI({ apiKey: env.OPENAI_API_KEY }),
+    client: new OpenAI({
+      apiKey: env.OPENAI_API_KEY,
+      timeout: env.AI_REQUEST_TIMEOUT_MS,
+      maxRetries: env.AI_MAX_RETRIES,
+    }),
     model: env.TRANSCRIBE_MODEL_OPENAI,
   };
 }

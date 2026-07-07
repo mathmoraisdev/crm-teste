@@ -102,7 +102,11 @@ export interface AiClient {
 // ───────────────────────── OpenAI ─────────────────────────
 
 function openAiClient(apiKey: string, clientModel?: string): AiClient {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({
+    apiKey,
+    timeout: env.AI_REQUEST_TIMEOUT_MS,
+    maxRetries: env.AI_MAX_RETRIES,
+  });
   const models = MODELS_BY_PROVIDER.OPENAI;
   // Precedência: override da chamada → modelo do client (por-número) → padrão do tier.
   const pick = (tier: Tier, callModel?: string) => callModel || clientModel || models[tier];
@@ -220,7 +224,11 @@ function openAiClient(apiKey: string, clientModel?: string): AiClient {
 // ──────────────────────── Anthropic ────────────────────────
 
 function anthropicClient(apiKey: string, clientModel?: string): AiClient {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({
+    apiKey,
+    timeout: env.AI_REQUEST_TIMEOUT_MS,
+    maxRetries: env.AI_MAX_RETRIES,
+  });
   const models = MODELS_BY_PROVIDER.ANTHROPIC;
   // Precedência: override da chamada → modelo do client (por-número) → padrão do tier.
   const pick = (tier: Tier, callModel?: string) => callModel || clientModel || models[tier];

@@ -15,6 +15,13 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().optional().default(""),
   AI_MODEL_CHEAP: z.string().default("gpt-4o-mini"), // classificação / próxima pergunta (barato)
   AI_MODEL_STRONG: z.string().default("gpt-4o"), // qualificação estruturada / decisões
+  // Timeout por requisição aos SDKs de IA (OpenAI/Anthropic/transcrição). Os SDKs
+  // usam ~10min de default: uma chamada pendurada trava a conversa inteira (a
+  // resposta reativa faz várias chamadas em série). 45s falha rápido e ainda dá
+  // folga p/ o modelo strong. AI_MAX_RETRIES é o teto de retentativas (SDK usa 2):
+  // com backoff, 2 retries + 45s/tentativa ≈ ~2min no pior caso, vs ~13min hoje.
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
+  AI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
   // Kill-switch global do loop de tools (IA com ações). true desliga o caminho
   // agêntico em TODOS os números, independente da flag por número — p/ apagar
   // incêndio em prod sem tocar no banco. Default false = respeita a flag do número.
