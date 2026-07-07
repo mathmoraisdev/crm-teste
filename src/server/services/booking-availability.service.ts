@@ -288,6 +288,12 @@ export async function confirmBooking(
       source: "ONLINE", // veio do link público → selo/filtro na Agenda
     });
     return { appt, lead };
+  }, {
+    // Teto default do Prisma é 5s. Em serverless "frio" (Vercel→Supabase) o
+    // handshake de conexão + as várias queries sob a trava passam de 5s e a
+    // transação expira. 15s cobre o cold start; maxWait dá folga p/ pegar conexão.
+    timeout: 15_000,
+    maxWait: 10_000,
   });
 
   // 5. confirmação por WhatsApp — só p/ lead COM chip. Falha aqui não derruba a marcação.
