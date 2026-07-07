@@ -13,7 +13,7 @@ const NO_SETTINGS_PERM =
   "Seu usuário não tem permissão para alterar as configurações da conta.";
 
 const bodySchema = z.object({
-  provider: z.enum(["MERCADO_PAGO", "ASAAS"]),
+  provider: z.enum(["MERCADO_PAGO", "ASAAS", "PAGBANK"]),
   apiKey: z.string().min(12),
 });
 
