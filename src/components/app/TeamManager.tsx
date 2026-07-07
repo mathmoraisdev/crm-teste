@@ -18,6 +18,7 @@ interface Member {
   email: string;
   canCampaigns: boolean;
   canSettings: boolean;
+  canFinance: boolean;
   leadsScope: LeadsScope;
   createdAt: string;
 }
@@ -48,6 +49,7 @@ export function TeamManager({
   // Permissões do novo operador (default = acesso total, igual ao comportamento atual).
   const [canCampaigns, setCanCampaigns] = useState(true);
   const [canSettings, setCanSettings] = useState(true);
+  const [canFinance, setCanFinance] = useState(true);
   const [leadsScope, setLeadsScope] = useState<LeadsScope>("ALL");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function TeamManager({
       const res = await fetch("/api/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, canCampaigns, canSettings, leadsScope }),
+        body: JSON.stringify({ name, email, password, canCampaigns, canSettings, canFinance, leadsScope }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -78,6 +80,7 @@ export function TeamManager({
       setShowPassword(false);
       setCanCampaigns(true);
       setCanSettings(true);
+      setCanFinance(true);
       setLeadsScope("ALL");
       router.refresh();
     } finally {
@@ -183,10 +186,17 @@ export function TeamManager({
                 disabled={!canCreate || busy}
               />
               <PermCheckbox
-                label="Editar configurações e IA"
-                hint="Chave de IA, rótulos do funil e ajustes da conta."
+                label="Configurar atendimento & IA"
+                hint="Chave de IA, funil, campos, catálogo, respostas rápidas, SLA, profissionais, automações."
                 checked={canSettings}
                 onChange={setCanSettings}
+                disabled={!canCreate || busy}
+              />
+              <PermCheckbox
+                label="Financeiro & fiscal"
+                hint="Despesas e contas a pagar, estornar/reabrir comanda, chaves de pagamento e fiscal (NFC-e), comissões, relatórios de margem, fechar o caixa de outro operador."
+                checked={canFinance}
+                onChange={setCanFinance}
                 disabled={!canCreate || busy}
               />
               <label className="flex flex-col gap-1">
@@ -266,7 +276,7 @@ function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function patch(patch: Partial<Pick<Member, "canCampaigns" | "canSettings" | "leadsScope">>) {
+  async function patch(patch: Partial<Pick<Member, "canCampaigns" | "canSettings" | "canFinance" | "leadsScope">>) {
     setErr(null);
     setSaving(true);
     try {
@@ -316,9 +326,17 @@ function MemberRow({ member, onRemove }: { member: Member; onRemove: () => void 
           disabled={saving}
         />
         <PermCheckbox
-          label="Editar configurações e IA"
+          label="Configurar atendimento & IA"
+          hint="Chave de IA, funil, campos, catálogo, respostas rápidas, SLA, profissionais, automações."
           checked={member.canSettings}
           onChange={(v) => patch({ canSettings: v })}
+          disabled={saving}
+        />
+        <PermCheckbox
+          label="Financeiro & fiscal"
+          hint="Despesas, estornar/reabrir comanda, chaves de pagamento e fiscal, comissões, margem, fechar caixa de outro operador."
+          checked={member.canFinance}
+          onChange={(v) => patch({ canFinance: v })}
           disabled={saving}
         />
         <label className="flex flex-wrap items-center gap-2 text-sm">
