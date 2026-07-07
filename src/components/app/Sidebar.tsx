@@ -137,7 +137,7 @@ export function Sidebar({
         key={href}
         href={href}
         className={cn(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+          "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
           active ? "bg-brand-300/12 text-white" : "text-white/70 hover:bg-white/5 hover:text-white",
         )}
       >
@@ -201,7 +201,7 @@ export function Sidebar({
           open ? "translate-x-0 shadow-2xl" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between px-2 pb-5 pt-1.5">
+        <div className="flex flex-none items-center justify-between px-2 pb-4 pt-1.5">
           <Link href="/leads">
             <Logo dark logoUrl={branding?.logoUrl} appName={branding?.appName} />
           </Link>
@@ -214,7 +214,7 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex flex-col gap-5">
+        <nav className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-2">
           {navGroups.map((group) =>
             // "Mais" (módulos fora do ramo) = seção colapsada por padrão. Nada
             // some: fica a um clique. Demais grupos renderizam abertos.
@@ -245,7 +245,7 @@ export function Sidebar({
           )}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-2.5">
+        <div className="mt-3 flex flex-none flex-col gap-2.5 border-t border-white/[.06] pt-3">
           <Link
             href="/empresas"
             className="rounded-2xl border border-white/[.07] bg-white/[.04] p-3.5 transition-colors hover:bg-white/[.07]"
@@ -263,7 +263,7 @@ export function Sidebar({
           <button
             onClick={logout}
             disabled={loggingOut}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
           >
             <LogOut size={17} /> Sair
           </button>
