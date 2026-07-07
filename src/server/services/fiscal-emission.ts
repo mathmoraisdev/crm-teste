@@ -28,6 +28,21 @@ export function nextFiscalAction(
   }
 }
 
+/**
+ * Re-enfileira uma emissão em ERRO (botão "Tentar de novo" no extrato). Só age em
+ * fiscalStatus=ERRO e attempts abaixo do teto (o `updateMany` condicionado é a guarda
+ * atômica). Escopo por conta. Volta a PENDENTE + limpa o erro; o worker faz o resto.
+ */
+export async function retryFiscalEmission(accountId: string, orderId: string): Promise<void> {
+  const res = await prisma.order.updateMany({
+    where: { id: orderId, accountId, fiscalStatus: "ERRO", fiscalAttempts: { lt: env.FISCAL_MAX_ATTEMPTS } },
+    data: { fiscalStatus: "PENDENTE", fiscalError: null },
+  });
+  if (res.count === 0) {
+    throw new Error("Não é possível reemitir esta nota (verifique o status e o limite de tentativas).");
+  }
+}
+
 /** Grava o resultado normalizado do emissor na comanda. */
 async function applyResult(orderId: string, r: NfceResult): Promise<void> {
   await prisma.order.update({

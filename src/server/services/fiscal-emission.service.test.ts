@@ -141,3 +141,24 @@ describe("dispatchPendingFiscalEmissions", () => {
     expect(rollback.data.fiscalStatus).toBe("PENDENTE");
   });
 });
+
+describe("retryFiscalEmission", () => {
+  it("re-enfileira ERRO abaixo do teto: volta a PENDENTE, escopado por conta, limpa erro", async () => {
+    const prisma = await db();
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    const { retryFiscalEmission } = await import("./fiscal-emission");
+    await retryFiscalEmission("acc1", "o1");
+    const call = prisma.order.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({
+      id: "o1", accountId: "acc1", fiscalStatus: "ERRO", fiscalAttempts: { lt: 5 },
+    });
+    expect(call.data).toEqual({ fiscalStatus: "PENDENTE", fiscalError: null });
+  });
+
+  it("nada casa (status != ERRO ou teto atingido) → erro amigável", async () => {
+    const prisma = await db();
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+    const { retryFiscalEmission } = await import("./fiscal-emission");
+    await expect(retryFiscalEmission("acc1", "o1")).rejects.toThrow(/não é possível reemitir/i);
+  });
+});
