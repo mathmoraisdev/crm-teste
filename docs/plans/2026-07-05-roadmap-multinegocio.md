@@ -56,6 +56,17 @@ não paga o cheque. Este roadmap fecha essa distância.
 > (*desvio consciente:* snapshot de custo por linha p/ a **margem realizada**, no mesmo padrão de `commissionCents`, já que
 > o custo do catálogo muda e o item pode ser excluído). Valorização/margem potencial reusam `CatalogItem.costCents` (**sem
 > schema**). Um único `prisma/manual/2026-07-11-onda-g.sql` idempotente; PROD = SQL + deploy de código.
+>
+> ⁵ **Iniciativa 13 = plano escrito** (`2026-07-12-fiscal-nfce.md`). **Onda H isolada** (nenhuma outra iniciativa
+> compõe). Emissão de **NFC-e (modelo 65)** via **emissor terceiro** (Focus NFe/PlugNotas/Tecnospeed) com credencial
+> **BYOK cifrada** ([[strong-model-byok-only]]), **opt-in por conta** e **assíncrona no worker** (SEFAZ é lento — nunca
+> trava o fechamento). **Duas chaves** p/ emitir (kill-switch `FISCAL_EMISSION` + `User.fiscalEnabled`), sobe **inerte**
+> — padrão da automação de ciclo de vida. **Onda H > o previsto** (*desvios conscientes*): além de `Order.fiscalStatus`/
+> `fiscalDocId`, o plano adiciona `fiscalKey`/`fiscalDanfeUrl` (reimpressão do DANFE), `fiscalError`, `fiscalRequestedAt`/
+> `fiscalIssuedAt`/`fiscalAttempts` (retry/backoff), e em `User` o perfil fiscal mínimo (`fiscalEnv` homologação/produção,
+> `fiscalSerie`, `fiscalCnpj`, `fiscalDefaultNcm`/`fiscalDefaultCfop`) — o cadastro tributário pesado mora **no emissor**.
+> **Classificação tributária por item (`CatalogItem.ncm/cfop`) ADIADA** (v1 usa NCM/CFOP padrão da conta). Um único
+> `prisma/manual/2026-07-12-onda-h.sql` (enums novos com guarda por `DO $$ … EXCEPTION`); PROD = SQL + deploy + `ENCRYPTION_KEY` no worker.
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
@@ -64,7 +75,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **FEITO (dev)** ² (motor puro + serviço idempotente + tick no worker + opt-in por conta na UI; `onda-e.sql` composto/append, PROD a aplicar; sobe **inerte** — off até `LIFECYCLE_AUTOMATION`=true **e** opt-in da conta) |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D (**sem schema**) | **P3** | `2026-07-10-verticais-unificadas.md` — **FEITO (dev)** ³ (conteúdo + wizard de orquestração; 10 commits em master; gate verde 780 testes; **PROD = só deploy de código**) |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` — **FEITO (dev)** ⁴ (valorização/margem + bipar + grade SKU flat; 8 commits em master; gate verde 792 testes; `onda-g.sql` **JÁ aplicado em PROD**, código a deployar) |
-| 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
+| 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` — **plano escrito, pronto p/ executar** ⁵ |
 
 ---
 
@@ -116,8 +127,18 @@ tocam o schema **compõem** o mesmo arquivo (como estoque×despesas já fizeram)
   (snapshot de custo por linha no fechamento, p/ a **margem realizada** — o mestre não previa, mas segue o padrão de
   `commissionCents`/`professionalId`: custo do catálogo muda e o item pode ser excluído, então re-derivar ao vivo é frágil).
   A **valorização** e a **margem potencial** reusam `CatalogItem.costCents` já existente — sem schema.
-- **Onda H** (iniciativa 13): `Order.fiscalStatus`, `Order.fiscalDocId`, credenciais do emissor
-  cifradas em `User` (padrão BYOK — [[strong-model-byok-only]]).
+- **Onda H** (iniciativa 13): **um** `prisma/manual/2026-07-12-onda-h.sql` idempotente e **isolado** (nenhuma
+  outra iniciativa compõe). **Enums novos** `FiscalProvider`/`FiscalEnv`/`FiscalStatus` — como `CREATE TYPE`
+  **não** tem `IF NOT EXISTS`, cada um vai num guard `DO $$ BEGIN CREATE TYPE … EXCEPTION WHEN duplicate_object
+  THEN null; END $$;` (≠ `ALTER TYPE … ADD VALUE` do estorno). Em `User`: credencial BYOK do emissor cifrada
+  (`fiscalProvider`, `fiscalKeyEnc`, `fiscalKeyLast4`, `fiscalKeyVerifiedAt` — padrão de `paymentKeyEnc`,
+  [[strong-model-byok-only]]) + **perfil fiscal mínimo** (`fiscalEnabled` opt-in, `fiscalEnv`
+  homologação/produção, `fiscalSerie`, `fiscalCnpj`, `fiscalDefaultNcm`, `fiscalDefaultCfop`). Em `Order`:
+  `fiscalStatus`, `fiscalDocId` (previstos) **+** *desvios conscientes* `fiscalKey`/`fiscalDanfeUrl` (chave de
+  acesso + URL do DANFE p/ reimpressão), `fiscalError`, `fiscalRequestedAt`/`fiscalIssuedAt`, `fiscalAttempts`
+  (retry/backoff) e `@@index([accountId, fiscalStatus])` (o worker varre pendentes). **Classificação
+  tributária por item (`CatalogItem.ncm/cfop`) ADIADA** (v1 usa NCM/CFOP padrão da conta ou a regra do
+  emissor). Detalhe em `2026-07-12-fiscal-nfce.md`.
 
 > Regra de ouro: **nunca** rode SQL manual redundante com uma migration versionada na mesma
 > mudança — colisão vira P3018→P3009 e trava deploy ([[prod-schema-drift-destravar]]). Em dev é
@@ -321,13 +342,23 @@ Destrava **beleza, saúde, fitness** (a maior fatia dos 63 modelos):
 - **Dependência:** independe; alto valor pra varejo. **Custo ausente** conta como 0 mas é **exibido** como
   parcial (nunca margem/valor otimista silencioso).
 
-### 13. Fiscal NFC-e (emissor terceiro)
-- **Objetivo:** emissão fiscal **opt-in por conta**, sem construir SEFAZ do zero.
-- **Fases:** (13.1) integração com um emissor por API (Focus NFe / PlugNotas / Tecnospeed) atrás de
-  credencial BYOK cifrada → (13.2) emitir no fechamento da comanda (assíncrono, worker) → (13.3)
-  status fiscal + reimpressão do DANFE no extrato.
-- **Schema (Onda H):** `Order.fiscalStatus/fiscalDocId`, credenciais cifradas em `User`.
-- **Dependência:** POS financeiro (2) fechado; **último** por complexidade e por ser opcional.
+### 13. Fiscal NFC-e (emissor terceiro) — **plano completo em `2026-07-12-fiscal-nfce.md`**
+- **Objetivo:** emissão de **NFC-e (modelo 65)** **opt-in por conta**, sem construir SEFAZ do zero.
+- **Fases:** (13.1) abstração de emissor (`FiscalEmitter`/`fiscalEmitterFor`, adaptador Focus NFe + mock) +
+  credencial **BYOK cifrada** + perfil fiscal mínimo + config nas Configurações → (13.2) **carimbo**
+  `fiscalStatus=PENDENTE` no fechamento (só conta opt-in) + **tick assíncrono no worker**
+  (`dispatchPendingFiscalEmissions`, flip atômico, kill-switch `FISCAL_EMISSION`) → (13.3) status fiscal +
+  **DANFE** (reimpressão) no extrato + retry manual de `ERRO` + cancelamento best-effort no estorno (opcional).
+- **Schema (Onda H):** enums `FiscalProvider`/`FiscalEnv`/`FiscalStatus`; em `User` credencial BYOK cifrada +
+  perfil fiscal; em `Order` `fiscalStatus`/`fiscalDocId`/`fiscalKey`/`fiscalDanfeUrl`/`fiscalError`/timestamps/
+  `fiscalAttempts`. Detalhe e *desvios conscientes* no plano filho e na nota ⁵. `CatalogItem.ncm/cfop` por item
+  **ADIADO**.
+- **Arquivos-chave:** novo `src/server/fiscal/` (`emitter.ts`/`focus-nfe.ts`/`mock.ts`), novo
+  `fiscal-credential.service.ts`, novo `fiscal-emission.ts` (puro + serviço do worker), `order.service.ts`
+  (carimbo no `closeOrder`), `worker/run.ts` (tick), `api/account/fiscal-key/route.ts`, `AccountSettings.tsx`,
+  `SalesHistoryPanel.tsx` (badge + DANFE), `crypto.ts` (reuso).
+- **Dependência:** POS financeiro (2) fechado; **último** por complexidade e por ser opcional. Sobe **inerte**
+  (2 chaves: `FISCAL_EMISSION` global + `fiscalEnabled` por conta). Precisa de `ENCRYPTION_KEY` no worker.
 
 ---
 
