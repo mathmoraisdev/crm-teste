@@ -50,7 +50,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 >
 > ² **Iniciativa 10 = FEITO em dev** (`db push` local + testes verdes + E2E do toggle). **PROD pendente**: aplicar a seção da iniciativa 10 do `onda-e.sql` no Supabase (idempotente, `IF NOT EXISTS` — pode aplicar o arquivo inteiro), deploy web (leva a toggle) + `git pull`/restart do worker (leva o tick, sobe inerte). Ligar **gradual**: `LIFECYCLE_AUTOMATION=true` + `LIFECYCLE_POSTSALE_HOURS=2` numa conta piloto com opt-in → depois NPS → **reengajamento por último** (cold-ish).
 >
-> ⁴ **Iniciativa 12 = plano escrito** (`2026-07-11-catalogo-estoque-avancado.md`). **Onda G composta**: além do previsto
+> ⁴ **Iniciativa 12 = FEITO em dev** (`2026-07-11-catalogo-estoque-avancado.md`; 8 commits em master, gate verde 792 testes, tsc+lint limpos). **PROD**: `onda-g.sql` **JÁ aplicado e confirmado** (3 colunas + 2 índices); falta só deploy do código (Vercel CLI). **Onda G composta**: além do previsto
 > `CatalogItem.barcode` (12.2), o plano resolve a variação como **SKU flat** — `CatalogItem.variantGroup` (rótulo de
 > grade; **`ItemVariant` relacional ADIADO** por reuso total do estoque/venda por linha) — e adiciona **`OrderItem.unitCostCents`**
 > (*desvio consciente:* snapshot de custo por linha p/ a **margem realizada**, no mesmo padrão de `commissionCents`, já que
@@ -63,7 +63,7 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 9 | Comissão por profissional | F | **P2** | `2026-07-09-comissao.md` — **FEITO (dev)** ¹ (motor puro + CRUD + snapshot no fechamento + relatório + UI; `onda-f.sql` composto, PROD a aplicar) |
 | 10 | Automação de ciclo de vida (pós-venda, NPS/avaliação, reengajamento de frio) | E | **P2** | `2026-07-08-automacao-ciclo-vida.md` — **FEITO (dev)** ² (motor puro + serviço idempotente + tick no worker + opt-in por conta na UI; `onda-e.sql` composto/append, PROD a aplicar; sobe **inerte** — off até `LIFECYCLE_AUTOMATION`=true **e** opt-in da conta) |
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D (**sem schema**) | **P3** | `2026-07-10-verticais-unificadas.md` — **FEITO (dev)** ³ (conteúdo + wizard de orquestração; 10 commits em master; gate verde 780 testes; **PROD = só deploy de código**) |
-| 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` — **plano escrito, pronto p/ executar** ⁴ |
+| 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` — **FEITO (dev)** ⁴ (valorização/margem + bipar + grade SKU flat; 8 commits em master; gate verde 792 testes; `onda-g.sql` **JÁ aplicado em PROD**, código a deployar) |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` |
 
 ---
