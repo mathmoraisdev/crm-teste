@@ -227,7 +227,8 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="scroll-overlay -mr-1.5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1.5">
+        <nav className="scroll-overlay -mr-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1.5">
+          <div className="my-auto flex flex-col gap-3">
           {navGroups.map((group) =>
             // "Mais" (módulos fora do ramo) = seção colapsada por padrão. Nada
             // some: fica a um clique. Demais grupos renderizam abertos.
@@ -256,6 +257,7 @@ export function Sidebar({
               </div>
             ),
           )}
+          </div>
         </nav>
 
         <div className="mt-2 flex flex-none flex-col gap-1.5 border-t border-white/[.06] pt-2">
