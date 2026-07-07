@@ -16,8 +16,10 @@ vi.mock("@/server/db/client", () => ({
   },
 }));
 
-const FUTURE = new Date("2026-07-10T12:00:00Z");
-const PAST = new Date("2026-06-01T12:00:00Z");
+// Sentinelas relativas ao AGORA (não datas fixas) para o teste não virar
+// time-bomb: FUTURE tem de ficar folgado à frente de now+dias do trial.
+const FUTURE = new Date(Date.now() + 30 * 86400_000);
+const PAST = new Date(Date.now() - 30 * 86400_000);
 
 describe("isAccountActiveByLead", () => {
   beforeEach(() => vi.clearAllMocks());
