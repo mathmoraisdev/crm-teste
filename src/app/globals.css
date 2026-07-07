@@ -110,13 +110,39 @@ body {
   color: #fff;
 }
 
-/* Scrollbar discreta para áreas roláveis (conversa, kanban). */
+/* Scrollbar GLOBAL elegante (estilo macOS): vale para toda área rolável do
+   sistema. Thumb neutro translúcido (via --slate-400, que inverte por tema →
+   lê bem no claro e no escuro), trilho invisível, cantos arredondados, sem
+   setas. A borda transparente + background-clip dão o efeito "flutuante". */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--slate-400) / 0.45) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--slate-400) / 0.45);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--slate-400) / 0.7);
+}
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Scrollbar ainda mais discreta (conversa, kanban): herda o estilo global,
+   só afina o thumb. Mantida por retrocompat de quem já usa a classe. */
 .scroll-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
-}
-.scroll-thin::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-300;
 }
 
 /* Scrollbar overlay minimalista (estilo macOS) para áreas ESCURAS (sidebar):
