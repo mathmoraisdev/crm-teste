@@ -44,6 +44,7 @@ function toDateInput(d: string | null): string {
 
 export function AccountAccessModal({
   accountId,
+  name,
   active,
   isAdmin,
   daysLeft,
@@ -52,6 +53,7 @@ export function AccountAccessModal({
   plan,
 }: {
   accountId: string;
+  name: string;
   active: boolean;
   isAdmin: boolean;
   daysLeft: number | null;
@@ -67,6 +69,24 @@ export function AccountAccessModal({
   const [due, setDue] = useState<string>(toDateInput(paymentDueDate));
   const [amount, setAmount] = useState<string>("");
   const [planValue, setPlanValue] = useState<Plan | "">(plan ?? "");
+  // Zona de perigo: exige digitar o nome da conta p/ liberar a exclusão.
+  const [confirmName, setConfirmName] = useState("");
+
+  async function remove() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/accounts/${accountId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error ?? "Falha ao excluir.");
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function send(action: Action) {
     setBusy(true);
@@ -241,6 +261,35 @@ export function AccountAccessModal({
               fica sem prazo — suspensa).
             </p>
           </div>
+
+          {/* Zona de perigo: exclusão permanente da conta (dono + operadores + dados).
+              Confirmação por digitação do nome. Conta admin é bloqueada no server. */}
+          {!isAdmin && (
+            <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-surface/40 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-danger">
+                Zona de perigo
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Exclui a conta em definitivo: dono, operadores, contatos, campanhas,
+                mensagens e números. Não tem como desfazer. Digite{" "}
+                <span className="font-bold text-ink">{name}</span> para liberar.
+              </p>
+              <input
+                type="text"
+                value={confirmName}
+                onChange={(e) => setConfirmName(e.target.value)}
+                placeholder={name}
+                className="w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm text-ink"
+              />
+              <button
+                disabled={busy || confirmName.trim() !== name.trim()}
+                onClick={remove}
+                className="w-full rounded-lg bg-danger px-3 py-2 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
+              >
+                Excluir conta permanentemente
+              </button>
+            </div>
+          )}
         </div>
       </Modal>
     </>

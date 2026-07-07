@@ -252,6 +252,7 @@ export default async function FinanceiroPage({
             <div className="border-t border-slate-100 pt-3">
               <AccountAccessModal
                 accountId={a.id}
+                name={a.name}
                 active={a.active}
                 isAdmin={a.isAdmin}
                 daysLeft={a.daysLeft}
@@ -347,6 +348,7 @@ export default async function FinanceiroPage({
                 <Td>
                   <AccountAccessModal
                     accountId={a.id}
+                    name={a.name}
                     active={a.active}
                     isAdmin={a.isAdmin}
                     daysLeft={a.daysLeft}
