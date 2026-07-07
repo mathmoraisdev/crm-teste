@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
-import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode, setCatalogItemCustomFields } from "./catalog.service";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode, setCatalogItemCustomFields, duplicateCatalogItem } from "./catalog.service";
 import { createDef } from "@/server/services/custom-field.service";
 
 // Cria um usuário-dono descartável por teste (isolamento).
@@ -169,5 +169,37 @@ describe("catalog.service", () => {
     await createDef(a, { label: "Ano", type: "NUMBER", scope: "PRODUCT" });
     const item = await createCatalogItem(a, { name: "Carro", priceCents: 100, kind: "PRODUTO" });
     await expect(setCatalogItemCustomFields(b, item.id, { ano: 2020 })).rejects.toThrow();
+  });
+
+  it("duplica copiando descritivos+ficha, mas zera sku/barcode/estoque", async () => {
+    const a = await makeOwner();
+    await createDef(a, { label: "Cor", type: "TEXT", scope: "PRODUCT" });
+    const src = await createCatalogItem(a, {
+      name: "Camiseta P", priceCents: 5000, kind: "PRODUTO",
+      trackStock: true, sku: "CAM-P", barcode: "789", minStock: 10, costCents: 2000, variantGroup: "Camiseta",
+    });
+    await setCatalogItemCustomFields(a, src.id, { cor: "Azul" });
+
+    const copy = await duplicateCatalogItem(a, src.id);
+    expect(copy.id).not.toBe(src.id);
+    expect(copy.name).toBe("Camiseta P (cópia)");
+    expect(copy.priceCents).toBe(5000);
+    expect(copy.kind).toBe("PRODUTO");
+    expect(copy.trackStock).toBe(true);
+    expect(copy.minStock).toBe(10);
+    expect(copy.costCents).toBe(2000);
+    expect(copy.variantGroup).toBe("Camiseta");
+    expect(copy.customFields).toEqual({ cor: "Azul" });
+    // NÃO copiados (identidade/quantidade):
+    expect(copy.sku).toBeNull();
+    expect(copy.barcode).toBeNull();
+    expect(copy.stockQty).toBe(0);
+  });
+
+  it("não duplica item de outra conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    const src = await createCatalogItem(a, { name: "X", priceCents: 100, kind: "PRODUTO" });
+    await expect(duplicateCatalogItem(b, src.id)).rejects.toThrow();
   });
 });

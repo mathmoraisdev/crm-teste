@@ -187,6 +187,32 @@ export async function seedCatalogFromTemplate(accountId: string, templateId: str
   return listCatalogItems(accountId);
 }
 
+// Duplica um item: cria uma cópia com os mesmos dados descritivos (nome + " (cópia)",
+// preço, tipo, duração, setor, grupo/grade, config de estoque e ficha técnica). NÃO
+// copia o que é identidade/quantidade do item: `sku`/`barcode` ficam nulos (barcode é
+// único por conta) e `stockQty` nasce em 0 (o saldo é um livro-razão, entra por movimento).
+export async function duplicateCatalogItem(accountId: string, id: string): Promise<CatalogItemDTO> {
+  const src = await prisma.catalogItem.findFirst({ where: { id, accountId } });
+  if (!src) throw new Error("Item não encontrado.");
+  const copy = await prisma.catalogItem.create({
+    data: {
+      accountId,
+      name: `${src.name} (cópia)`,
+      kind: src.kind,
+      priceCents: src.priceCents,
+      durationMinutes: src.durationMinutes,
+      printSector: src.printSector,
+      trackStock: src.trackStock,
+      minStock: src.minStock,
+      costCents: src.costCents,
+      variantGroup: src.variantGroup,
+      ...(src.customFields != null ? { customFields: src.customFields as Prisma.InputJsonValue } : {}),
+      // sku/barcode → null (barcode é único); stockQty → 0 (default); active → true (default).
+    },
+  });
+  return toDTO(copy);
+}
+
 // Grava a ficha técnica (specs) do item — valores dos CustomFieldDef scope=PRODUCT.
 // Valida posse, mescla/coage via mergeCustomFields (chave desconhecida → erro;
 // valor vazio → remove a chave). Retorna o DTO atualizado.

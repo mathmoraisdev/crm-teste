@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Loader2, Pencil, Check, X, Sparkles } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Loader2, Pencil, Check, X, Sparkles, Copy } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
@@ -99,6 +99,8 @@ export function CatalogManager({
   const [editDuration, setEditDuration] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Foco no Nome ao abrir edição via "Duplicar" (troca rápida do rótulo da variação).
+  const editNameRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -215,6 +217,29 @@ export function CatalogManager({
   function cancelEdit() {
     setEditingId(null);
     setEditError(null);
+  }
+
+  // Duplica o item e já abre a cópia em edição, com o cursor no Nome. Copia
+  // descritivos + ficha; sku/barcode vêm vazios e o estoque em 0 (ver o service).
+  async function duplicate(it: Item) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/vendas/catalog/${it.id}/duplicate`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Erro ao duplicar.");
+        return;
+      }
+      await load();
+      startEdit(data.item as Item);
+      // Após o render do modo de edição, foca e seleciona o Nome (troca rápida).
+      setTimeout(() => {
+        editNameRef.current?.focus();
+        editNameRef.current?.select();
+      }, 0);
+    } catch {
+      setError("Erro ao duplicar.");
+    }
   }
 
   async function saveEdit(id: string) {
@@ -379,6 +404,7 @@ export function CatalogManager({
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Field label="Nome" className="flex-1">
                       <input
+                        ref={editNameRef}
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
                         placeholder="ex.: Corte"
@@ -543,6 +569,15 @@ export function CatalogManager({
                         />
                         Ativo
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => void duplicate(it)}
+                        className="text-slate-400 hover:text-brand-600"
+                        aria-label="Duplicar item"
+                        title="Duplicar item"
+                      >
+                        <Copy size={15} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => startEdit(it)}
