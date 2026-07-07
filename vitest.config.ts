@@ -8,6 +8,10 @@ import { defineConfig } from "vitest/config";
  * disto, mas os que mockam Prisma/env sim.
  */
 export default defineConfig({
+  // Componentes `.tsx` (ex.: HelpHint) usam JSX sem importar React — o app roda
+  // no runtime automático do Next. Espelhamos isso aqui para os testes de
+  // renderização não quebrarem com "React is not defined".
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
