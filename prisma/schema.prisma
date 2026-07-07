@@ -409,6 +409,10 @@ model CatalogItem {
   // --- Comanda de cozinha (N3): roteia o item p/ a impressora do setor ---
   printSector String? // ex.: "cozinha", "bar", "balcao"; null = não vai p/ produção
 
+  // --- Anúncio (fotos + ficha técnica); opt-in, usado por veículos/imóveis/varejo ---
+  customFields Json? // valores dos CustomFieldDef scope=PRODUCT (chaveado por 'key')
+  photos       CatalogItemPhoto[]
+
   @@unique([accountId, barcode]) // bipar resolve p/ um item; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, active])
   @@index([accountId, trackStock])
@@ -778,6 +782,7 @@ enum CustomFieldScope {
   LEAD
   ORDER
   ORDER_ITEM
+  PRODUCT // ficha técnica do item de catálogo (anúncio): specs de carro/imóvel/produto
 }
 
 // Definição de um campo customizado por conta. O valor vive em `Lead.customFields`,
@@ -1213,4 +1218,19 @@ model WhatsAppAuthState {
   updatedAt DateTime       @updatedAt
 
   @@unique([numberId, key])
+}
+
+// Foto de um item de catálogo (galeria do anúncio). O binário vive no Supabase
+// Storage (bucket privado, mesmo de MediaAsset/Message); aqui guardamos só o
+// caminho do objeto. `order` define a ordem de exibição (0 = capa).
+model CatalogItemPhoto {
+  id            String      @id @default(cuid())
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  mediaPath     String // caminho no bucket (NÃO é URL; assinamos sob demanda)
+  mediaMime     String
+  order         Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  @@index([catalogItemId, order])
 }
