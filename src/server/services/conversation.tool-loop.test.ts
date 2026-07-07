@@ -58,6 +58,8 @@ vi.mock("@/server/db/client", () => {
           }),
         ),
       },
+      // habilita/desabilita a tool enviar_fotos (conta sem fotos por padrão no teste).
+      catalogItemPhoto: { count: vi.fn(() => Promise.resolve(0)) },
     },
   };
 });
