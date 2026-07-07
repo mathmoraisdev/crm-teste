@@ -124,7 +124,13 @@ const schema = z.object({
   APP_PUBLIC_URL: z.string().default("http://localhost:3000"),
 
   // ── Fiscal (NFC-e via emissor terceiro, Onda H) ─────────────────────────────
-  FISCAL_MOCK: z.coerce.boolean().default(false), // dev/teste: emissor determinístico, não toca SEFAZ
+  // FISCAL_EMISSION é o KILL-SWITCH global: false = nada é emitido (sobe inerte).
+  // A 2ª chave é o opt-in por conta (User.fiscalEnabled). As duas precisam estar
+  // ligadas. FISCAL_MOCK usa o emissor determinístico sem tocar SEFAZ (dev/teste).
+  FISCAL_MOCK: z.coerce.boolean().default(false),
+  FISCAL_EMISSION: z.coerce.boolean().default(false),
+  FISCAL_EVERY_MS: z.coerce.number().int().positive().default(60_000), // 1 min: SEFAZ é lento
+  FISCAL_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
 
   // ── Transcrição de áudio (fala→texto) — chave SEMPRE de plataforma ──────────
   TRANSCRIBE_ENABLED: z.coerce.boolean().default(false),

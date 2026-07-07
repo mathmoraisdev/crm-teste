@@ -4,6 +4,7 @@ import { getTenantContext } from "@/lib/tenant";
 import { getUserById } from "@/server/services/user.service";
 import { getAiCredentialStatus } from "@/server/services/ai-credential.service";
 import { getPaymentCredentialStatus } from "@/server/services/payment-credential.service";
+import { getFiscalCredentialStatus } from "@/server/services/fiscal-credential.service";
 import { getAiUsageStatus, canUseFeature } from "@/server/services/entitlements";
 import { AccountSettings } from "@/components/app/AccountSettings";
 import { CustomFieldsManager } from "@/components/CustomFieldsManager";
@@ -45,9 +46,10 @@ export default async function ConfiguracoesPage() {
 
   // Consumo de IA é do DONO (tenant), não do operador logado.
   const ownerId = ctx?.tenantUserId ?? userId;
-  const [aiUsage, paymentKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness, lifecycleEnabled] = await Promise.all([
+  const [aiUsage, paymentKey, fiscalKey, salesAllowed, branding, businessTemplateId, posSettings, inboxSla, bookingSettings, bookingReadiness, lifecycleEnabled] = await Promise.all([
     getAiUsageStatus(ownerId),
     getPaymentCredentialStatus(ownerId), // credencial de pagamento é do dono
+    getFiscalCredentialStatus(ownerId), // credencial/perfil fiscal é do dono
     canUseFeature(ownerId, "sales"), // funil de vendas só em planos que permitem
     getBranding(ownerId), // identidade visual da conta (só o dono edita)
     getBusinessTemplateId(ownerId), // ramo do negócio da conta (só o dono edita)
@@ -81,6 +83,8 @@ export default async function ConfiguracoesPage() {
         aiKey={aiKey}
         aiUsage={aiUsage}
         paymentKey={paymentKey}
+        fiscalKey={fiscalKey}
+        fiscalEmissionGlobal={env.FISCAL_EMISSION}
         salesAllowed={salesAllowed}
         canSettings={canSettings}
         isOwner={isOwner}

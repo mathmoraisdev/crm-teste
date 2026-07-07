@@ -43,11 +43,35 @@ const PAYMENT_PROVIDER_LABEL: Record<PaymentProvider, string> = {
   ASAAS: "Asaas",
 };
 
+type FiscalProvider = "FOCUS_NFE" | "PLUGNOTAS" | "TECNOSPEED";
+type FiscalEnv = "HOMOLOGACAO" | "PRODUCAO";
+
+type FiscalKeyStatus = {
+  configured: boolean;
+  provider: FiscalProvider | null;
+  last4: string | null;
+  verifiedAt: string | null;
+  enabled: boolean;
+  env: FiscalEnv;
+  serie: number;
+  cnpj: string | null;
+  defaultNcm: string | null;
+  defaultCfop: string | null;
+};
+
+const FISCAL_PROVIDER_LABEL: Record<FiscalProvider, string> = {
+  FOCUS_NFE: "Focus NFe",
+  PLUGNOTAS: "PlugNotas",
+  TECNOSPEED: "Tecnospeed",
+};
+
 export function AccountSettings({
   account,
   aiKey,
   aiUsage,
   paymentKey,
+  fiscalKey,
+  fiscalEmissionGlobal = false,
   salesAllowed = false,
   canSettings = true,
   isOwner = true,
@@ -56,6 +80,8 @@ export function AccountSettings({
   aiKey: AiKeyStatus;
   aiUsage: AiUsage;
   paymentKey?: PaymentKeyStatus;
+  fiscalKey?: FiscalKeyStatus;
+  fiscalEmissionGlobal?: boolean; // kill-switch global FISCAL_EMISSION (só p/ aviso na UI)
   salesAllowed?: boolean; // plano permite o funil de vendas (mostra o bloco de Pix)
   canSettings?: boolean;
   isOwner?: boolean; // dono/ADMIN — só ele exporta/exclui a conta
@@ -150,6 +176,75 @@ export function AccountSettings({
   async function removePaymentKey() {
     await fetch("/api/account/payment-key", { method: "DELETE" });
     setPayStatus({ configured: false, provider: null, last4: null, verifiedAt: null });
+  }
+
+  // BYOK fiscal: emissor terceiro de NFC-e (Focus NFe / PlugNotas / Tecnospeed).
+  const EMPTY_FISCAL: FiscalKeyStatus = {
+    configured: false, provider: null, last4: null, verifiedAt: null,
+    enabled: false, env: "HOMOLOGACAO", serie: 1, cnpj: null,
+    defaultNcm: null, defaultCfop: null,
+  };
+  const [fiscalStatus, setFiscalStatus] = useState<FiscalKeyStatus>(fiscalKey ?? EMPTY_FISCAL);
+  const [fiscalProvider, setFiscalProvider] = useState<FiscalProvider>(
+    fiscalKey?.provider ?? "FOCUS_NFE",
+  );
+  const [fiscalEnvSel, setFiscalEnvSel] = useState<FiscalEnv>(fiscalKey?.env ?? "HOMOLOGACAO");
+  const [fiscalKeyInput, setFiscalKeyInput] = useState("");
+  const [fiscalSaving, setFiscalSaving] = useState(false);
+  const [fiscalError, setFiscalError] = useState<string | null>(null);
+  // Perfil fiscal (série/CNPJ/NCM/CFOP + opt-in).
+  const [fiscalSerie, setFiscalSerie] = useState<number>(fiscalKey?.serie ?? 1);
+  const [fiscalCnpj, setFiscalCnpj] = useState(fiscalKey?.cnpj ?? "");
+  const [fiscalNcm, setFiscalNcm] = useState(fiscalKey?.defaultNcm ?? "");
+  const [fiscalCfop, setFiscalCfop] = useState(fiscalKey?.defaultCfop ?? "");
+  const [fiscalProfileSaving, setFiscalProfileSaving] = useState(false);
+  const [fiscalProfileMsg, setFiscalProfileMsg] = useState<string | null>(null);
+
+  async function saveFiscalKey() {
+    setFiscalSaving(true);
+    setFiscalError(null);
+    try {
+      const res = await fetch("/api/account/fiscal-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: fiscalProvider, apiKey: fiscalKeyInput, env: fiscalEnvSel }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao conectar.");
+      setFiscalStatus(data);
+      setFiscalEnvSel(data.env);
+      setFiscalSerie(data.serie);
+      setFiscalKeyInput("");
+    } catch (e) {
+      setFiscalError(e instanceof Error ? e.message : "Erro ao conectar.");
+    } finally {
+      setFiscalSaving(false);
+    }
+  }
+
+  async function removeFiscalKey() {
+    await fetch("/api/account/fiscal-key", { method: "DELETE" });
+    setFiscalStatus(EMPTY_FISCAL);
+  }
+
+  async function patchFiscalProfile(patch: Record<string, unknown>) {
+    setFiscalProfileSaving(true);
+    setFiscalProfileMsg(null);
+    try {
+      const res = await fetch("/api/account/fiscal-key", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Erro ao salvar.");
+      setFiscalStatus(data);
+      setFiscalProfileMsg("Salvo.");
+    } catch (e) {
+      setFiscalProfileMsg(e instanceof Error ? e.message : "Erro ao salvar.");
+    } finally {
+      setFiscalProfileSaving(false);
+    }
   }
 
   async function changePwd() {
@@ -511,6 +606,171 @@ export function AccountSettings({
                     Conectar
                   </Button>
                 </div>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* BYOK fiscal — emitir NFC-e no fechamento via emissor terceiro (Focus NFe/…).
+          Opt-in por conta; o cadastro tributário pesado mora no emissor. Só o dono. */}
+      {isOwner && (
+        <Card className="mt-6">
+          <CardHeader
+            title="Nota fiscal (NFC-e)"
+            subtitle="Emita a nota do consumidor no fechamento da comanda via emissor terceiro. Você conecta o token do emissor; a assinatura e o cadastro tributário ficam com ele."
+          />
+          <div className="space-y-4 px-5 py-4">
+            {!canSettings ? (
+              <p className="text-sm text-slate-600">
+                {fiscalStatus.configured
+                  ? `${fiscalStatus.provider ? FISCAL_PROVIDER_LABEL[fiscalStatus.provider] : ""} • conectado ••••${fiscalStatus.last4}.`
+                  : "Nenhum emissor conectado."}{" "}
+                Apenas o administrador da conta pode configurar a emissão fiscal.
+              </p>
+            ) : (
+              <>
+                {/* Credencial */}
+                {fiscalStatus.configured ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-slate-600">
+                      {fiscalStatus.provider ? FISCAL_PROVIDER_LABEL[fiscalStatus.provider] : ""} • conectado{" "}
+                      <strong>••••{fiscalStatus.last4}</strong>
+                      {fiscalStatus.verifiedAt ? " • validado" : ""} •{" "}
+                      {fiscalStatus.env === "PRODUCAO" ? "produção" : "homologação"}
+                    </p>
+                    <Button variant="secondary" onClick={removeFiscalKey}>
+                      Remover
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select
+                        value={fiscalProvider}
+                        onChange={(e) => setFiscalProvider(e.target.value as FiscalProvider)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
+                      >
+                        <option value="FOCUS_NFE">Focus NFe</option>
+                        <option value="PLUGNOTAS">PlugNotas</option>
+                        <option value="TECNOSPEED">Tecnospeed</option>
+                      </select>
+                      <select
+                        value={fiscalEnvSel}
+                        onChange={(e) => setFiscalEnvSel(e.target.value as FiscalEnv)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm sm:w-auto"
+                      >
+                        <option value="HOMOLOGACAO">Homologação (teste)</option>
+                        <option value="PRODUCAO">Produção (nota real)</option>
+                      </select>
+                      <input
+                        type="password"
+                        value={fiscalKeyInput}
+                        onChange={(e) => setFiscalKeyInput(e.target.value)}
+                        placeholder="Token da API do emissor"
+                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    {fiscalEnvSel === "PRODUCAO" && (
+                      <p className="text-sm text-warning">
+                        Produção emite nota fiscal <strong>real</strong> (valor contábil). Use homologação para testar.
+                      </p>
+                    )}
+                    {fiscalError && <p className="text-sm text-danger">{fiscalError}</p>}
+                    <div className="flex justify-end">
+                      <Button onClick={saveFiscalKey} loading={fiscalSaving} disabled={fiscalKeyInput.length < 12}>
+                        Conectar
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {/* Perfil fiscal + opt-in (só com credencial configurada) */}
+                {fiscalStatus.configured && (
+                  <div className="space-y-3 border-t border-slate-100 pt-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="text-sm">
+                        <span className="mb-1 block text-slate-600">Série</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={fiscalSerie}
+                          onChange={(e) => setFiscalSerie(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                      </label>
+                      <label className="text-sm">
+                        <span className="mb-1 block text-slate-600">CNPJ emitente</span>
+                        <input
+                          value={fiscalCnpj}
+                          onChange={(e) => setFiscalCnpj(e.target.value)}
+                          placeholder="00.000.000/0000-00"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                      </label>
+                      <label className="text-sm">
+                        <span className="mb-1 block text-slate-600">NCM padrão</span>
+                        <input
+                          value={fiscalNcm}
+                          onChange={(e) => setFiscalNcm(e.target.value)}
+                          placeholder="ex.: 21069090"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                      </label>
+                      <label className="text-sm">
+                        <span className="mb-1 block text-slate-600">CFOP padrão</span>
+                        <input
+                          value={fiscalCfop}
+                          onChange={(e) => setFiscalCfop(e.target.value)}
+                          placeholder="ex.: 5102"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      {fiscalProfileMsg && <p className="text-sm text-slate-500">{fiscalProfileMsg}</p>}
+                      <Button
+                        variant="secondary"
+                        loading={fiscalProfileSaving}
+                        onClick={() =>
+                          patchFiscalProfile({
+                            fiscalSerie,
+                            fiscalCnpj: fiscalCnpj.trim() || null,
+                            fiscalDefaultNcm: fiscalNcm.trim() || null,
+                            fiscalDefaultCfop: fiscalCfop.trim() || null,
+                          })
+                        }
+                        className="ml-auto"
+                      >
+                        Salvar perfil
+                      </Button>
+                    </div>
+
+                    {/* Opt-in: emitir no fechamento */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink">Emitir NFC-e no fechamento</p>
+                        <p className="mt-0.5 text-sm text-slate-500">
+                          {fiscalStatus.enabled
+                            ? "Cada comanda fechada vira nota (assíncrono, no worker)."
+                            : "Desligado — nenhuma comanda vira nota."}
+                        </p>
+                      </div>
+                      <Button
+                        variant={fiscalStatus.enabled ? "secondary" : "primary"}
+                        loading={fiscalProfileSaving}
+                        onClick={() => patchFiscalProfile({ fiscalEnabled: !fiscalStatus.enabled })}
+                      >
+                        {fiscalStatus.enabled ? "Desligar" : "Ligar"}
+                      </Button>
+                    </div>
+                    {fiscalStatus.enabled && !fiscalEmissionGlobal && (
+                      <p className="text-sm text-slate-500">
+                        Emissão em implantação — sua conta está pronta; ligamos globalmente em breve.
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
