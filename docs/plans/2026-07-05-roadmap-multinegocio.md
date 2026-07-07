@@ -67,6 +67,16 @@ não paga o cheque. Este roadmap fecha essa distância.
 > `fiscalSerie`, `fiscalCnpj`, `fiscalDefaultNcm`/`fiscalDefaultCfop`) — o cadastro tributário pesado mora **no emissor**.
 > **Classificação tributária por item (`CatalogItem.ncm/cfop`) ADIADA** (v1 usa NCM/CFOP padrão da conta). Um único
 > `prisma/manual/2026-07-12-onda-h.sql` (enums novos com guarda por `DO $$ … EXCEPTION`); PROD = SQL + deploy + `ENCRYPTION_KEY` no worker.
+>
+> ⁶ **Iniciativa 14 = FEITO em dev** (`2026-07-13-reorganizacao-navegacao.md`; commits em master; gate verde, 835 testes,
+> tsc limpo). **Sem schema** — só front-end/roteamento. A navegação virou **dado puro testável**: `buildNav(ctx)` +
+> `moduleVisibleFor(category, key)` em `src/lib/nav.ts` (o `Sidebar` só renderiza). Menu reagrupado em 5 (**Operação /
+> Clientes / Catálogo & Estoque / Financeiro / Conta**) com renomes (item **Atendimento**; billing SaaS → **Administração**).
+> Catálogo/Estoque/Relatórios/Despesas **viraram rotas próprias** (Caixa vira PDV puro); a config de cada módulo **mora no
+> módulo** (Agenda: profissionais/horários/comissão/link; Atendimento: `/inbox/config`; Caixa: impressão) e `Configurações`
+> ficou só com o global. Nav **adaptável ao ramo** é **fail-open**: módulos fora do ramo caem num grupo **"Mais"** colapsável
+> (nada some). **Desvios conscientes:** o **fiscal (NFC-e)** ficou em `AccountSettings`/Configurações (acoplado ao BYOK — não
+> extraído p/ o Caixa); **Produção** segue hard-gate (ausente fora de alimentação, não em "Mais"). **PROD = só deploy de código.**
 | 5 | Agenda Pro (profissional/recurso + duração por serviço + visão calendário + conflito) | C | **P1** | `2026-07-07-agenda-profissional.md` — **FEITO (dev)** ¹ |
 | 6 | Respostas rápidas + SLA + notas internas/anti-colisão (inbox) | D | **P1** | `2026-07-07-inbox-produtividade.md` — **FEITO (dev)** ¹ |
 | 7 | IA tool-calling (criar comanda, consultar estoque, enviar catálogo/mídia, escalar) | E | **P2** | `2026-07-08-ia-tool-calling.md` — **FEITO (dev)** ¹ (gated por flag) |
@@ -76,6 +86,8 @@ não paga o cheque. Este roadmap fecha essa distância.
 | 11 | Verticais unificadas (onboarding único, presets de campo/oferta, temas faltantes) | D (**sem schema**) | **P3** | `2026-07-10-verticais-unificadas.md` — **FEITO (dev)** ³ (conteúdo + wizard de orquestração; 10 commits em master; gate verde 780 testes; **PROD = só deploy de código**) |
 | 12 | Catálogo/estoque++ (variações, código de barras/EAN, valorização, margem) | G | **P3** | `2026-07-11-catalogo-estoque-avancado.md` — **FEITO (dev)** ⁴ (valorização/margem + bipar + grade SKU flat; 8 commits em master; gate verde 792 testes; `onda-g.sql` **JÁ aplicado em PROD**, código a deployar) |
 | 13 | Fiscal NFC-e via emissor terceiro (opt-in por conta) | H | **P3** | `2026-07-12-fiscal-nfce.md` — **plano escrito, pronto p/ executar** ⁵ |
+| 14 | Reorganização da navegação / IA do dashboard (sidebar por rotina + config no módulo + nav por ramo) | — (**sem schema**, só front-end) | **P2** | `2026-07-13-reorganizacao-navegacao.md` — **FEITO (dev)** ⁶ (`buildNav`/`moduleVisibleFor` puros + testáveis; 5 grupos novos + renomes; catálogo/estoque/relatórios/despesas viram rotas; config de cada módulo mora no módulo; grupo "Mais" por ramo; **PROD = só deploy de código**) |
+| 15 | Admin da plataforma em conta própria (separa god-mode do negócio; cartório vira conta normal) | — (config/dados via `ADMIN_EMAILS` + `billingOverride`, sem schema) | **P2** | `2026-07-14-admin-conta-propria.md` — **runbook escrito, pronto p/ executar** |
 
 ---
 
