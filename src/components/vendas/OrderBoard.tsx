@@ -593,6 +593,81 @@ function OrderPanel({
           </div>
         )}
 
+        {/* Adicionar do catálogo — ação principal, logo abaixo dos dados */}
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <p className="text-xs font-semibold text-slate-600">Adicionar do catálogo</p>
+          <input
+            value={bipar}
+            onChange={(e) => setBipar(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void scanBarcode();
+              }
+            }}
+            disabled={busy || biparBusy}
+            placeholder="Bipar código de barras…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
+          />
+          <input
+            value={catQuery}
+            onChange={(e) => setCatQuery(e.target.value)}
+            placeholder="Buscar item…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          {catalog.length === 0 ? (
+            <p className="text-xs text-slate-400">Nenhum item ativo no catálogo.</p>
+          ) : (
+            <ul className="max-h-44 space-y-1 overflow-y-auto">
+              {filteredOrdered.map((c) => (
+                <Fragment key={c.id}>
+                  {pickerGroupHeaders.has(c.id) && (
+                    <li className="px-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      {pickerGroupHeaders.get(c.id)}
+                    </li>
+                  )}
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => addFromCatalog(c.id)}
+                      disabled={busy}
+                      className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
+                    >
+                      <span className="truncate text-ink">{c.name}</span>
+                      <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>
+                    </button>
+                  </li>
+                </Fragment>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Linha avulsa */}
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <p className="text-xs font-semibold text-slate-600">Linha avulsa</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={avulsoName}
+              onChange={(e) => setAvulsoName(e.target.value)}
+              placeholder="Descrição (ex.: Gorjeta)"
+              className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+            <input
+              value={avulsoPrice}
+              onChange={(e) => setAvulsoPrice(e.target.value)}
+              placeholder="Preço (R$)"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
+            />
+            <Button size="sm" variant="secondary" onClick={addAvulso} disabled={busy}>
+              <Plus size={14} /> Adicionar
+            </Button>
+          </div>
+        </div>
+
+        {/* ── A conta: itens lançados, ajustes e total ─────────────────── */}
+        <div className="border-t border-slate-100" />
+
         {/* Itens da comanda */}
         {order.items.length === 0 ? (
           <p className="text-sm text-slate-400">Nenhum item ainda.</p>
@@ -700,78 +775,6 @@ function OrderPanel({
           <div className="flex items-center justify-between border-t border-slate-100 pt-2">
             <span className="text-sm font-semibold text-slate-600">Total</span>
             <span className="text-xl font-bold text-ink">{formatCentsBRL(order.totalCents)}</span>
-          </div>
-        </div>
-
-        {/* Adicionar do catálogo */}
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-          <p className="text-xs font-semibold text-slate-600">Adicionar do catálogo</p>
-          <input
-            value={bipar}
-            onChange={(e) => setBipar(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void scanBarcode();
-              }
-            }}
-            disabled={busy || biparBusy}
-            placeholder="Bipar código de barras…"
-            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
-          />
-          <input
-            value={catQuery}
-            onChange={(e) => setCatQuery(e.target.value)}
-            placeholder="Buscar item…"
-            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          />
-          {catalog.length === 0 ? (
-            <p className="text-xs text-slate-400">Nenhum item ativo no catálogo.</p>
-          ) : (
-            <ul className="max-h-44 space-y-1 overflow-y-auto">
-              {filteredOrdered.map((c) => (
-                <Fragment key={c.id}>
-                  {pickerGroupHeaders.has(c.id) && (
-                    <li className="px-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      {pickerGroupHeaders.get(c.id)}
-                    </li>
-                  )}
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => addFromCatalog(c.id)}
-                      disabled={busy}
-                      className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
-                    >
-                      <span className="truncate text-ink">{c.name}</span>
-                      <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>
-                    </button>
-                  </li>
-                </Fragment>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Linha avulsa */}
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-          <p className="text-xs font-semibold text-slate-600">Linha avulsa</p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              value={avulsoName}
-              onChange={(e) => setAvulsoName(e.target.value)}
-              placeholder="Descrição (ex.: Gorjeta)"
-              className="w-full flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            />
-            <input
-              value={avulsoPrice}
-              onChange={(e) => setAvulsoPrice(e.target.value)}
-              placeholder="Preço (R$)"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:w-32"
-            />
-            <Button size="sm" variant="secondary" onClick={addAvulso} disabled={busy}>
-              <Plus size={14} /> Adicionar
-            </Button>
           </div>
         </div>
 
@@ -897,9 +900,43 @@ function AdjustmentsEditor({
   onSave: (patch: Record<string, unknown>) => Promise<boolean>;
 }) {
   const afterDiscount = Math.max(0, order.subtotalCents - (order.discountCents ?? 0));
+  const hasAny = !!(order.discountCents || order.surchargeCents || order.tipCents);
+  const [open, setOpen] = useState(hasAny);
+
+  // Reabre sozinho se um ajuste passou a existir (ex.: veio de outro dispositivo).
+  useEffect(() => {
+    if (hasAny) setOpen(true);
+  }, [hasAny]);
+
+  // Colapsado (caso comum: sem desconto/taxa/gorjeta) → só um atalho discreto.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50"
+      >
+        + Desconto, taxa de serviço ou gorjeta
+      </button>
+    );
+  }
+
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-      <p className="text-xs font-semibold text-slate-600">Ajustes</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-600">Ajustes</p>
+        {!hasAny && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="text-slate-400 hover:text-ink"
+            aria-label="Recolher ajustes"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
       <AdjField
         label="Desconto"
         valueCents={order.discountCents}
