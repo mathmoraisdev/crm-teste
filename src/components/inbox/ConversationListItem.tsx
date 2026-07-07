@@ -61,8 +61,10 @@ export const ConversationListItem = memo(function ConversationListItem({
       }
       className={cn(
         "flex w-full items-start gap-2.5 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
-        active && !selectMode && "bg-brand-50/60",
-        selected && "bg-brand-50/60",
+        // Seleção: no dark, brand-50 (que NÃO inverte) clareava a linha e lavava o
+        // texto claro. dark:bg-brand-400/15 tinge de verde SEM clarear → contraste ok.
+        active && !selectMode && "bg-brand-50/60 dark:bg-brand-400/15",
+        selected && "bg-brand-50/60 dark:bg-brand-400/15",
         // Estouro de SLA: destaque de urgência (barra + leve fundo), some ao responder.
         breached && "border-l-2 border-l-danger bg-danger-surface/40",
       )}
