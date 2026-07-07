@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildNav, type NavCtx } from "./nav";
+import { buildNav, moduleVisibleFor, type NavCtx } from "./nav";
 
 const base: NavCtx = { isAdmin: false, isAccountAdmin: false, category: "beleza" };
 
@@ -29,5 +29,23 @@ describe("buildNav", () => {
     expect(opAlim.items.some((i) => i.href === "/producao")).toBe(true);
     const opBeleza = buildNav(base).find((g) => g.title === "Operação")!;
     expect(opBeleza.items.some((i) => i.href === "/producao")).toBe(false);
+  });
+});
+
+describe("moduleVisibleFor", () => {
+  it("Produção só em alimentação", () => {
+    expect(moduleVisibleFor("alimentacao", "producao")).toBe(true);
+    expect(moduleVisibleFor("beleza", "producao")).toBe(false);
+  });
+  it("Agenda faz sentido em beleza/saúde, não em varejo/alimentação", () => {
+    expect(moduleVisibleFor("beleza", "agenda")).toBe(true);
+    expect(moduleVisibleFor("varejo", "agenda")).toBe(false);
+  });
+  it("Estoque some em serviços sem produto (ex.: servicos-pro)", () => {
+    expect(moduleVisibleFor("varejo", "estoque")).toBe(true);
+    expect(moduleVisibleFor("servicos-pro", "estoque")).toBe(false);
+  });
+  it("categoria desconhecida/null → mostra tudo (fail-open)", () => {
+    expect(moduleVisibleFor(null, "producao")).toBe(true);
   });
 });

@@ -49,6 +49,40 @@ export type NavCtx = {
 // undefined ⇒ sempre visível. O filtro por papel vive DENTRO de buildNav.
 type NavItemSpec = NavItem & { show?: boolean };
 
+// Regra de visibilidade por ramo (Fase 3). Só os módulos "primários" cujo uso
+// varia por ramo têm regra; os demais (sem entrada aqui) aparecem sempre.
+// Chave = "moduleKey" do item de nav. Valor = categorias onde ele é primário.
+const MODULE_RULES: Record<string, BusinessCategory[]> = {
+  // Comanda de cozinha: só faz sentido em alimentação.
+  producao: ["alimentacao"],
+  // Agenda (hora marcada): ramos de serviço/atendimento, não varejo/alimentação.
+  agenda: [
+    "saude",
+    "beleza",
+    "automotivo",
+    "casa",
+    "educacao",
+    "servicos-pro",
+    "fitness",
+    "eventos",
+    "imoveis-turismo",
+  ],
+  // Estoque físico: ramos que carregam produto (não serviços puros).
+  estoque: ["varejo", "alimentacao", "automotivo", "beleza"],
+};
+
+/**
+ * Um módulo é visível "de primeira" para uma categoria? Fail-open:
+ * sem regra ⇒ sempre visível; categoria null/desconhecida ⇒ visível (nunca
+ * prende o usuário). Módulos fora do ramo não somem — vão para o grupo "Mais".
+ */
+export function moduleVisibleFor(category: BusinessCategory | null, moduleKey: string): boolean {
+  const rules = MODULE_RULES[moduleKey];
+  if (!rules) return true;
+  if (category == null) return true;
+  return rules.includes(category);
+}
+
 export function buildNav(ctx: NavCtx): NavGroup[] {
   const { isAdmin, isAccountAdmin, category } = ctx;
   // Produção (comanda de cozinha) só faz sentido em ramos de alimentação.
