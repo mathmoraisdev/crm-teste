@@ -9,6 +9,9 @@ import {
   Megaphone,
   Bot,
   CalendarClock,
+  Package,
+  Boxes,
+  Users2,
   ArrowRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -18,7 +21,24 @@ import { cn } from "@/lib/utils";
 import type {
   OnboardingState,
   OnboardingStepKey,
+  CatalogVariant,
 } from "@/server/services/onboarding.service";
+
+/** Copy do passo de catálogo por variante de ramo. */
+const CATALOG_COPY: Record<CatalogVariant, { title: string; description: string }> = {
+  produtos: {
+    title: "Cadastre seus produtos",
+    description: "Adicione itens com preço (e custo, p/ ver sua margem no caixa).",
+  },
+  servicos: {
+    title: "Cadastre seus serviços",
+    description: "Adicione os serviços com preço e duração — a agenda usa a duração.",
+  },
+  ambos: {
+    title: "Cadastre produtos e serviços",
+    description: "Monte seu catálogo: serviços (com duração) e produtos (com preço/custo).",
+  },
+};
 
 /**
  * Apresentação (ícone/título/descrição/CTA) por passo, indexada pela `key`. A
@@ -60,6 +80,31 @@ const STEP_META: Record<
     href: "/configuracoes",
     cta: "Configurar IA",
     help: "A IA usa a persona e a base de conhecimento do seu ramo para responder no seu tom. Você revisa o texto antes de ligar.",
+  },
+  catalogo: {
+    icon: Package,
+    // título/descrição resolvidos por variante em tempo de render (ver CATALOG_COPY)
+    title: "Monte seu catálogo",
+    description: "Cadastre o que você vende.",
+    href: "/catalogo",
+    cta: "Abrir catálogo",
+    help: "O catálogo alimenta o caixa, a agenda e a IA de atendimento. Serviços têm duração; produtos podem ter controle de estoque.",
+  },
+  estoque: {
+    icon: Boxes,
+    title: "Ligue o controle de estoque",
+    description: "Ative o estoque nos produtos e informe as quantidades iniciais.",
+    href: "/estoque",
+    cta: "Configurar estoque",
+    help: "O estoque baixa sozinho no fechamento da comanda e avisa quando um produto está acabando. Opt-in por produto — só liga no que você quer controlar.",
+  },
+  agenda_setup: {
+    icon: Users2,
+    title: "Configure sua agenda",
+    description: "Cadastre profissionais/recursos e seus horários de atendimento.",
+    href: "/agenda",
+    cta: "Configurar agenda",
+    help: "Com profissionais e expediente definidos, a Agenda evita conflitos de horário e o link público de agendamento passa a funcionar.",
   },
   campaign: {
     icon: Megaphone,
@@ -106,6 +151,10 @@ export function OnboardingChecklist({ state }: { state: OnboardingState }) {
         {state.steps.map((step) => {
           const meta = STEP_META[step.key];
           const Icon = meta.icon;
+          const copy =
+            step.key === "catalogo" && step.variant
+              ? CATALOG_COPY[step.variant]
+              : { title: meta.title, description: meta.description };
           return (
             <li
               key={step.key}
@@ -129,10 +178,10 @@ export function OnboardingChecklist({ state }: { state: OnboardingState }) {
                     step.done ? "text-slate-400 line-through" : "text-ink",
                   )}
                 >
-                  {meta.title}
-                  {!step.done && <HelpHint label={`Sobre: ${meta.title}`}>{meta.help}</HelpHint>}
+                  {copy.title}
+                  {!step.done && <HelpHint label={`Sobre: ${copy.title}`}>{meta.help}</HelpHint>}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">{meta.description}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{copy.description}</p>
               </div>
 
               {!step.done && (
