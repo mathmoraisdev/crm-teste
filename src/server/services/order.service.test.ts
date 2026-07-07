@@ -650,3 +650,56 @@ describe("closeOrder — comissão (snapshot por linha)", () => {
     expect((await prisma.orderItem.findMany({ where: { orderId: o.id } }))[0].commissionCents).toBe(4000);
   });
 });
+
+describe("fiscal (carimbo no fechamento)", () => {
+  it("closeOrder carimba fiscalStatus=PENDENTE só quando a conta é opt-in", async () => {
+    const acc = await makeOwner();
+    const prod = await createCatalogItem(acc, { name: "Bola", priceCents: 5000, kind: "PRODUTO" });
+
+    // conta SEM opt-in → fica null
+    const o1 = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o1.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o1.id, { payment: "DINHEIRO", closedById: acc });
+    expect((await prisma.order.findUnique({ where: { id: o1.id } }))!.fiscalStatus).toBeNull();
+
+    // liga o opt-in → próxima comanda nasce PENDENTE
+    await prisma.user.update({ where: { id: acc }, data: { fiscalEnabled: true } });
+    const o2 = await openOrder(acc, { openedById: acc, customerName: "Y" });
+    await addItem(acc, o2.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o2.id, { payment: "DINHEIRO", closedById: acc });
+    const r2 = await prisma.order.findUnique({ where: { id: o2.id } });
+    expect(r2!.fiscalStatus).toBe("PENDENTE");
+    expect(r2!.fiscalRequestedAt).toBeInstanceOf(Date);
+  });
+
+  it("reabrir uma comanda PENDENTE descarta o carimbo fiscal", async () => {
+    const acc = await makeOwner();
+    await prisma.user.update({ where: { id: acc }, data: { fiscalEnabled: true } });
+    const prod = await createCatalogItem(acc, { name: "Cola", priceCents: 1000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "Z" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    expect((await prisma.order.findUnique({ where: { id: o.id } }))!.fiscalStatus).toBe("PENDENTE");
+
+    await reopenOrder(acc, o.id, acc);
+    const reopened = await prisma.order.findUnique({ where: { id: o.id } });
+    expect(reopened!.fiscalStatus).toBeNull();
+    expect(reopened!.fiscalRequestedAt).toBeNull();
+  });
+
+  it("reabrir NÃO descarta uma nota já EMITIDA", async () => {
+    const acc = await makeOwner();
+    await prisma.user.update({ where: { id: acc }, data: { fiscalEnabled: true } });
+    const prod = await createCatalogItem(acc, { name: "Fita", priceCents: 2000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "W" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    // simula o worker resolvendo a nota
+    await prisma.order.update({ where: { id: o.id }, data: { fiscalStatus: "EMITIDA", fiscalKey: "k" } });
+
+    await reopenOrder(acc, o.id, acc);
+    const reopened = await prisma.order.findUnique({ where: { id: o.id } });
+    expect(reopened!.fiscalStatus).toBe("EMITIDA");
+    expect(reopened!.fiscalKey).toBe("k");
+  });
+});

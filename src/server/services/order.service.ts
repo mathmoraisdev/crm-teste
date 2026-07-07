@@ -295,6 +295,16 @@ export async function closeOrder(
           select: { id: true },
         });
 
+        // Fiscal (Onda H): carimbo de emissão PENDENTE p/ conta opt-in. O opt-in
+        // (User.fiscalEnabled) é a 2ª chave; a emissão real roda no worker (assíncrona
+        // — SEFAZ é lento). Conta sem opt-in → fiscalStatus fica null (comanda
+        // não-fiscal). Comanda fechada ANTES de ligar o opt-in nunca é emitida
+        // retroativamente (só quem nasce com o carimbo). Leitura barata (PK indexada).
+        const acct = await tx.user.findUnique({
+          where: { id: accountId },
+          select: { fiscalEnabled: true },
+        });
+
         // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
         // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
         // e aborta ANTES da baixa/tenders, evitando decremento/SAIDA/tender em dobro.
@@ -304,6 +314,7 @@ export async function closeOrder(
             status: "FECHADA", payment, note: data.note?.trim() || null, closedAt: new Date(),
             amountTenderedCents: amountTendered, changeCents,
             cashSessionId: openSession?.id ?? null,
+            ...(acct?.fiscalEnabled ? { fiscalStatus: "PENDENTE", fiscalRequestedAt: new Date() } : {}),
           },
         });
         if (res.count === 0) throw new Error("Comanda já fechada.");
@@ -420,6 +431,13 @@ export async function reopenOrder(accountId: string, orderId: string, byId: stri
       },
     });
     if (res.count === 0) throw new Error("Comanda não pôde ser reaberta.");
+    // Fiscal (Onda H): descarta o carimbo SÓ se ainda não virou nota (PENDENTE/ERRO).
+    // Uma nota já EMITIDA/PROCESSANDO NÃO pode sumir silenciosamente — o descarte
+    // fiscal é via estorno/cancelamento (13.3.3), nunca pela reabertura.
+    await tx.order.updateMany({
+      where: { id: orderId, accountId, fiscalStatus: { in: ["PENDENTE", "ERRO"] } },
+      data: { fiscalStatus: null, fiscalRequestedAt: null, fiscalError: null, fiscalAttempts: 0 },
+    });
     await tx.orderTender.deleteMany({ where: { orderId } });
     // Limpa o snapshot de comissão — será recalculado no próximo fechamento (a
     // regra/preço/agendamento podem ter mudado). Sem isso o snapshot fica velho.
