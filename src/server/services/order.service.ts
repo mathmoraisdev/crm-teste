@@ -303,10 +303,14 @@ export async function closeOrder(
         // — SEFAZ é lento). Conta sem opt-in → fiscalStatus fica null (comanda
         // não-fiscal). Comanda fechada ANTES de ligar o opt-in nunca é emitida
         // retroativamente (só quem nasce com o carimbo). Leitura barata (PK indexada).
+        // SÓ carimba se ainda não há nota: uma comanda EMITIDA/PROCESSANDO que foi
+        // reaberta e é refechada NÃO pode voltar a PENDENTE (re-enfileiraria uma nota
+        // que já foi ao SEFAZ). Descarte de nota emitida é via estorno/cancelamento.
         const acct = await tx.user.findUnique({
           where: { id: accountId },
           select: { fiscalEnabled: true },
         });
+        const stampFiscal = !!acct?.fiscalEnabled && order.fiscalStatus == null;
 
         // Guarda atômica: o UPDATE condicionado a status=ABERTA é o árbitro. Se dois
         // fechamentos concorrerem (duplo-clique), só um afeta linhas — o outro vê count=0
@@ -317,7 +321,7 @@ export async function closeOrder(
             status: "FECHADA", payment, note: data.note?.trim() || null, closedAt: new Date(),
             amountTenderedCents: amountTendered, changeCents,
             cashSessionId: openSession?.id ?? null,
-            ...(acct?.fiscalEnabled ? { fiscalStatus: "PENDENTE", fiscalRequestedAt: new Date() } : {}),
+            ...(stampFiscal ? { fiscalStatus: "PENDENTE", fiscalRequestedAt: new Date() } : {}),
           },
         });
         if (res.count === 0) throw new Error("Comanda já fechada.");
@@ -412,15 +416,28 @@ export async function voidOrder(accountId: string, orderId: string, reason: stri
     await reverseOrderStockExit(tx, accountId, orderId, byId);
   });
 
-  // Fiscal (Onda H): se a comanda tinha nota EMITIDA, tenta cancelá-la no emissor —
-  // best-effort SÍNCRONO, FORA da tx (o estorno já commitou). A janela legal é curta
-  // (~30 min NFC-e); se passou, a nota fica EMITIDA com aviso e o contador resolve.
-  // Falha aqui NUNCA desfaz o estorno. Nunca loga o token.
+  // Fiscal (Onda H): reconcilia a nota com o estorno. FORA da tx (o estorno já
+  // commitou); falha aqui NUNCA desfaz o estorno. Nunca loga o token.
   const fiscal = await prisma.order.findUnique({
     where: { id: orderId },
     select: { fiscalStatus: true, fiscalDocId: true },
   });
-  if (fiscal?.fiscalStatus === "EMITIDA" && fiscal.fiscalDocId) {
+  if (fiscal?.fiscalStatus === "PENDENTE" || fiscal?.fiscalStatus === "ERRO") {
+    // A nota NUNCA foi ao SEFAZ (só carimbo/erro). Descarta o carimbo p/ o worker
+    // não emitir uma venda que foi anulada — volta a comanda a não-fiscal.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { fiscalStatus: null, fiscalError: null, fiscalRequestedAt: null },
+    });
+  } else if (
+    (fiscal?.fiscalStatus === "EMITIDA" || fiscal?.fiscalStatus === "PROCESSANDO") &&
+    fiscal.fiscalDocId
+  ) {
+    // Nota já enviada ao SEFAZ → cancelamento best-effort SÍNCRONO. A janela legal é
+    // curta (~30 min NFC-e); se passou/falha, a nota mantém o status atual com aviso e
+    // o contador resolve. (PROCESSANDO pode ainda nem estar autorizada — o worker
+    // segue re-consultando se o cancelamento não pegar.)
+    const prev = fiscal.fiscalStatus;
     try {
       const acct = await prisma.user.findUnique({
         where: { id: accountId },
@@ -431,11 +448,11 @@ export async function voidOrder(accountId: string, orderId: string, reason: stri
           decryptSecret(acct.fiscalKeyEnc), acct.fiscalEnv, fiscal.fiscalDocId, trimmed,
         );
         // cancelNfce sinaliza sucesso reusando status "EMITIDA" (janela ok) → CANCELADA;
-        // qualquer outra coisa (janela passou/erro) mantém EMITIDA com o motivo.
+        // qualquer outra coisa (janela passou/erro) mantém o status anterior com o motivo.
         await prisma.order.update({
           where: { id: orderId },
           data: {
-            fiscalStatus: r.status === "EMITIDA" ? "CANCELADA" : "EMITIDA",
+            fiscalStatus: r.status === "EMITIDA" ? "CANCELADA" : prev,
             fiscalError: r.status === "EMITIDA" ? null : (r.error ?? "Não foi possível cancelar a NFC-e (janela?)."),
           },
         });

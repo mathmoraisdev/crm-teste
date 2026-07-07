@@ -70,6 +70,7 @@ export async function dispatchPendingFiscalEmissions(_now: Date): Promise<number
   const orders = await prisma.order.findMany({
     where: {
       fiscalStatus: { in: ["PENDENTE", "PROCESSANDO"] },
+      status: { not: "CANCELADA" }, // nunca emite/consulta nota de comanda estornada
       account: { fiscalEnabled: true, fiscalProvider: { not: null }, fiscalKeyEnc: { not: null } },
     },
     include: {

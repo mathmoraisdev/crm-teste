@@ -711,6 +711,22 @@ describe("fiscal (carimbo no fechamento)", () => {
     expect(reopened!.fiscalStatus).toBe("EMITIDA");
     expect(reopened!.fiscalKey).toBe("k");
   });
+
+  it("refechar uma comanda já EMITIDA (reaberta) NÃO re-enfileira a nota (não volta a PENDENTE)", async () => {
+    const acc = await makeOwner();
+    await prisma.user.update({ where: { id: acc }, data: { fiscalEnabled: true } });
+    const prod = await createCatalogItem(acc, { name: "Luva", priceCents: 4000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "V" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+    await prisma.order.update({ where: { id: o.id }, data: { fiscalStatus: "EMITIDA", fiscalKey: "k" } });
+
+    await reopenOrder(acc, o.id, acc); // EMITIDA sobrevive à reabertura
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc }); // refecha
+    const r = await prisma.order.findUnique({ where: { id: o.id } });
+    expect(r!.fiscalStatus).toBe("EMITIDA"); // NÃO voltou a PENDENTE
+    expect(r!.fiscalKey).toBe("k");
+  });
 });
 
 describe("fiscal (cancelamento best-effort no estorno)", () => {
@@ -758,5 +774,22 @@ describe("fiscal (cancelamento best-effort no estorno)", () => {
     const r = await prisma.order.findUnique({ where: { id: orderId } });
     expect(r!.status).toBe("CANCELADA");
     expect(r!.fiscalStatus).toBe("EMITIDA"); // inalterada
+  });
+
+  it("estornar comanda ainda PENDENTE descarta o carimbo (worker NÃO emite venda anulada)", async () => {
+    cancelNfce.mockReset();
+    const acc = await makeOwner();
+    await prisma.user.update({ where: { id: acc }, data: { fiscalEnabled: true } });
+    const prod = await createCatalogItem(acc, { name: "Toca", priceCents: 1500, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "P" });
+    await addItem(acc, o.id, { catalogItemId: prod.id, quantity: 1 });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc }); // nasce PENDENTE
+    expect((await prisma.order.findUnique({ where: { id: o.id } }))!.fiscalStatus).toBe("PENDENTE");
+
+    await voidOrder(acc, o.id, "cancelou antes de emitir", acc);
+    const r = await prisma.order.findUnique({ where: { id: o.id } });
+    expect(r!.status).toBe("CANCELADA");
+    expect(r!.fiscalStatus).toBeNull(); // carimbo descartado → worker não pega
+    expect(cancelNfce).not.toHaveBeenCalled(); // nada no SEFAZ p/ cancelar
   });
 });
