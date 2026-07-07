@@ -192,6 +192,9 @@ export function BookingSettings({
               }}
               className={numClass}
             />
+            <span className="mt-1 block max-w-[16rem] text-xs text-slate-500">
+              Folga entre agora e o 1º horário livre. Ex.: 120 = nada nas próximas 2h.
+            </span>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Janela futura (dias)</label>
@@ -207,6 +210,9 @@ export function BookingSettings({
               }}
               className={numClass}
             />
+            <span className="mt-1 block max-w-[16rem] text-xs text-slate-500">
+              Até quantos dias à frente o cliente pode marcar.
+            </span>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Granularidade (min)</label>
@@ -222,6 +228,9 @@ export function BookingSettings({
               }}
               className={numClass}
             />
+            <span className="mt-1 block max-w-[16rem] text-xs text-slate-500">
+              De quantos em quantos minutos os horários aparecem (não é a duração do serviço).
+            </span>
           </div>
         </div>
 

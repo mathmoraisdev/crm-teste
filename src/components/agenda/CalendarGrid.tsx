@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apptDisplayName, type AppointmentDTO } from "@/components/agenda/appointment-labels";
 
@@ -75,12 +76,14 @@ export function CalendarGrid({
   mode,
   date,
   onSlotClick,
+  onEventClick,
 }: {
   appointments: AppointmentDTO[];
   professionals: Professional[];
   mode: "day" | "week";
   date: Date;
   onSlotClick: (d: { scheduledAt: string; professionalId?: string }) => void;
+  onEventClick?: (appt: AppointmentDTO) => void;
 }) {
   // Início do dia/semana (00:00 local) para posicionar colunas e agendamentos.
   const dayStart = useMemo(() => {
@@ -155,12 +158,16 @@ export function CalendarGrid({
         }
         const minutesFromStart = at.getHours() * 60 + at.getMinutes() - START_HOUR * 60;
         const dur = a.durationMinutes ?? DEFAULT_DURATION;
+        const end = new Date(at.getTime() + dur * 60_000);
         const rawTop = (minutesFromStart / 60) * HOUR_PX;
         const height = Math.max((dur / 60) * HOUR_PX, 22);
         const top = clamp(rawTop, 0, gridHeight - height);
-        return { appt: a, at, top, height };
+        return { appt: a, at, end, top, height };
       })
-      .filter((x): x is { appt: AppointmentDTO; at: Date; top: number; height: number } => x !== null)
+      .filter(
+        (x): x is { appt: AppointmentDTO; at: Date; end: Date; top: number; height: number } =>
+          x !== null,
+      )
       .sort((a, b) => a.top - b.top);
   }
 
@@ -219,33 +226,51 @@ export function CalendarGrid({
               className="relative min-w-[120px] flex-1 cursor-pointer border-l border-line-default"
               style={{ height: gridHeight }}
             >
-              {/* Linhas de hora */}
+              {/* Linhas de hora (cheias) + meia-hora (tracejada, mais fraca) para
+                  leitura de durações curtas sem depender de clicar. */}
               {HOURS.map((h, i) => (
-                <div
-                  key={h}
-                  className="pointer-events-none absolute inset-x-0 border-t border-line-default/60"
-                  style={{ top: i * HOUR_PX }}
-                />
+                <div key={h} className="pointer-events-none">
+                  <div
+                    className="absolute inset-x-0 border-t border-line-default/60"
+                    style={{ top: i * HOUR_PX }}
+                  />
+                  <div
+                    className="absolute inset-x-0 border-t border-dashed border-line-default/30"
+                    style={{ top: i * HOUR_PX + HOUR_PX / 2 }}
+                  />
+                </div>
               ))}
 
               {/* Blocos de agendamento */}
-              {laidOut(col).map(({ appt, at, top, height }) => {
+              {laidOut(col).map(({ appt, at, end, top, height }) => {
                 const service = appt.serviceName ?? appt.catalogItem?.name ?? "Atendimento";
                 const color = appt.professional?.color ?? col.color;
                 return (
                   <div
                     key={appt.id}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      // Não deixa o clique "vazar" p/ a coluna (que abriria um novo
+                      // agendamento) e abre o resumo deste agendamento.
+                      e.stopPropagation();
+                      onEventClick?.(appt);
+                    }}
                     className={cn(
-                      "absolute inset-x-1 overflow-hidden rounded-md border-l-4 px-2 py-1 text-[11px] leading-tight shadow-sm",
+                      "absolute inset-x-1 cursor-pointer overflow-hidden rounded-md border-l-4 px-2 py-1 text-[11px] leading-tight shadow-sm transition-shadow hover:shadow-md",
                       blockTone(color),
                     )}
                     style={{ top, height }}
-                    title={`${apptDisplayName(appt)} · ${service} · ${hhmm(at)}`}
+                    title={`${apptDisplayName(appt)} · ${service} · ${hhmm(at)}–${hhmm(end)}`}
                   >
-                    <p className="truncate font-bold">{apptDisplayName(appt)}</p>
+                    <p className="flex items-center gap-1 truncate font-bold">
+                      {appt.source === "ONLINE" && (
+                        <Link2 size={10} className="shrink-0" aria-label="Agendamento online" />
+                      )}
+                      <span className="truncate">{apptDisplayName(appt)}</span>
+                    </p>
                     <p className="truncate opacity-80">{service}</p>
-                    <p className="tabular-nums opacity-70">{hhmm(at)}</p>
+                    <p className="tabular-nums opacity-70">
+                      {hhmm(at)}–{hhmm(end)}
+                    </p>
                   </div>
                 );
               })}

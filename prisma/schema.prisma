@@ -909,6 +909,15 @@ enum AppointmentStatus {
   CANCELADO
 }
 
+// Origem do agendamento (selo/filtro na Agenda). MANUAL = criado pela equipe;
+// ONLINE = autoatendimento pelo link público /agendar; IA reservado p/ quando a
+// IA marcar direto (ainda não usado — evita nova migração depois).
+enum AppointmentSource {
+  MANUAL
+  ONLINE
+  IA
+}
+
 // Agendamento de serviço: N por Lead (≠ Meeting, que é 1:1). Cobre recorrência e
 // pacotes (sessões geradas antecipadamente, agrupadas por `seriesId`). Sem `userId`
 // próprio — scoping por `lead.userId`, igual Meeting. Reaproveita o motor de
@@ -934,6 +943,7 @@ model Appointment {
   durationMinutes      Int? // snapshot da duração (min) no momento do agendamento; null = instante
   scheduledAt          DateTime
   status               AppointmentStatus @default(AGENDADO)
+  source               AppointmentSource @default(MANUAL) // origem: equipe (MANUAL) x link público (ONLINE)
   note                 String?
   seriesId             String? // agrupa sessões de um mesmo pacote
   order                Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)

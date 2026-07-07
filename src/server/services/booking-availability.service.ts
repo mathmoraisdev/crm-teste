@@ -285,6 +285,7 @@ export async function confirmBooking(
       catalogItemId: service.id,
       professionalId: input.professionalId,
       createdById: accountId, // autoatendimento: a própria conta é a autora
+      source: "ONLINE", // veio do link público → selo/filtro na Agenda
     });
     return { appt, lead };
   });

@@ -15,6 +15,7 @@ import {
   Video,
   X,
   AlertTriangle,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -30,6 +31,7 @@ import {
   type AppointmentDTO,
 } from "@/components/agenda/appointment-labels";
 import { CalendarGrid } from "@/components/agenda/CalendarGrid";
+import { AppointmentDetailModal } from "@/components/agenda/AppointmentDetailModal";
 import { ScheduleModal } from "@/components/clientes/AppointmentSection";
 import { ProfessionalsSettings } from "@/components/app/ProfessionalsSettings";
 import { CommissionSettings } from "@/components/app/CommissionSettings";
@@ -137,13 +139,20 @@ export function AgendaView({
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
   const [reviewOnly, setReviewOnly] = useState(false);
+  // Filtro de origem da Lista: todos, só link público (ONLINE) ou só equipe (MANUAL).
+  const [sourceFilter, setSourceFilter] = useState<"ALL" | "ONLINE" | "MANUAL">("ALL");
 
   // Calendário (aba Agendamentos): visão + data + intervalo carregado.
-  const [apptView, setApptView] = useState<ApptView>("day");
+  // Abre na Lista (próximos agendamentos ordenados) em vez do Dia de hoje, que
+  // esconde marcações futuras — ex.: agendamento online cai num dia à frente.
+  const [apptView, setApptView] = useState<ApptView>("list");
   const [calDate, setCalDate] = useState(() => new Date());
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [profFilter, setProfFilter] = useState<string>("ALL");
   const [calAppts, setCalAppts] = useState<AppointmentDTO[] | null>(null);
+
+  // Resumo de um agendamento clicado (calendário ou Lista) — detalhes + ações.
+  const [detailAppt, setDetailAppt] = useState<AppointmentDTO | null>(null);
 
   // Modal de agendamento (walk-in-capable): sem leadId, com defaults do slot.
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -277,6 +286,8 @@ export function AgendaView({
       } else if (a.status !== "AGENDADO" && a.status !== "CONFIRMADO") {
         return false;
       }
+      if (sourceFilter === "ONLINE" && a.source !== "ONLINE") return false;
+      if (sourceFilter === "MANUAL" && a.source === "ONLINE") return false;
       if (!q) return true;
       const phone = a.lead?.phone ?? a.customerPhone ?? "";
       return (
@@ -284,7 +295,7 @@ export function AgendaView({
         (digits.length > 0 && phone.replace(/\D/g, "").includes(digits))
       );
     });
-  }, [appointments, query, reviewOnly]);
+  }, [appointments, query, reviewOnly, sourceFilter]);
 
   return (
     <div className="space-y-4">
@@ -506,6 +517,16 @@ export function AgendaView({
                 </span>
               )}
             </button>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as "ALL" | "ONLINE" | "MANUAL")}
+              aria-label="Filtrar por origem"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            >
+              <option value="ALL">Todas as origens</option>
+              <option value="ONLINE">Só online (link)</option>
+              <option value="MANUAL">Só manual</option>
+            </select>
           </div>
 
           {filteredAppts === null ? (
@@ -526,7 +547,7 @@ export function AgendaView({
             <Card>
               <ul className="divide-y divide-slate-100">
                 {filteredAppts.map((a) => (
-                  <AppointmentRow key={a.id} item={a} />
+                  <AppointmentRow key={a.id} item={a} onOpen={setDetailAppt} />
                 ))}
               </ul>
             </Card>
@@ -579,6 +600,7 @@ export function AgendaView({
                   mode={apptView === "week" ? "week" : "day"}
                   date={calDate}
                   onSlotClick={openSchedule}
+                  onEventClick={setDetailAppt}
                 />
               )}
             </>
@@ -595,11 +617,25 @@ export function AgendaView({
           await Promise.all([load(), loadCalendar()]);
         }}
       />
+
+      <AppointmentDetailModal
+        appt={detailAppt}
+        onClose={() => setDetailAppt(null)}
+        onChanged={async () => {
+          await Promise.all([load(), loadCalendar()]);
+        }}
+      />
     </div>
   );
 }
 
-function AppointmentRow({ item }: { item: AppointmentDTO }) {
+function AppointmentRow({
+  item,
+  onOpen,
+}: {
+  item: AppointmentDTO;
+  onOpen: (a: AppointmentDTO) => void;
+}) {
   const relDay = relativeDayLabel(item.scheduledAt);
   const service = item.serviceName ?? item.catalogItem?.name ?? "Atendimento";
   // Resposta do cliente ao lembrete aguardando conferência: destaca com a cor de
@@ -607,8 +643,9 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
   const review = item.needsReview;
   return (
     <li
+      onClick={() => onOpen(item)}
       className={cn(
-        "flex flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 sm:flex-nowrap",
+        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-1 py-3.5 pr-1 hover:bg-slate-50 sm:flex-nowrap",
         review
           ? "-mx-1 rounded-lg border-l-2 border-warning bg-warning-surface pl-3"
           : relDay
@@ -629,6 +666,7 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
           {item.lead ? (
             <Link
               href={`/leads/${item.lead.id}`}
+              onClick={(e) => e.stopPropagation()}
               className="font-bold text-ink hover:text-brand-600 hover:underline"
             >
               {item.lead.name}
@@ -637,6 +675,11 @@ function AppointmentRow({ item }: { item: AppointmentDTO }) {
             <span className="font-bold text-ink">{apptDisplayName(item)}</span>
           )}
           <Badge tone={APPT_STATUS_TONE[item.status]}>{APPT_STATUS_LABEL[item.status]}</Badge>
+          {item.source === "ONLINE" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-info-surface px-2 py-0.5 text-xs font-semibold text-info">
+              <Link2 size={11} /> Online
+            </span>
+          )}
           {relDay && (
             <span className="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-bold text-white">
               {relDay}

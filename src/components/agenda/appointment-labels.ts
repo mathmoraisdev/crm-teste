@@ -2,6 +2,8 @@ import type { Tone } from "@/components/ui/Badge";
 
 export type AppointmentStatus = "AGENDADO" | "CONFIRMADO" | "REALIZADO" | "FALTOU" | "CANCELADO";
 
+export type AppointmentSource = "MANUAL" | "ONLINE" | "IA";
+
 export const APPT_STATUS_LABEL: Record<AppointmentStatus, string> = {
   AGENDADO: "Agendado",
   CONFIRMADO: "Confirmado",
@@ -28,6 +30,7 @@ export interface AppointmentDTO {
   durationMinutes: number | null;
   scheduledAt: string; // ISO
   status: AppointmentStatus;
+  source: AppointmentSource; // origem: MANUAL (equipe) x ONLINE (link público)
   note: string | null;
   seriesId: string | null;
   orderId: string | null;

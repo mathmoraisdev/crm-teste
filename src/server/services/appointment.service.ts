@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/server/db/client";
-import type { AppointmentStatus, Prisma } from "@prisma/client";
+import type { AppointmentStatus, AppointmentSource, Prisma } from "@prisma/client";
 import type { ApptReply } from "@/server/ai/schemas";
 import { env } from "@/lib/env";
 import { formatSlot } from "@/lib/utils";
@@ -271,6 +271,7 @@ export interface CreateAppointmentInput {
   professionalId?: string | null;
   note?: string | null;
   createdById: string;
+  source?: AppointmentSource; // origem; ausente = MANUAL (default do banco)
   allowOverlap?: boolean; // override do bloqueio de conflito
   force?: boolean; // override do aviso de fora-do-expediente
 }
@@ -304,6 +305,7 @@ export async function createAppointment(userId: string, input: CreateAppointment
       professionalId: input.professionalId ?? null,
       note: input.note?.trim() || null,
       createdById: input.createdById,
+      ...(input.source ? { source: input.source } : {}),
     },
   });
 }
