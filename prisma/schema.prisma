@@ -24,6 +24,27 @@ enum PaymentProvider {
   ASAAS
 }
 
+// Fiscal (Onda H): emissor terceiro de NFC-e (o cadastro tributário pesado mora
+// no emissor; aqui só o token da API + roteamento). Ambiente e status da nota.
+enum FiscalProvider {
+  FOCUS_NFE
+  PLUGNOTAS
+  TECNOSPEED
+}
+
+enum FiscalEnv {
+  HOMOLOGACAO
+  PRODUCAO
+}
+
+enum FiscalStatus {
+  PENDENTE
+  PROCESSANDO
+  EMITIDA
+  ERRO
+  CANCELADA
+}
+
 enum SaleStatus {
   PENDING // cobrança criada, aguardando pagamento
   PAID // confirmado via webhook + reconsulta na API
@@ -197,6 +218,20 @@ model User {
   paymentKeyEnc        String? // token cifrado (AES-256-GCM): "iv:tag:ciphertext"
   paymentKeyLast4      String? // 4 últimos p/ exibir na UI
   paymentKeyVerifiedAt DateTime? // última validação bem-sucedida contra o gateway
+
+  // BYOK fiscal (Onda H): credencial do emissor terceiro (Focus NFe/PlugNotas/…) +
+  // perfil fiscal mínimo. O cadastro tributário pesado (regime, CSC, certificado)
+  // mora NO EMISSOR — aqui só o token da API + roteamento. Só faz sentido no dono.
+  fiscalProvider      FiscalProvider?
+  fiscalKeyEnc        String?   // token do emissor cifrado (AES-256-GCM): "iv:tag:ciphertext"
+  fiscalKeyLast4      String?
+  fiscalKeyVerifiedAt DateTime?
+  fiscalEnabled       Boolean    @default(false) // opt-in por conta (2ª chave; a 1ª é FISCAL_EMISSION)
+  fiscalEnv           FiscalEnv  @default(HOMOLOGACAO) // NUNCA emitir nota real em teste
+  fiscalSerie         Int        @default(1)
+  fiscalCnpj          String?    // CNPJ emitente (referência/exibição; a validade é do emissor)
+  fiscalDefaultNcm    String?    // NCM padrão da conta (per-item ADIADO — ver Riscos)
+  fiscalDefaultCfop   String?    // CFOP padrão (ex.: "5102" venda no estado)
 
   offers Offer[]
   sales  Sale[]
@@ -418,6 +453,16 @@ model Order {
   // Sessão de caixa em que a comanda foi FECHADA (null = fechada fora de sessão).
   cashSessionId  String?
   cashSession    CashSession?    @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  // Fiscal (Onda H): null = comanda não-fiscal (conta sem opt-in ou comanda antiga).
+  // Emissão é ASSÍNCRONA no worker; o fechamento só carimba PENDENTE p/ conta opt-in.
+  fiscalStatus      FiscalStatus?
+  fiscalDocId       String?   // id do documento no emissor (ref p/ status/cancelamento)
+  fiscalKey         String?   // chave de acesso NFC-e (44 díg.), snapshot p/ exibir
+  fiscalDanfeUrl    String?   // URL do DANFE no emissor (reimpressão — 13.3)
+  fiscalError       String?   // mensagem de rejeição (ERRO)
+  fiscalRequestedAt DateTime?
+  fiscalIssuedAt    DateTime?
+  fiscalAttempts    Int       @default(0) // tentativas do worker (backoff/limite)
   items          OrderItem[]
   tenders        OrderTender[]
   stockMovements StockMovement[]
@@ -426,6 +471,7 @@ model Order {
   @@unique([accountId, number]) // sequencial por conta; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, status])
   @@index([accountId, closedAt])
+  @@index([accountId, fiscalStatus])
 }
 
 // Linha de uma comanda. Guarda SNAPSHOT de nome/preço: reajustar o catálogo
