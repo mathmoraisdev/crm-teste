@@ -10,6 +10,7 @@ const patchSchema = z
   .object({
     canCampaigns: z.boolean().optional(),
     canSettings: z.boolean().optional(),
+    canFinance: z.boolean().optional(),
     leadsScope: z.enum(["ALL", "ASSIGNED"]).optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar." });

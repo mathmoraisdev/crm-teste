@@ -12,6 +12,7 @@ const createSchema = z.object({
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres."),
   canCampaigns: z.boolean().optional(),
   canSettings: z.boolean().optional(),
+  canFinance: z.boolean().optional(),
   leadsScope: z.enum(["ALL", "ASSIGNED"]).optional(),
 });
 
