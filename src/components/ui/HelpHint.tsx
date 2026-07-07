@@ -8,14 +8,16 @@ import { HelpCircle } from "lucide-react";
  */
 export function HelpHint({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <details className="group inline-block align-middle">
+    <details className="group relative inline-block align-middle">
       <summary
         aria-label={label}
         className="inline-flex cursor-pointer list-none items-center text-slate-400 hover:text-slate-600 [&::-webkit-details-marker]:hidden"
       >
         <HelpCircle size={14} />
       </summary>
-      <div className="mt-1.5 rounded-lg border border-line-default bg-inset px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
+      {/* Overlay flutuante (absolute): abre POR CIMA do conteúdo, sem empurrar/
+          quebrar a linha da lista. Largura fixa com guarda de viewport no mobile. */}
+      <div className="absolute left-0 top-full z-20 mt-1.5 w-64 max-w-[calc(100vw-2.5rem)] rounded-lg border border-line-default bg-inset px-3 py-2 text-xs font-normal leading-relaxed text-slate-600 shadow-lg dark:text-slate-400">
         {children}
       </div>
     </details>
