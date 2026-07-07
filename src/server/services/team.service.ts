@@ -8,6 +8,7 @@ import type { AccountRole, LeadsScope } from "@prisma/client";
 export interface OperatorPermsInput {
   canCampaigns?: boolean;
   canSettings?: boolean;
+  canFinance?: boolean;
   leadsScope?: LeadsScope;
 }
 
@@ -24,6 +25,7 @@ export interface MemberRow {
   role: AccountRole;
   canCampaigns: boolean;
   canSettings: boolean;
+  canFinance: boolean;
   leadsScope: LeadsScope;
   createdAt: Date;
 }
@@ -78,6 +80,7 @@ export async function createOperator(
       ownerId: adminUserId,
       canCampaigns: input.canCampaigns ?? true,
       canSettings: input.canSettings ?? true,
+      canFinance: input.canFinance ?? true,
       leadsScope: input.leadsScope ?? "ALL",
     },
     select: { id: true },
@@ -97,6 +100,7 @@ export async function listMembers(adminUserId: string): Promise<MemberRow[]> {
       role: true,
       canCampaigns: true,
       canSettings: true,
+      canFinance: true,
       leadsScope: true,
       createdAt: true,
     },
@@ -123,6 +127,7 @@ export async function updateOperatorPerms(
     data: {
       ...(perms.canCampaigns !== undefined ? { canCampaigns: perms.canCampaigns } : {}),
       ...(perms.canSettings !== undefined ? { canSettings: perms.canSettings } : {}),
+      ...(perms.canFinance !== undefined ? { canFinance: perms.canFinance } : {}),
       ...(perms.leadsScope !== undefined ? { leadsScope: perms.leadsScope } : {}),
     },
   });

@@ -92,9 +92,45 @@ describe("createOperator", () => {
       email: "maria@y.com",
       ownerId: "dono-1",
       role: "OPERADOR",
+      canFinance: true, // default = acesso total (igual às demais flags) quando omitido
     });
     expect(arg.data.passwordHash).toMatch(/^scrypt\$/);
     expect(arg.data).not.toHaveProperty("plan");
+  });
+
+  it("grava canFinance=false quando informado", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockImplementation(({ where }: any) =>
+      where.id ? Promise.resolve(adminRecord()) : Promise.resolve(null),
+    );
+    (prisma.user.count as any).mockResolvedValue(1);
+    (prisma.user.create as any).mockResolvedValue({ id: "op-novo" });
+    const { createOperator } = await import("./team.service");
+    await createOperator("dono-1", { name: "Ana", email: "ana@y.com", password: "12345678", canFinance: false });
+    const arg = (prisma.user.create as any).mock.calls[0][0];
+    expect(arg.data.canFinance).toBe(false);
+  });
+});
+
+describe("updateOperatorPerms", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("faz merge de canFinance só quando informado", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findFirst as any).mockResolvedValue({ id: "op-1" });
+    (prisma.user.update as any) = vi.fn().mockResolvedValue({ id: "op-1" });
+    const { updateOperatorPerms } = await import("./team.service");
+
+    // Informado → entra no data.
+    await updateOperatorPerms("dono-1", "op-1", { canFinance: false });
+    expect((prisma.user.update as any).mock.calls[0][0].data).toEqual({ canFinance: false });
+
+    // Omitido → não entra no data (não mexe no campo).
+    (prisma.user.update as any).mockClear();
+    await updateOperatorPerms("dono-1", "op-1", { canSettings: true });
+    const data = (prisma.user.update as any).mock.calls[0][0].data;
+    expect(data).toEqual({ canSettings: true });
+    expect(data).not.toHaveProperty("canFinance");
   });
 });
 
