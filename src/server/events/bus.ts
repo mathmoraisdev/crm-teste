@@ -2,7 +2,7 @@ import { redis } from "@/server/cache/redis";
 
 /** Evento empurrado a uma conta via SSE. `type` orienta a revalidação no front. */
 export interface TenantEvent {
-  type: "tenant:changed" | "conversation:changed" | "presence:changed";
+  type: "tenant:changed" | "conversation:changed";
   /** lead afetado (quando aplicável) — permite revalidação dirigida. */
   leadId?: string;
 }
