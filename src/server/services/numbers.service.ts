@@ -90,6 +90,8 @@ export interface WhatsAppNumberListItem {
   aiToolCallingEnabled: boolean;
   reminderDayBeforeTemplate: string | null;
   reminderHourBeforeTemplate: string | null;
+  apptReminderDayBeforeTemplate: string | null;
+  apptReminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -129,6 +131,8 @@ export async function listWhatsAppNumbers(
         aiToolCallingEnabled: true,
         reminderDayBeforeTemplate: true,
         reminderHourBeforeTemplate: true,
+        apptReminderDayBeforeTemplate: true,
+        apptReminderHourBeforeTemplate: true,
         replyDelaySeconds: true,
         firstReplyDelaySeconds: true,
         autoPauseOnHumanReply: true,
@@ -170,6 +174,8 @@ export async function updateWhatsAppNumber(
     aiToolCallingEnabled?: boolean;
     reminderDayBeforeTemplate?: string | null;
     reminderHourBeforeTemplate?: string | null;
+    apptReminderDayBeforeTemplate?: string | null;
+    apptReminderHourBeforeTemplate?: string | null;
     replyDelaySeconds?: number;
     firstReplyDelaySeconds?: number;
     autoPauseOnHumanReply?: boolean;
@@ -210,6 +216,8 @@ export async function updateWhatsAppNumber(
   if (data.aiToolCallingEnabled !== undefined) patch.aiToolCallingEnabled = data.aiToolCallingEnabled;
   if (data.reminderDayBeforeTemplate !== undefined) patch.reminderDayBeforeTemplate = data.reminderDayBeforeTemplate;
   if (data.reminderHourBeforeTemplate !== undefined) patch.reminderHourBeforeTemplate = data.reminderHourBeforeTemplate;
+  if (data.apptReminderDayBeforeTemplate !== undefined) patch.apptReminderDayBeforeTemplate = data.apptReminderDayBeforeTemplate;
+  if (data.apptReminderHourBeforeTemplate !== undefined) patch.apptReminderHourBeforeTemplate = data.apptReminderHourBeforeTemplate;
   if (data.replyDelaySeconds !== undefined) patch.replyDelaySeconds = data.replyDelaySeconds;
   if (data.firstReplyDelaySeconds !== undefined) patch.firstReplyDelaySeconds = data.firstReplyDelaySeconds;
   if (data.autoPauseOnHumanReply !== undefined) patch.autoPauseOnHumanReply = data.autoPauseOnHumanReply;

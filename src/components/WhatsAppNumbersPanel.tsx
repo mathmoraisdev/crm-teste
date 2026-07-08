@@ -35,6 +35,8 @@ interface NumberItem {
   aiToolCallingEnabled: boolean;
   reminderDayBeforeTemplate: string | null;
   reminderHourBeforeTemplate: string | null;
+  apptReminderDayBeforeTemplate: string | null;
+  apptReminderHourBeforeTemplate: string | null;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -57,6 +59,8 @@ interface ServiceConfig {
   aiToolCallingEnabled: boolean;
   reminderDayBeforeTemplate: string;
   reminderHourBeforeTemplate: string;
+  apptReminderDayBeforeTemplate: string;
+  apptReminderHourBeforeTemplate: string;
   replyDelaySeconds: number;
   firstReplyDelaySeconds: number;
   autoPauseOnHumanReply: boolean;
@@ -308,6 +312,8 @@ export function WhatsAppNumbersPanel() {
       aiToolCallingEnabled: n.aiToolCallingEnabled,
       reminderDayBeforeTemplate: n.reminderDayBeforeTemplate ?? "",
       reminderHourBeforeTemplate: n.reminderHourBeforeTemplate ?? "",
+      apptReminderDayBeforeTemplate: n.apptReminderDayBeforeTemplate ?? "",
+      apptReminderHourBeforeTemplate: n.apptReminderHourBeforeTemplate ?? "",
       replyDelaySeconds: n.replyDelaySeconds,
       firstReplyDelaySeconds: n.firstReplyDelaySeconds,
       autoPauseOnHumanReply: n.autoPauseOnHumanReply,
@@ -338,6 +344,8 @@ export function WhatsAppNumbersPanel() {
         aiToolCallingEnabled: service.aiToolCallingEnabled,
         reminderDayBeforeTemplate: service.reminderDayBeforeTemplate.trim() || null,
         reminderHourBeforeTemplate: service.reminderHourBeforeTemplate.trim() || null,
+        apptReminderDayBeforeTemplate: service.apptReminderDayBeforeTemplate.trim() || null,
+        apptReminderHourBeforeTemplate: service.apptReminderHourBeforeTemplate.trim() || null,
         replyDelaySeconds: service.replyDelaySeconds,
         firstReplyDelaySeconds: service.firstReplyDelaySeconds,
         autoPauseOnHumanReply: service.autoPauseOnHumanReply,
@@ -1021,11 +1029,11 @@ export function WhatsAppNumbersPanel() {
             {service.scheduleEnabled && (
               <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
                 <p className="text-xs font-semibold text-slate-600">
-                  Lembretes da reunião (WhatsApp do lead)
+                  Lembretes da conversa/reunião (funil de vendas)
                 </p>
                 <p className="text-xs text-slate-400">
                   Enviados automaticamente na véspera (~24h antes) e em cima da hora
-                  (~1h antes). Placeholders:{" "}
+                  (~1h antes) para reuniões do funil. Placeholders:{" "}
                   <code>{"{{nome}}"}</code> <code>{"{{quando}}"}</code>{" "}
                   <code>{"{{link}}"}</code>. Deixe vazio para usar o texto padrão.
                 </p>
@@ -1054,6 +1062,48 @@ export function WhatsAppNumbersPanel() {
                     }
                     rows={3}
                     placeholder={"Oi, {{nome}}! Nossa conversa é daqui a pouco.\n📅 {{quando}}\n{{link}}"}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+              </div>
+            )}
+
+            {service.scheduleEnabled && (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <p className="text-xs font-semibold text-slate-600">
+                  Lembretes do agendamento (serviço da Agenda)
+                </p>
+                <p className="text-xs text-slate-400">
+                  Enviados ao cliente na véspera (~24h antes) e em cima da hora (~1h
+                  antes) do horário marcado. Placeholders:{" "}
+                  <code>{"{{nome}}"}</code> <code>{"{{servico}}"}</code>{" "}
+                  <code>{"{{quando}}"}</code>. Deixe vazio para usar o texto padrão.
+                </p>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Lembrete da véspera
+                  </label>
+                  <textarea
+                    value={service.apptReminderDayBeforeTemplate}
+                    onChange={(e) =>
+                      setService({ ...service, apptReminderDayBeforeTemplate: e.target.value })
+                    }
+                    rows={3}
+                    placeholder={"Oi, {{nome}}! Lembrete: {{servico}} amanhã.\n📅 {{quando}}"}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Lembrete de 1 hora antes
+                  </label>
+                  <textarea
+                    value={service.apptReminderHourBeforeTemplate}
+                    onChange={(e) =>
+                      setService({ ...service, apptReminderHourBeforeTemplate: e.target.value })
+                    }
+                    rows={3}
+                    placeholder={"Oi, {{nome}}! Lembrete: {{servico}} é daqui a pouco.\n📅 {{quando}}"}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
                 </div>

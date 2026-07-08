@@ -1098,6 +1098,11 @@ model WhatsAppNumber {
   // null/vazio = usa o texto padrão. Véspera (~24h) e em cima da hora (~1h).
   reminderDayBeforeTemplate  String?
   reminderHourBeforeTemplate String?
+  // Texto dos lembretes de AGENDAMENTO de serviço (Agenda Pro) ao lead — separado do
+  // de reunião porque os placeholders diferem ({{servico}} em vez de {{link}}).
+  // null/vazio = usa o texto padrão de serviço.
+  apptReminderDayBeforeTemplate  String?
+  apptReminderHourBeforeTemplate String?
 
   // ── Timing & handoff do atendimento ────────────────────────────────────
   replyDelaySeconds       Int     @default(10) // janela de espera (debounce) antes de responder; junta msgs picadas

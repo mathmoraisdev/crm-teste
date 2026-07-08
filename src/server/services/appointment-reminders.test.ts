@@ -55,4 +55,28 @@ describe("apptReminderMessage", () => {
     expect(msg).toContain("daqui a pouco");
     expect(msg).toContain("atendimento"); // fallback do serviço
   });
+
+  it("usa o template do número quando informado (override)", () => {
+    const msg = apptReminderMessage("day_before", lead, at, "Corte", {
+      dayBefore: "Fala {{nome}}! Seu {{servico}} tá marcado.",
+      hourBefore: "não usado",
+    });
+    expect(msg).toBe("Fala Maria! Seu Corte tá marcado.");
+  });
+
+  it("template vazio/espaços cai para o padrão", () => {
+    const msg = apptReminderMessage("day_before", lead, at, "Corte", {
+      dayBefore: "   ",
+      hourBefore: null,
+    });
+    expect(msg).toContain("Lembrete: Corte amanhã"); // texto padrão de véspera
+  });
+
+  it("override respeita a janela (hour_before usa o texto de 1h, não o de véspera)", () => {
+    const msg = apptReminderMessage("hour_before", lead, at, "Corte", {
+      dayBefore: "TEXTO DE VESPERA",
+      hourBefore: "Seu {{servico}} é já já, {{nome}}!",
+    });
+    expect(msg).toBe("Seu Corte é já já, Maria!");
+  });
 });

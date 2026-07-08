@@ -47,15 +47,23 @@ export function renderApptReminderTemplate(
     .trim();
 }
 
-/** Monta o texto do lembrete de agendamento (usa o padrão de serviço). */
+/**
+ * Monta o texto do lembrete de agendamento. Usa o template do número (se houver)
+ * ou o padrão de serviço — mesmo contrato override→fallback do `reminderMessage`
+ * de reunião. `override?.trim()` vazio cai para o default.
+ */
 export function apptReminderMessage(
   kind: ReminderKind,
   lead: { name: string },
   scheduledAt: Date,
   serviceName: string | null,
+  templates?: { dayBefore?: string | null; hourBefore?: string | null },
 ): string {
-  const template =
+  const override =
+    kind === "day_before" ? templates?.dayBefore : templates?.hourBefore;
+  const fallback =
     kind === "day_before" ? DEFAULT_APPT_REMINDER_DAY_BEFORE : DEFAULT_APPT_REMINDER_HOUR_BEFORE;
+  const template = override?.trim() ? override : fallback;
   return renderApptReminderTemplate(template, {
     nome: firstName(lead.name),
     servico: serviceName,
@@ -86,7 +94,20 @@ export async function dispatchDueAppointmentReminders(now: Date): Promise<number
       remindedDayBeforeAt: true,
       remindedHourBeforeAt: true,
       lead: {
-        select: { id: true, name: true, phone: true, userId: true, whatsAppNumberId: true },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          userId: true,
+          whatsAppNumberId: true,
+          // texto dos lembretes de agendamento configurado no número (cai p/ o padrão se null)
+          whatsAppNumber: {
+            select: {
+              apptReminderDayBeforeTemplate: true,
+              apptReminderHourBeforeTemplate: true,
+            },
+          },
+        },
       },
     },
   });
@@ -105,7 +126,10 @@ export async function dispatchDueAppointmentReminders(now: Date): Promise<number
     try {
       await sendWhatsAppMessage(
         a.lead,
-        apptReminderMessage(kind, a.lead, a.scheduledAt, a.serviceName),
+        apptReminderMessage(kind, a.lead, a.scheduledAt, a.serviceName, {
+          dayBefore: a.lead.whatsAppNumber?.apptReminderDayBeforeTemplate,
+          hourBefore: a.lead.whatsAppNumber?.apptReminderHourBeforeTemplate,
+        }),
         { source: "SYSTEM" }, // lembrete automático, não é resposta da IA
       );
       await prisma.appointment.update({

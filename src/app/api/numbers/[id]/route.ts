@@ -44,6 +44,9 @@ const updateSchema = z
     // texto dos lembretes de reunião (placeholders {{nome}} {{quando}} {{link}})
     reminderDayBeforeTemplate: z.string().max(1000).nullable().optional(),
     reminderHourBeforeTemplate: z.string().max(1000).nullable().optional(),
+    // texto dos lembretes de agendamento (placeholders {{nome}} {{servico}} {{quando}})
+    apptReminderDayBeforeTemplate: z.string().max(1000).nullable().optional(),
+    apptReminderHourBeforeTemplate: z.string().max(1000).nullable().optional(),
     // timing & handoff
     replyDelaySeconds: z.number().int().min(0).max(600).optional(),
     firstReplyDelaySeconds: z.number().int().min(0).max(600).optional(),
