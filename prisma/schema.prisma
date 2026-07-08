@@ -240,6 +240,7 @@ model User {
 
   leads                    Lead[]
   assignedLeads            Lead[]                   @relation("AssignedLeads")
+  attendingLeads           Lead[]                   @relation("LeadAttendedBy")
   tags                     Tag[]
   customFieldDefs          CustomFieldDef[]
   campaigns                Campaign[]
@@ -749,6 +750,12 @@ model Lead {
   attendanceStatus  AttendanceStatus @default(IA)
   assignedTo        User?            @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedToId      String?
+  // Anti-colisão event-driven: quem está com a conversa aberta AGORA (trava de
+  // atendimento). Diferente de assignedToId (dono do lead, durável) — isto é
+  // efêmero e muda a cada abertura/assumir/fechar. Ver docs/plans/2026-07-08-trava-atendimento-conversa.md
+  attendingUserId   String?
+  attendingAt       DateTime?
+  attendingTo       User?            @relation("LeadAttendedBy", fields: [attendingUserId], references: [id], onDelete: SetNull)
   queuedAt          DateTime? // entrou na FILA (base do SLA)
   firstResponseAt   DateTime? // 1ª resposta humana após a fila (fecha o SLA)
   lastReadAt        DateTime? // leitura (inbox compartilhado)
@@ -769,6 +776,7 @@ model Lead {
   @@index([status])
   @@index([userId, attendanceStatus])
   @@index([assignedToId])
+  @@index([attendingUserId])
 }
 
 enum CustomFieldType {
