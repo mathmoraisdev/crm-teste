@@ -69,12 +69,13 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
     }
   }, []);
 
-  // Polling de FALLBACK (30s): com Redis o SSE abaixo cobre o tempo real; este
-  // intervalo protege contra SSE indisponível. Recarrega ao trocar de número.
+  // Polling de FALLBACK (60s): o SSE abaixo cobre o tempo real na hora; este
+  // intervalo só protege contra SSE indisponível, então é folgado (60s) p/ poupar
+  // invocação na Vercel e query no banco. Recarrega ao trocar de número.
   useEffect(() => {
     setLoadingList(true);
     loadList(filter);
-    const t = setInterval(() => loadList(filter), 30000);
+    const t = setInterval(() => loadList(filter), 60000);
     return () => clearInterval(t);
   }, [filter, selectedNumber, loadList]);
 
@@ -89,14 +90,15 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
     }
   }, []);
 
-  // Polling de FALLBACK do detalhe selecionado (30s) — o SSE revalida na hora.
+  // Polling de FALLBACK do detalhe selecionado (60s) — o SSE revalida na hora; o
+  // timer só cobre SSE fora, então folgado p/ poupar Vercel/DB.
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
     loadDetail(selectedId);
-    const t = setInterval(() => loadDetail(selectedId), 30000);
+    const t = setInterval(() => loadDetail(selectedId), 60000);
     return () => clearInterval(t);
   }, [selectedId, loadDetail]);
 
