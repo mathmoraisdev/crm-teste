@@ -46,20 +46,24 @@ export async function interpretSlotChoice(opts: {
   ai: AiClient;
   formattedSlots: string[]; // legíveis, índice = posição
   leadMessage: string;
+  nowLabel?: string; // data/hora atual legível — base p/ resolver "amanhã/semana que vem"
 }): Promise<SlotChoice> {
   const list = opts.formattedSlots.map((s, i) => `[${i}] ${s}`).join("\n");
+  const dateLine = opts.nowLabel ? `Data/hora atual: ${opts.nowLabel}\n\n` : "";
   const input = await opts.ai.forcedToolCall({
     tier: "cheap",
     maxTokens: 256,
     system: SLOT_CHOICE_SYSTEM,
-    user: `Horários oferecidos:\n${list}\n\nMensagem do lead: "${opts.leadMessage}"`,
+    user: `${dateLine}Horários oferecidos:\n${list}\n\nMensagem do lead: "${opts.leadMessage}"`,
     toolName: "registrar_escolha",
     toolDescription: "Registra qual horário o lead escolheu.",
     jsonSchema: slotChoiceJsonSchema as unknown as Record<string, unknown>,
   });
-  if (input == null) return { chosenIndex: null, confident: false };
+  if (input == null) return { chosenIndex: null, confident: false, preferredStartIso: null };
   const parsed = slotChoiceSchema.safeParse(input);
-  return parsed.success ? parsed.data : { chosenIndex: null, confident: false };
+  return parsed.success
+    ? parsed.data
+    : { chosenIndex: null, confident: false, preferredStartIso: null };
 }
 
 const APPT_REPLY_SYSTEM =

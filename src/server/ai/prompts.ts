@@ -36,11 +36,12 @@ Escreva a PRÓXIMA mensagem a enviar. Regras:
 - NÃO use markdown. WhatsApp não renderiza links: escreva URLs cruas (ex.: https://site.com.br), nunca no formato [texto](url).
 - Responda APENAS com o texto da mensagem, nada mais.`;
 
-export const SLOT_CHOICE_SYSTEM = `Você interpreta a resposta de um lead que recebeu uma lista numerada de horários para uma reunião.
+export const SLOT_CHOICE_SYSTEM = `Você interpreta a resposta de um lead que recebeu uma lista numerada de horários para um agendamento.
 
-Dada a lista de horários (com índices base 0) e a mensagem do lead, identifique qual horário ele escolheu chamando a tool "registrar_escolha".
-- O lead pode responder com o número ("2"), com o horário ("quarta às 14h"), ou de forma ambígua.
-- Se não der para identificar com razoável confiança, retorne chosenIndex = null e confident = false.
+Dada a data/hora atual, a lista de horários (com índices base 0) e a mensagem do lead, chame a tool "registrar_escolha".
+- Se o lead escolheu UM dos horários oferecidos (pelo número "2", pelo horário "quarta às 14h", etc.), retorne chosenIndex = índice e confident = true. Nesse caso preferredStartIso = null.
+- Se o lead NÃO quer nenhum dos oferecidos e pediu um dia/hora DIFERENTE (ex.: "semana que vem", "amanhã 14h", "quinta de manhã", "só de tarde"), retorne chosenIndex = null, confident = false e preferredStartIso = a data/hora aproximada em ISO 8601, calculada a partir da data atual informada (ex.: se hoje é 2026-07-08 e ele diz "semana que vem", use a próxima segunda; "amanhã 14h" = dia seguinte às 14:00).
+- Se for ambíguo e você não conseguir nem escolher nem extrair uma preferência, retorne chosenIndex null, confident false e preferredStartIso null.
 Não escreva texto livre — apenas chame a tool.`;
 
 export const ATTENDANCE_SYSTEM = `Você é um atendente virtual de uma empresa, respondendo clientes pelo WhatsApp.

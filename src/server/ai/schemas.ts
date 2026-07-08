@@ -116,6 +116,9 @@ export const qualificationJsonSchema = {
 export const slotChoiceSchema = z.object({
   chosenIndex: z.number().int().nullable(),
   confident: z.boolean(),
+  // Preferência de OUTRO horário (o lead não quer nenhum dos oferecidos e pediu
+  // um dia/hora diferente): ISO 8601 aproximado no fuso da conta, ou null.
+  preferredStartIso: z.string().nullable().optional().default(null),
 });
 export type SlotChoice = z.infer<typeof slotChoiceSchema>;
 
@@ -126,14 +129,22 @@ export const slotChoiceJsonSchema = {
     chosenIndex: {
       type: ["integer", "null"],
       description:
-        "Índice (base 0) do horário escolhido pelo lead, ou null se não deu para identificar.",
+        "Índice (base 0) do horário escolhido pelo lead, ou null se ele não escolheu nenhum dos oferecidos.",
     },
     confident: {
       type: "boolean",
       description: "Se há confiança razoável na escolha identificada.",
     },
+    preferredStartIso: {
+      type: ["string", "null"],
+      description:
+        "Se o lead NÃO escolheu nenhum dos horários e pediu um dia/hora DIFERENTE " +
+        "(ex.: 'semana que vem', 'amanhã 14h', 'quinta de manhã'), calcule a data/hora " +
+        "aproximada com base na data atual informada e retorne em ISO 8601 (ex.: " +
+        "2026-07-15T14:00:00). Sem preferência nova → null.",
+    },
   },
-  required: ["chosenIndex", "confident"],
+  required: ["chosenIndex", "confident", "preferredStartIso"],
 } as const;
 
 // ── Interpretação da resposta a um lembrete de agendamento (modelo "cheap") ──

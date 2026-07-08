@@ -387,14 +387,20 @@ function readOfferId(args: unknown): string | undefined {
   return undefined;
 }
 
-/** Lê `{ serviceId?: string, professionalId?: string }` de um args cru, tolerante. */
-function readAgendarArgs(args: unknown): { serviceId?: string; professionalId?: string } {
+/** Lê `{ serviceId?, professionalId?, preferredStartIso? }` de um args cru, tolerante. */
+function readAgendarArgs(args: unknown): {
+  serviceId?: string;
+  professionalId?: string;
+  preferredStartIso?: string;
+} {
   if (!args || typeof args !== "object") return {};
   const s = (args as { serviceId?: unknown }).serviceId;
   const p = (args as { professionalId?: unknown }).professionalId;
+  const w = (args as { preferredStartIso?: unknown }).preferredStartIso;
   return {
     serviceId: typeof s === "string" && s.trim() ? s.trim() : undefined,
     professionalId: typeof p === "string" && p.trim() ? p.trim() : undefined,
+    preferredStartIso: typeof w === "string" && w.trim() ? w.trim() : undefined,
   };
 }
 
@@ -423,13 +429,25 @@ function agendar(ctx: AttendanceToolCtx): ToolDef {
           type: "string",
           description: "id do profissional (opcional; ausente = sem preferência).",
         },
+        preferredStartIso: {
+          type: "string",
+          description:
+            "Opcional. Quando o cliente indicar QUANDO quer (ex.: 'semana que vem', " +
+            "'amanhã 14h', 'quinta de manhã'), calcule a data/hora aproximada a partir " +
+            "da data atual e informe em ISO 8601 (ex.: 2026-07-15T14:00:00). Sem " +
+            "preferência de horário → omita (proponho os horários mais próximos).",
+        },
       },
       required: ["serviceId"],
     },
     handler: async (args): Promise<ToolResult> => {
-      const { serviceId, professionalId } = readAgendarArgs(args);
+      const { serviceId, professionalId, preferredStartIso } = readAgendarArgs(args);
       if (!serviceId) return { content: "Preciso saber qual serviço agendar." };
-      await proposeAppointmentSlots(ctx.lead.id, ctx.accountId, { serviceId, professionalId });
+      await proposeAppointmentSlots(ctx.lead.id, ctx.accountId, {
+        serviceId,
+        professionalId,
+        preferredStartIso,
+      });
       return { content: "horários propostos ao cliente", stop: true };
     },
   };

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import { formatSlot } from "@/lib/utils";
+import { zonedWallTimeToUtc } from "@/lib/agenda/availability";
 import { interpretSlotChoice } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
 import { resolveAiModelForUser } from "@/server/services/entitlements";
@@ -29,6 +30,21 @@ const HORIZON_REQUEST_DAYS = 60;
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
+}
+
+/**
+ * PURA: converte um ISO "de parede" (naive, sem offset — como a IA devolve a
+ * preferência de horário do lead) para o instante UTC correspondente NAQUELE fuso,
+ * via `zonedWallTimeToUtc` (DST-safe). Aceita data sem hora ("2026-07-15" → 00:00,
+ * que vira "o dia a partir da abertura"). Retorna null se não parsear.
+ */
+export function parsePreferredStart(iso: string, timeZone: string): Date | null {
+  const m = /^\s*(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(iso);
+  if (!m) return null;
+  const [, y, mo, d, hh, mm] = m;
+  const minuteOfDay = Number(hh ?? "0") * 60 + Number(mm ?? "0");
+  const dt = zonedWallTimeToUtc(Number(y), Number(mo), Number(d), minuteOfDay, timeZone);
+  return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
 /** Slot rico guardado em `Meeting.proposedSlots` (objeto = discriminador do fluxo novo). */
@@ -72,7 +88,13 @@ async function bookingUrlFor(accountId: string): Promise<string | null> {
 export async function proposeAppointmentSlots(
   leadId: string,
   accountId: string,
-  input: { serviceId: string; professionalId?: string | null },
+  input: {
+    serviceId: string;
+    professionalId?: string | null;
+    // Preferência de quando o lead quer ("semana que vem", "amanhã 14h"): ISO de
+    // parede no fuso da conta. Desloca o início da busca; ausente/passado = agora.
+    preferredStartIso?: string | null;
+  },
 ): Promise<void> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!lead) return;
@@ -85,12 +107,19 @@ export async function proposeAppointmentSlots(
   }
 
   const now = new Date();
+  // Se o lead pediu um horário específico, começa a busca por ali (getAvailableSlots
+  // já aplica a antecedência mínima e clampa ao horizonte). Preferência no passado
+  // ou inválida cai para "agora" (comportamento padrão: os 3 primeiros livres).
+  const preferred = input.preferredStartIso
+    ? parsePreferredStart(input.preferredStartIso, TZ)
+    : null;
+  const fromUtc = preferred && preferred.getTime() > now.getTime() ? preferred : now;
   let slots;
   try {
     slots = await getAvailableSlots(accountId, {
       catalogItemId: input.serviceId,
       professionalId: input.professionalId ?? null,
-      fromUtc: now,
+      fromUtc,
       toUtc: new Date(now.getTime() + HORIZON_REQUEST_DAYS * DAY_MS),
     });
   } catch (e) {
@@ -172,10 +201,31 @@ export async function interpretAndBookAppointment(
     : null;
   const effectiveModel = await resolveAiModelForUser(lead.userId, num?.aiModel ?? null);
   const ai = await getAiClient(lead.userId, effectiveModel ?? undefined);
-  const choice = await interpretSlotChoice({ ai, formattedSlots: formatted, leadMessage });
+  const now = new Date();
+  const choice = await interpretSlotChoice({
+    ai,
+    formattedSlots: formatted,
+    leadMessage,
+    nowLabel: formatSlot(now.toISOString(), TZ),
+  });
 
   const idx = choice.chosenIndex;
-  if (idx === null || !choice.confident || idx < 0 || idx >= slots.length) {
+  const validChoice = idx !== null && choice.confident && idx >= 0 && idx < slots.length;
+  if (!validChoice) {
+    // O lead não escolheu nenhum dos 3 — se pediu um horário DIFERENTE ("amanhã 14h",
+    // "semana que vem"), re-propõe em volta do horário pedido em vez de repetir os
+    // mesmos. Reabre amplo (sem travar no profissional). Sem preferência válida →
+    // mantém o "qual desses fica melhor?".
+    const preferred = choice.preferredStartIso
+      ? parsePreferredStart(choice.preferredStartIso, TZ)
+      : null;
+    if (preferred && preferred.getTime() > now.getTime()) {
+      await proposeAppointmentSlots(leadId, lead.userId, {
+        serviceId: slots[0].serviceId,
+        preferredStartIso: choice.preferredStartIso,
+      });
+      return { booked: false };
+    }
     const lines = formatted.map((s, i) => `${i + 1}) ${s}`).join("\n");
     await sendWhatsAppMessage(lead, `Só pra confirmar, qual desses fica melhor pra você?\n${lines}`);
     return { booked: false };
