@@ -3,7 +3,6 @@ import type { AttendanceStatus, LeadStatus } from "@prisma/client";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
 import { slaState, type SlaState } from "@/lib/inbox/sla";
-import { whoIsViewingMany, type Viewer } from "@/server/services/presence.service";
 
 export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
@@ -29,9 +28,9 @@ export interface InboxConversation {
   // Estado de SLA (reusa queuedAt/firstResponseAt + meta do dono). Calculado no
   // servidor a cada listagem (re-fetch por SSE/polling mantém o destaque fresco).
   sla: SlaState;
-  // Anti-colisão: outros operadores vendo esta conversa AGORA (exceto o próprio).
-  // Vazio sem Redis. Best-effort — só informa, não bloqueia.
-  viewers: Viewer[];
+  // Trava de atendimento (anti-colisão): quem está com a conversa aberta AGORA
+  // (exceto o próprio operador). null = livre. Vem de graça na query da lista.
+  attendingBy: { userId: string; name: string; since: Date | null } | null;
   optOut: boolean;
 }
 
@@ -112,6 +111,7 @@ export async function listConversations(
       where,
       include: {
         assignedTo: { select: { id: true, name: true } },
+        attendingTo: { select: { id: true, name: true } },
         whatsAppNumber: { select: { displayName: true, label: true } },
         messages: { orderBy: { createdAt: "desc" }, take: 1, select: { content: true, createdAt: true } },
       },
@@ -134,10 +134,6 @@ export async function listConversations(
       : [];
   const inboundAt = new Map(lastInbound.map((g) => [g.leadId, g._max.createdAt]));
 
-  // Anti-colisão: quem está vendo cada conversa agora (exceto o próprio operador).
-  // Best-effort e barato (uma pipeline; vazio sem Redis).
-  const viewersByLead = await whoIsViewingMany(ids, { excludeUserId: opts.sessionUserId });
-
   const rows: InboxConversation[] = leads.map((l) => {
     const lastIn = inboundAt.get(l.id) ?? null;
     const readAt = l.lastReadAt?.getTime() ?? 0;
@@ -155,7 +151,12 @@ export async function listConversations(
       queuedAt: l.queuedAt,
       firstResponseAt: l.firstResponseAt,
       sla: slaState({ queuedAt: l.queuedAt, firstResponseAt: l.firstResponseAt, targetMinutes, now }),
-      viewers: viewersByLead[l.id] ?? [],
+      // Trava de atendimento (anti-colisão): quem está com a conversa aberta agora.
+      // Vem de graça no include — sem Redis. Não mostra a si mesmo.
+      attendingBy:
+        l.attendingUserId && l.attendingUserId !== opts.sessionUserId && l.attendingTo
+          ? { userId: l.attendingTo.id, name: l.attendingTo.name, since: l.attendingAt }
+          : null,
       optOut: l.optOut,
     };
   });
