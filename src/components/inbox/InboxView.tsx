@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, ExternalLink, Hand, RotateCcw, Settings } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Hand, Lock, RotateCcw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -44,18 +44,26 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
 
-  const loadList = useCallback(async (f: InboxFilter) => {
+  // Trava de atendimento (anti-colisão): `iHoldRef` = eu seguro a trava da conversa
+  // aberta (p/ detectar quando alguém a assume). `heldByOther` = outro operador está
+  // atendendo esta conversa → mostra o banner "Assumir".
+  const iHoldRef = useRef(false);
+  const [heldByOther, setHeldByOther] = useState<{ userId: string; name: string } | null>(null);
+
+  const loadList = useCallback(async (f: InboxFilter): Promise<InboxConversation[] | null> => {
     try {
       const n = numberRef.current;
       const url = `/api/inbox?filter=${f}${n ? `&number=${encodeURIComponent(n)}` : ""}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
-      setConversations((data.conversations as InboxConversation[]) ?? []);
+      const convs = (data.conversations as InboxConversation[]) ?? [];
+      setConversations(convs);
       setCounts((data.counts as InboxCounts) ?? null);
       setNumbers((data.numbers as InboxNumber[]) ?? []);
       setMe((data.me as string) ?? null);
+      return convs;
     } catch {
-      // mantém estado
+      return null; // mantém estado
     } finally {
       setLoadingList(false);
     }
@@ -93,24 +101,45 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
   }, [selectedId, loadDetail]);
 
   // Tempo real: evento da conta → revalida a lista e o detalhe aberto na hora.
-  useTenantStream(() => {
-    loadList(filter);
+  useTenantStream(async () => {
+    const fresh = await loadList(filter);
     if (selectedRef.current) loadDetail(selectedRef.current);
+    // Trava: eu segurava a conversa aberta e alguém a assumiu → cai pro banner
+    // "Fulano está atendendo" (posso reassumir). Usa a lista recém-buscada (o
+    // `attendingBy` já exclui a mim mesmo, então só aponta quando é OUTRO).
+    const row = fresh?.find((c) => c.id === selectedRef.current);
+    if (iHoldRef.current && row?.attendingBy) {
+      iHoldRef.current = false;
+      setHeldByOther({ userId: row.attendingBy.userId, name: row.attendingBy.name });
+    }
   });
 
-  // Presença (anti-colisão): enquanto uma conversa está aberta, bate um heartbeat
-  // a cada 15s p/ os outros verem "fulano está aqui". Ao fechar/trocar, sai na
-  // hora (DELETE). Best-effort — falha nunca bloqueia. A lista já traz `viewers`.
+  // Trava de atendimento (anti-colisão event-driven): ao abrir uma conversa,
+  // reivindico a trava (claim). Livre → eu seguro; ocupada por outro → mostro o
+  // banner "Fulano está atendendo" (posso Assumir). Ao fechar/trocar, libero
+  // (DELETE, só solta se ainda for minha). Sem heartbeat/timer — escreve só nas
+  // transições. Best-effort — falha nunca bloqueia responder.
   useEffect(() => {
     if (!selectedId) return;
     const id = selectedId;
-    const beat = () =>
-      fetch(`/api/inbox/${id}/presence`, { method: "POST" }).catch(() => {});
-    beat();
-    const t = setInterval(beat, 15000);
+    setHeldByOther(null);
+    iHoldRef.current = false;
+    fetch(`/api/inbox/${id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "claim" }),
+    })
+      .then((r) => r.json())
+      .then((r: { ok: boolean; heldBy: { userId: string; name: string } | null }) => {
+        // Ignora respostas atrasadas de uma conversa que já não é a aberta.
+        if (selectedRef.current !== id) return;
+        if (r.ok) iHoldRef.current = true;
+        else setHeldByOther(r.heldBy);
+      })
+      .catch(() => {});
     return () => {
-      clearInterval(t);
-      fetch(`/api/inbox/${id}/presence`, { method: "DELETE", keepalive: true }).catch(() => {});
+      iHoldRef.current = false;
+      fetch(`/api/inbox/${id}/attendance`, { method: "DELETE", keepalive: true }).catch(() => {});
     };
   }, [selectedId]);
 
@@ -327,6 +356,30 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
                 {actionError && <p className="mt-2 text-xs text-danger">{actionError}</p>}
               </div>
 
+              {/* Trava de atendimento: outro operador está com esta conversa aberta.
+                  Um clique em Assumir transfere a trava na hora (avisa o anterior). */}
+              {heldByOther && (
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-warning/25 bg-warning-surface px-4 py-2 text-sm text-warning">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lock size={14} /> {heldByOther.name} está atendendo esta conversa.
+                  </span>
+                  <button
+                    className="rounded bg-warning px-2 py-1 text-xs font-medium text-white"
+                    onClick={async () => {
+                      await fetch(`/api/inbox/${selectedId}/attendance`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "takeover" }),
+                      }).catch(() => {});
+                      iHoldRef.current = true;
+                      setHeldByOther(null);
+                    }}
+                  >
+                    Assumir
+                  </button>
+                </div>
+              )}
+
               <div className="min-h-0 flex-1">
                 <ConversationView
                   leadId={detail.id}
@@ -339,7 +392,6 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
                   canReply
                   aiPaused={detail.aiPaused}
                   hideHandoff
-                  viewers={conversations.find((c) => c.id === detail.id)?.viewers ?? []}
                 />
               </div>
             </>
