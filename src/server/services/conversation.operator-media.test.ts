@@ -7,7 +7,7 @@ process.env.DATABASE_URL =
 vi.mock("@/server/db/client", () => ({
   prisma: {
     message: {
-      findUnique: vi.fn(async () => null), // dedupe: nada existente
+      findFirst: vi.fn(async () => null), // dedupe (por lead): nada existente
       create: vi.fn(async () => ({ id: "msg-1" })),
     },
     lead: {
@@ -91,7 +91,7 @@ describe("handleOperatorMedia — arquivo enviado pelo operador (fromMe)", () =>
 
   it("dedupe: providerMessageId já gravado (eco do próprio envio) → não cria Message", async () => {
     const { prisma } = await import("@/server/db/client");
-    (prisma.message.findUnique as any).mockResolvedValueOnce({ leadId: "lead-1" });
+    (prisma.message.findFirst as any).mockResolvedValueOnce({ id: "msg-existing" });
     const { handleOperatorMedia } = await import("./conversation.service");
 
     const res = await handleOperatorMedia(imgInput);

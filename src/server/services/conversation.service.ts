@@ -42,6 +42,15 @@ import { uploadInboundMedia } from "@/server/storage/media-storage";
 import { transcribeAudio } from "@/server/ai/transcribe";
 import { shouldTranscribe } from "@/server/ai/transcribe-policy";
 
+/** Violação da unique (leadId, providerMessageId) do Prisma. Acontece na reentrega
+ *  do WhatsApp da MESMA mensagem no MESMO lead, em corrida com o dedupe prévio.
+ *  Não é erro: a duplicata é ignorada. */
+function isUniqueViolation(e: unknown): boolean {
+  return (
+    !!e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002"
+  );
+}
+
 export interface InboundInput {
   /** Localiza o lead por id (mock/dev) ou por telefone E.164 (webhook real). */
   leadId?: string;
@@ -211,19 +220,22 @@ export async function ingestInboundMedia(input: {
   fileName?: string;
   audioSeconds?: number | null; // duração da nota de voz (guardrail de áudio longo)
 }): Promise<{ respond: boolean; leadId: string | null; delayMs: number }> {
-  if (input.providerMessageId) {
-    const existing = await prisma.message.findUnique({
-      where: { providerMessageId: input.providerMessageId },
-      select: { leadId: true },
-    });
-    if (existing) return { respond: false, leadId: existing.leadId, delayMs: 0 };
-  }
   const lead = await resolveOrCreateLead({
     phone: input.phone,
     whatsAppNumberId: input.whatsAppNumberId,
     text: input.placeholder,
   });
   if (!lead) return { respond: false, leadId: null, delayMs: 0 };
+
+  // Dedupe ESCOPADO ao lead (unique por lead), ANTES de subir/transcrever: reentrega
+  // da mesma mídia não re-gasta storage/Whisper. Só descarta no MESMO lead.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findFirst({
+      where: { providerMessageId: input.providerMessageId, leadId: lead.id },
+      select: { id: true },
+    });
+    if (existing) return { respond: false, leadId: lead.id, delayMs: 0 };
+  }
 
   // Se veio arquivo (imagem/PDF) e o storage está configurado, sobe pro bucket
   // privado e guarda só o caminho. Falha/sem storage → segue só com placeholder.
@@ -268,15 +280,21 @@ export async function ingestInboundMedia(input: {
     transcript = await transcribeAudio(input.buffer, input.mime);
   }
 
-  await prisma.message.create({
-    data: {
-      leadId: lead.id,
-      direction: "INBOUND",
-      content: transcript ?? input.placeholder, // transcrição quando houver; senão "🎤 Áudio"
-      providerMessageId: input.providerMessageId ?? undefined,
-      ...(media ?? {}), // mediaPath/mediaType/... — player do operador continua
-    },
-  });
+  try {
+    await prisma.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "INBOUND",
+        content: transcript ?? input.placeholder, // transcrição quando houver; senão "🎤 Áudio"
+        providerMessageId: input.providerMessageId ?? undefined,
+        ...(media ?? {}), // mediaPath/mediaType/... — player do operador continua
+      },
+    });
+  } catch (e) {
+    // Reentrega em corrida com o dedupe acima (mesma id, mesmo lead): duplicata.
+    if (isUniqueViolation(e)) return { respond: false, leadId: lead.id, delayMs: 0 };
+    throw e;
+  }
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
   await invalidateConversation(lead.id);
   await invalidateLeadCaches(lead.userId);
@@ -350,15 +368,6 @@ async function suggestReplyDelay(lead: {
 }
 
 export async function ingestInbound(input: InboundInput): Promise<IngestResult> {
-  // 1. Dedupe
-  if (input.providerMessageId) {
-    const existing = await prisma.message.findUnique({
-      where: { providerMessageId: input.providerMessageId },
-      select: { leadId: true },
-    });
-    if (existing) return { leadId: existing.leadId, deduped: true, respond: false, delayMs: 0 };
-  }
-
   // Localiza o lead (respeitando o isolamento por conta) ou cria o contato.
   const lead = await resolveOrCreateLead(input);
   if (!lead) {
@@ -372,6 +381,17 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     return { leadId: null, respond: false, delayMs: 0 };
   }
 
+  // 1. Dedupe — ESCOPADO ao lead (a unique é por lead, não global). Só descarta a
+  // reentrega da MESMA mensagem NESTE lead; a mesma id vinda de outra conta (chip↔chip)
+  // é um inbound legítimo e segue normalmente.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findFirst({
+      where: { providerMessageId: input.providerMessageId, leadId: lead.id },
+      select: { id: true },
+    });
+    if (existing) return { leadId: lead.id, deduped: true, respond: false, delayMs: 0 };
+  }
+
   // 1b. Salva inbound. Se o lead citou (reply) uma msg nossa, resolve o stanzaId
   // → providerMessageId → Message.replyToId (mesmo lead). Citada ausente/de outro
   // lead → ignora silenciosamente (a mensagem chega, só sem o vínculo).
@@ -383,15 +403,24 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
     });
     replyToId = quoted?.id;
   }
-  await prisma.message.create({
-    data: {
-      leadId: lead.id,
-      direction: "INBOUND",
-      content: input.text,
-      providerMessageId: input.providerMessageId ?? undefined,
-      replyToId,
-    },
-  });
+  try {
+    await prisma.message.create({
+      data: {
+        leadId: lead.id,
+        direction: "INBOUND",
+        content: input.text,
+        providerMessageId: input.providerMessageId ?? undefined,
+        replyToId,
+      },
+    });
+  } catch (e) {
+    // Reentrega em corrida com o dedupe acima (mesma id, mesmo lead): duplicata,
+    // não recria nem responde de novo.
+    if (isUniqueViolation(e)) {
+      return { leadId: lead.id, deduped: true, respond: false, delayMs: 0 };
+    }
+    throw e;
+  }
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
   await invalidateConversation(lead.id);
   await invalidateLeadCaches(lead.userId);
@@ -1117,21 +1146,22 @@ export async function handleOperatorMessage(input: {
   providerMessageId: string | null;
   whatsAppNumberId: string;
 }): Promise<{ leadId: string | null }> {
-  // Backup ao filtro em memória do pool: se o id já está gravado, é o nosso
-  // próprio envio (ou já processado) — não duplica nem auto-pausa.
-  if (input.providerMessageId) {
-    const existing = await prisma.message.findUnique({
-      where: { providerMessageId: input.providerMessageId },
-      select: { leadId: true },
-    });
-    if (existing) return { leadId: existing.leadId };
-  }
   const lead = await resolveLead({
     whatsAppNumberId: input.whatsAppNumberId,
     phone: input.toPhone,
     text: input.text,
   });
   if (!lead) return { leadId: null };
+
+  // Backup ao filtro em memória do pool (sentByBot): se o id já está gravado NESTE
+  // lead, é o nosso próprio envio (ou já processado) — não duplica nem auto-pausa.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findFirst({
+      where: { providerMessageId: input.providerMessageId, leadId: lead.id },
+      select: { id: true },
+    });
+    if (existing) return { leadId: lead.id };
+  }
 
   try {
     await prisma.message.create({
@@ -1147,11 +1177,9 @@ export async function handleOperatorMessage(input: {
     });
   } catch (e) {
     // Race com o eco do próprio bot: o envio do bot persistiu o mesmo
-    // providerMessageId entre o findUnique acima e aqui. É mensagem NOSSA,
-    // não do operador — não auto-pausa. (P2002 = unique constraint do Prisma.)
-    if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") {
-      return { leadId: lead.id };
-    }
+    // providerMessageId (mesmo lead) entre o findFirst acima e aqui. É mensagem
+    // NOSSA, não do operador — não auto-pausa.
+    if (isUniqueViolation(e)) return { leadId: lead.id };
     throw e;
   }
   await applyOperatorHandoff(lead, input.whatsAppNumberId);
@@ -1176,20 +1204,21 @@ export async function handleOperatorMedia(input: {
   mime?: string;
   fileName?: string;
 }): Promise<{ leadId: string | null }> {
-  // Backup ao filtro em memória do pool (sentByBot): id já gravado = nosso envio.
-  if (input.providerMessageId) {
-    const existing = await prisma.message.findUnique({
-      where: { providerMessageId: input.providerMessageId },
-      select: { leadId: true },
-    });
-    if (existing) return { leadId: existing.leadId };
-  }
   const lead = await resolveLead({
     whatsAppNumberId: input.whatsAppNumberId,
     phone: input.toPhone,
     text: input.placeholder,
   });
   if (!lead) return { leadId: null };
+
+  // Backup ao filtro em memória do pool (sentByBot): id já gravado NESTE lead = nosso envio.
+  if (input.providerMessageId) {
+    const existing = await prisma.message.findFirst({
+      where: { providerMessageId: input.providerMessageId, leadId: lead.id },
+      select: { id: true },
+    });
+    if (existing) return { leadId: lead.id };
+  }
 
   // Sobe o arquivo (se baixável e o storage estiver configurado) — mesmo uploader
   // do inbound; falha/sem storage → segue só com o placeholder textual.
@@ -1235,10 +1264,8 @@ export async function handleOperatorMedia(input: {
       },
     });
   } catch (e) {
-    // Race com o eco do próprio bot (mesmo providerMessageId) → não duplica.
-    if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") {
-      return { leadId: lead.id };
-    }
+    // Race com o eco do próprio bot (mesmo providerMessageId, mesmo lead) → não duplica.
+    if (isUniqueViolation(e)) return { leadId: lead.id };
     throw e;
   }
   await applyOperatorHandoff(lead, input.whatsAppNumberId);

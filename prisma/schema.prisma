@@ -825,7 +825,12 @@ model Message {
   leadId            String
   direction         MessageDirection
   content           String
-  providerMessageId String?          @unique // dedupe de webhook
+  // Id do provedor (WA key.id) p/ dedupe. NÃO é único globalmente: o mesmo id é
+  // visto pelo remetente e pelo destinatário, então quando dois números conectados
+  // ao sistema conversam a mesma id aparece em DUAS contas (outbound de um, inbound
+  // do outro). A unicidade é POR LEAD (@@unique abaixo) — global descartaria o
+  // inbound legítimo e a IA nunca responderia.
+  providerMessageId String?
   status            MessageStatus?
   // origem do OUTBOUND (null em INBOUND e em linhas anteriores a este campo)
   source            MessageSource?
@@ -847,6 +852,7 @@ model Message {
   fileName          String? // nome original p/ exibir/baixar ("contrato.pdf")
   createdAt         DateTime         @default(now())
 
+  @@unique([leadId, providerMessageId]) // dedupe por lead (ver providerMessageId)
   @@index([leadId, createdAt])
 }
 

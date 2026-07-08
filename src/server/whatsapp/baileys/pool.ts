@@ -193,7 +193,10 @@ export async function connectNumber(numberId: string): Promise<void> {
       // o conteúdo já persistido pelo providerMessageId.
       getMessage: async (key) => {
         if (!key.id) return undefined;
-        const msg = await prisma.message.findUnique({
+        // findFirst: providerMessageId não é mais único globalmente (unique por
+        // lead). O conteúdo é idêntico entre cópias, então qualquer match serve
+        // p/ o reenvio (retry receipt) do Baileys.
+        const msg = await prisma.message.findFirst({
           where: { providerMessageId: key.id },
           select: { content: true },
         });
