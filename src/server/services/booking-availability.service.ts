@@ -1,6 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
-import { formatSlot } from "@/lib/utils";
+import { formatSlotDay, formatSlotTime } from "@/lib/utils";
 import {
   appointmentEnd,
   computeDaySlots,
@@ -217,6 +217,43 @@ export interface ConfirmBookingResult {
 }
 
 /**
+ * Número de agendamento cosmético (5 dígitos), estável e derivado do id (sem schema
+ * novo). Rótulo neutro por vertical — evita jargão de "OS/Ordem de Serviço", que só
+ * faz sentido em negócio de serviço.
+ */
+function confirmationCode(appointmentId: string): string {
+  let h = 0;
+  for (let i = 0; i < appointmentId.length; i += 1) {
+    h = (h * 31 + appointmentId.charCodeAt(i)) % 100000;
+  }
+  return String(h).padStart(5, "0");
+}
+
+/**
+ * Cartão de confirmação em texto formatado (WhatsApp renderiza *negrito*). Neutro
+ * por vertical — sem emoji específico de saúde. O "código" é cosmético/derivado do
+ * id (determinístico), só p/ dar cara de comprovante como no modelo de referência.
+ */
+function confirmationCard(input: {
+  serviceName: string;
+  customerName: string;
+  professionalName: string;
+  startISO: string;
+  durationMinutes: number;
+  appointmentId: string;
+}): string {
+  return (
+    `✅ *AGENDAMENTO CONFIRMADO*\n\n` +
+    `💠 *${input.serviceName}*\n` +
+    `👤 ${input.customerName}\n` +
+    `📌 ${input.professionalName}\n` +
+    `📅 ${formatSlotDay(input.startISO, TZ)} às ${formatSlotTime(input.startISO, TZ)}\n` +
+    `⏱ ${input.durationMinutes} min\n\n` +
+    `🔖 Agendamento nº ${confirmationCode(input.appointmentId)}`
+  );
+}
+
+/**
  * Confirma um agendamento vindo do link público. Revalida no SERVIDOR (não confia
  * no cliente): conta ligada, serviço com duração, `startISO` dentro de
  * [notBefore, horizonte]. A criação corre sob `pg_advisory_xact_lock` por
@@ -253,7 +290,7 @@ export async function confirmBooking(
   // posse do profissional (ativo) — o slot público sempre vem com um profissional.
   const pro = await prisma.professional.findFirst({
     where: { id: input.professionalId, accountId, active: true },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!pro) throw new Error("Profissional não encontrado.");
 
@@ -298,7 +335,6 @@ export async function confirmBooking(
 
   // 5. confirmação por WhatsApp — só p/ lead COM chip. Falha aqui não derruba a marcação.
   if (created.lead?.whatsAppNumberId) {
-    const quando = formatSlot(input.startISO, TZ);
     try {
       await sendWhatsAppMessage(
         {
@@ -307,7 +343,14 @@ export async function confirmBooking(
           userId: accountId,
           whatsAppNumberId: created.lead.whatsAppNumberId,
         },
-        `Agendamento confirmado: ${service.name} em ${quando} 😊`,
+        confirmationCard({
+          serviceName: service.name,
+          customerName: created.lead.name || input.customerName,
+          professionalName: pro.name,
+          startISO: input.startISO,
+          durationMinutes: service.durationMinutes,
+          appointmentId: created.appt.id,
+        }),
         { source: "SYSTEM" },
       );
     } catch (e) {

@@ -42,3 +42,25 @@ export function formatSlot(iso: string, timeZone = "America/Sao_Paulo"): string 
     timeZone,
   });
 }
+
+/** Cabeçalho de dia p/ cartão de agenda: "Quarta, 02/04" (sem o "-feira"). */
+export function formatSlotDay(iso: string, timeZone = "America/Sao_Paulo"): string {
+  const d = new Date(iso);
+  const weekday = d.toLocaleDateString("pt-BR", { weekday: "long", timeZone }).split("-")[0];
+  const dayMonth = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone });
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${dayMonth}`;
+}
+
+/** Só o horário do slot: "14:00". */
+export function formatSlotTime(iso: string, timeZone = "America/Sao_Paulo"): string {
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone,
+  });
+}
+
+/** Chave estável do dia local (YYYY-MM-DD no fuso) — p/ agrupar slots por dia. */
+export function localDayKey(iso: string, timeZone = "America/Sao_Paulo"): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone });
+}

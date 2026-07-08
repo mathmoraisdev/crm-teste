@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
-import { formatSlot } from "@/lib/utils";
+import { formatSlot, formatSlotDay, formatSlotTime, localDayKey } from "@/lib/utils";
 import { zonedWallTimeToUtc } from "@/lib/agenda/availability";
 import { interpretSlotChoice } from "@/server/ai/conversation.agent";
 import { getAiClient } from "@/server/ai/resolve";
@@ -128,8 +128,24 @@ export async function proposeAppointmentSlots(
     return;
   }
 
-  const top = slots.slice(0, 3);
-  if (top.length === 0) {
+  // Cartão de agenda: agrupa os livres por dia local (getAvailableSlots já devolve
+  // em ordem crescente), pega os 3 primeiros DIAS com vaga e, dentro de cada dia,
+  // até MAX_PER_DAY horários — pra não virar parede de texto no WhatsApp. O que
+  // aparece no cartão é EXATAMENTE o que guardamos em `proposedSlots` (a interpretação
+  // da escolha casa a resposta do cliente contra esses slots).
+  const MAX_DAYS = 3;
+  const MAX_PER_DAY = 6;
+  const byDay = new Map<string, typeof slots>();
+  for (const s of slots) {
+    const key = localDayKey(s.startISO, TZ);
+    const list = byDay.get(key) ?? [];
+    if (list.length < MAX_PER_DAY) list.push(s);
+    byDay.set(key, list);
+  }
+  const dayKeys = [...byDay.keys()].slice(0, MAX_DAYS);
+  const offered = dayKeys.flatMap((k) => byDay.get(k) ?? []);
+
+  if (offered.length === 0) {
     const url = await bookingUrlFor(accountId);
     const linkLine = url ? ` Se preferir, dá pra ver a agenda completa aqui: ${url}` : "";
     await sendWhatsAppMessage(
@@ -139,7 +155,7 @@ export async function proposeAppointmentSlots(
     return;
   }
 
-  const proposed: AppointmentProposedSlot[] = top.map((s) => ({
+  const proposed: AppointmentProposedSlot[] = offered.map((s) => ({
     startISO: s.startISO,
     professionalId: s.professionalId,
     professionalName: s.professionalName,
@@ -161,12 +177,20 @@ export async function proposeAppointmentSlots(
     },
   });
 
-  const lines = proposed
-    .map((s, i) => `${i + 1}) ${formatSlot(s.startISO, TZ)} — ${s.professionalName}`)
-    .join("\n");
+  // Cartão em texto formatado (WhatsApp renderiza *negrito*): um bloco por dia com
+  // os horários em linha. Sem número — o cliente responde "quarta 14h" e a
+  // interpretação casa. Profissional fica fora da grade (aparece na confirmação).
+  const dayBlocks = dayKeys
+    .map((k) => {
+      const daySlots = byDay.get(k) ?? [];
+      const times = daySlots.map((s) => formatSlotTime(s.startISO, TZ)).join("   ");
+      return `📅 *${formatSlotDay(daySlots[0].startISO, TZ)}*\n${times}`;
+    })
+    .join("\n\n");
   await sendWhatsAppMessage(
     lead,
-    `Show, ${firstName(lead.name)}! Para ${service.name}, tenho estes horários:\n${lines}\n\nÉ só me dizer o número que fica melhor. 😊`,
+    `Show, ${firstName(lead.name)}! Para *${service.name}*, tenho estes horários:\n\n${dayBlocks}\n\n` +
+      `É só me dizer o dia e o horário que prefere. 😊`,
   );
 }
 
