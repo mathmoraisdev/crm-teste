@@ -49,7 +49,7 @@ export default async function AgendaPage({
 
   return (
     <AgendaView
-      initialTab={wantsConfig && canSettings ? "config" : "meetings"}
+      initialTab={wantsConfig && canSettings ? "config" : "appointments"}
       config={{
         canSettings,
         booking: {
