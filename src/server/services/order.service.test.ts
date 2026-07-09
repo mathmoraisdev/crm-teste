@@ -43,6 +43,14 @@ describe("orderTotalCents (puro)", () => {
     // desconto 12000 > 10000 → subtotal 0; acréscimo/gorjeta ainda somam
     expect(orderTotalCents({ items: itens, discountCents: 12000, surchargeCents: 300 })).toBe(300);
   });
+  it("soma a taxa de entrega quando informada (delivery online)", () => {
+    // 2 × 1000 = 2000; + 700 taxa de entrega = 2700
+    expect(orderTotalCents({ items: [{ unitPriceCents: 1000, quantity: 2 }], deliveryFeeCents: 700 })).toBe(2700);
+  });
+  it("taxa de entrega nula/ausente não altera o total", () => {
+    expect(orderTotalCents({ items: [{ unitPriceCents: 1000, quantity: 1 }], deliveryFeeCents: null })).toBe(1000);
+    expect(orderTotalCents({ items: [{ unitPriceCents: 1000, quantity: 1 }] })).toBe(1000);
+  });
 });
 
 describe("order.service (ciclo)", () => {
