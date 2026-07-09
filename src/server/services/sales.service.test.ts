@@ -11,6 +11,7 @@ vi.mock("@/server/db/client", () => ({
     offer: { findFirst: vi.fn() },
     sale: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findUnique: vi.fn() },
     lead: { update: vi.fn(), findUnique: vi.fn() },
+    order: { findFirst: vi.fn(), update: vi.fn() },
     $transaction: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -109,11 +110,56 @@ describe("sendOffer", () => {
 });
 
 describe("confirmPaymentByCharge", () => {
-  it("Sale inexistente → no-op (not_found)", async () => {
+  it("Sale inexistente e Order inexistente → no-op (not_found)", async () => {
     const m = await mods();
     m.prisma.sale.findUnique.mockResolvedValue(null);
+    m.prisma.order.findFirst.mockResolvedValue(null);
     const { confirmPaymentByCharge } = await import("./sales.service");
     expect(await confirmPaymentByCharge("ASAAS", "pay_x")).toEqual({ confirmed: false, reason: "not_found" });
+  });
+
+  it("Order online já pago → idempotente (alreadyPaid)", async () => {
+    const m = await mods();
+    m.prisma.sale.findUnique.mockResolvedValue(null);
+    m.prisma.order.findFirst.mockResolvedValue({ id: "o1", accountId: "u1", onlinePaidAt: new Date() });
+    const { confirmPaymentByCharge } = await import("./sales.service");
+    expect(await confirmPaymentByCharge("ASAAS", "pay_9")).toEqual({ confirmed: true, alreadyPaid: true });
+    expect(m.prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it("Order online: gateway não confirma → not_paid", async () => {
+    const m = await mods();
+    m.prisma.sale.findUnique.mockResolvedValue(null);
+    m.prisma.order.findFirst.mockResolvedValue({ id: "o1", accountId: "u1", onlinePaidAt: null });
+    m.resolve.mockResolvedValue({ provider: "ASAAS", apiKey: "tok" });
+    m.gatewayFor.mockReturnValue({ isChargePaid: vi.fn().mockResolvedValue(false) });
+    const { confirmPaymentByCharge } = await import("./sales.service");
+    expect(await confirmPaymentByCharge("ASAAS", "pay_9")).toEqual({ confirmed: false, reason: "not_paid" });
+    expect(m.prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it("Order online: gateway confirma → marca onlinePaidAt", async () => {
+    const m = await mods();
+    m.prisma.sale.findUnique.mockResolvedValue(null);
+    m.prisma.order.findFirst.mockResolvedValue({ id: "o1", accountId: "u1", onlinePaidAt: null });
+    m.resolve.mockResolvedValue({ provider: "ASAAS", apiKey: "tok" });
+    m.gatewayFor.mockReturnValue({ isChargePaid: vi.fn().mockResolvedValue(true) });
+    const { confirmPaymentByCharge } = await import("./sales.service");
+    expect(await confirmPaymentByCharge("ASAAS", "pay_9")).toEqual({ confirmed: true });
+    expect(m.prisma.order.update).toHaveBeenCalledWith({
+      where: { id: "o1" },
+      data: { onlinePaidAt: expect.any(Date) },
+    });
+  });
+
+  it("Order online: sem gateway configurado → no_gateway", async () => {
+    const m = await mods();
+    m.prisma.sale.findUnique.mockResolvedValue(null);
+    m.prisma.order.findFirst.mockResolvedValue({ id: "o1", accountId: "u1", onlinePaidAt: null });
+    m.resolve.mockResolvedValue(null);
+    const { confirmPaymentByCharge } = await import("./sales.service");
+    expect(await confirmPaymentByCharge("ASAAS", "pay_9")).toEqual({ confirmed: false, reason: "no_gateway" });
+    expect(m.prisma.order.update).not.toHaveBeenCalled();
   });
 
   it("já PAID → idempotente, não reconsulta", async () => {

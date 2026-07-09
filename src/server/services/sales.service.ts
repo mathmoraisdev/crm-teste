@@ -116,7 +116,10 @@ export async function confirmPaymentByCharge(
     where: { provider_providerChargeId: { provider, providerChargeId } },
     select: { id: true, userId: true, leadId: true, status: true, amountCents: true, offer: { select: { name: true } } },
   });
-  if (!sale) return { confirmed: false, reason: "not_found" };
+  if (!sale) {
+    // Fallback: pedido online do cardápio (a cobrança mora no Order, não no Sale).
+    return confirmOnlineOrderCharge(provider, providerChargeId);
+  }
 
   // Idempotência: já confirmada → não reprocessa (webhook repetido).
   if (sale.status === "PAID") return { confirmed: true, alreadyPaid: true };
@@ -146,6 +149,40 @@ export async function confirmPaymentByCharge(
     await sendWhatsAppMessage(lead, buildPaidMessage(sale.offer?.name ?? null), { source: "SYSTEM" });
   }
 
+  return { confirmed: true };
+}
+
+/**
+ * Fallback do webhook p/ pedido online do cardápio: a cobrança mora no `Order`
+ * (onlineChargeProvider/onlineChargeId), não no `Sale`. Idempotente (webhook
+ * repete) e seguro: re-consulta o gateway (fonte de verdade) antes de marcar
+ * `onlinePaidAt`. A notificação ao lojista (fila de pedidos) sai na Fase 8.
+ */
+async function confirmOnlineOrderCharge(
+  provider: PaymentProvider,
+  providerChargeId: string,
+): Promise<ConfirmResult> {
+  const order = await prisma.order.findFirst({
+    where: { onlineChargeProvider: provider, onlineChargeId: providerChargeId },
+    select: { id: true, accountId: true, onlinePaidAt: true },
+  });
+  if (!order) return { confirmed: false, reason: "not_found" };
+
+  // Idempotente: já confirmado → não reprocessa.
+  if (order.onlinePaidAt) return { confirmed: true, alreadyPaid: true };
+
+  const resolved = await resolvePaymentForUser(order.accountId);
+  if (!resolved || resolved.provider !== provider) {
+    return { confirmed: false, reason: "no_gateway" };
+  }
+  const paid = await gatewayFor(provider).isChargePaid(resolved.apiKey, providerChargeId);
+  if (!paid) return { confirmed: false, reason: "not_paid" };
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { onlinePaidAt: new Date() },
+  });
+  // TODO(Fase 8): notifyMerchantNewOnlineOrder(order.accountId, order.id) — avisa o lojista que entrou pedido pago.
   return { confirmed: true };
 }
 
