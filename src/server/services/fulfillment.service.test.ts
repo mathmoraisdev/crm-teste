@@ -19,6 +19,10 @@ vi.mock("@/server/services/account.service", () => ({ isAccountActive: vi.fn().m
 vi.mock("./fulfillment-notify.service", () => ({
   notifyMerchantNewOnlineOrder: vi.fn().mockResolvedValue(undefined),
 }));
+// Notificação ao cliente (WhatsApp): best-effort, não bloqueia.
+vi.mock("./fulfillment-customer-notify.service", () => ({
+  notifyCustomerOrderStatus: vi.fn().mockResolvedValue(undefined),
+}));
 
 async function makeOwner(name = "Dono") {
   const u = await prisma.user.create({

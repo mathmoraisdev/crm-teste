@@ -5,6 +5,7 @@ import { closeOrder, getKitchenOrder, orderTotalCents } from "./order.service";
 import { buildKitchenTickets } from "@/lib/receipt/kitchen";
 import type { KitchenTicket } from "@/lib/receipt/kitchen";
 import { notifyMerchantNewOnlineOrder } from "./fulfillment-notify.service";
+import { notifyCustomerOrderStatus } from "./fulfillment-customer-notify.service";
 
 export type { KitchenTicket };
 
@@ -112,6 +113,8 @@ export async function confirmOnlineOrder(
     throw new Error("Pedido já foi confirmado ou recusado.");
   }
   await prisma.order.update({ where: { id: orderId }, data: { fulfillmentStatus: "CONFIRMADO" } });
+  // Avisa o cliente (best-effort: não bloqueia a confirmação se falhar).
+  void notifyCustomerOrderStatus(accountId, orderId, "CONFIRMADO").catch(() => {});
   const kitchen = await getKitchenOrder(accountId, orderId);
   const tickets = buildKitchenTickets(kitchen);
   return { fulfillmentStatus: "CONFIRMADO", tickets };
@@ -161,6 +164,8 @@ export async function advanceOnlineOrder(
     const payment = o.onlineChargeProvider ? "PIX" : "DINHEIRO";
     await closeOrder(accountId, orderId, { payment });
   }
+  // Avisa o cliente da nova etapa (best-effort: não bloqueia o avanço).
+  void notifyCustomerOrderStatus(accountId, orderId, next).catch(() => {});
   return { fulfillmentStatus: next, status: next === "ENTREGUE" ? "FECHADA" : "ABERTA" };
 }
 
