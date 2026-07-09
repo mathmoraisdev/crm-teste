@@ -22,6 +22,7 @@ import {
   BarChart3,
   TrendingDown,
   ChefHat,
+  ShoppingBag,
 } from "lucide-react";
 import type { BusinessCategory } from "@/lib/business-templates";
 
@@ -99,6 +100,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
         { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
         { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda", key: "agenda" },
         { href: "/caixa", label: "Caixa", icon: Receipt },
+        { href: "/pedidos", label: "Pedidos online", icon: ShoppingBag, show: isFood },
         { href: "/producao", label: "Produção", icon: ChefHat, show: isFood },
       ],
     },

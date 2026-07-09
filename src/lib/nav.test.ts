@@ -30,6 +30,12 @@ describe("buildNav", () => {
     const opBeleza = buildNav(base).find((g) => g.title === "Operação")!;
     expect(opBeleza.items.some((i) => i.href === "/producao")).toBe(false);
   });
+  it("Pedidos online na Operação só para ramos de alimentação", () => {
+    const opAlim = buildNav({ ...base, category: "alimentacao" }).find((g) => g.title === "Operação")!;
+    expect(opAlim.items.some((i) => i.href === "/pedidos")).toBe(true);
+    const opBeleza = buildNav(base).find((g) => g.title === "Operação")!;
+    expect(opBeleza.items.some((i) => i.href === "/pedidos")).toBe(false);
+  });
 });
 
 describe("moduleVisibleFor", () => {
