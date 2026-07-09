@@ -5,14 +5,16 @@ import type { PublicMenuDTO } from "@/server/services/menu.service";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
 import { formatCentsBRL } from "@/lib/money";
+import { computeCartTotals, type FulfillMode } from "@/lib/delivery/cart";
+import { CartSheet } from "./CartSheet";
+import { CheckoutForm, type CheckoutResult } from "./CheckoutForm";
+
+type View = "menu" | "cart" | "checkout" | "pix";
 
 /**
- * Vitrine do cardápio online. Rendera o cardápio agrupado por categoria e
- * orquestra carrinho + checkout (Fase 5). Quando a loja está fechada, mostra o
- * cardápio mas desabilita o checkout com aviso.
- *
- * (Versão inicial: vitrine read-only + carrinho simples. Checkout completo
- * chega na Task 5.2.)
+ * Orquestra a vitrine do cardápio online: lista por categoria, carrinho
+ * (CartSheet), checkout (CheckoutForm) e o resultado Pix (quando pagamento
+ * online). Loja fechada → cardápio visível, checkout desabilitado com aviso.
  */
 export function MenuStorefront({
   slug,
@@ -29,22 +31,89 @@ export function MenuStorefront({
 }) {
   const items = menu.categories.flatMap((c) => c.items);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [view, setView] = useState<View>("menu");
+  const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
+  const [lastOrderUrl, setLastOrderUrl] = useState<string | null>(null);
 
-  function add(id: string) {
-    setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
-  }
-  function remove(id: string) {
+  // Modo/zona mantidos entre cart e checkout (default = primeira modalidade disponível).
+  const defaultMode: FulfillMode = settings.deliveryEnabled ? "DELIVERY" : "RETIRADA";
+  const [mode, setMode] = useState<FulfillMode>(defaultMode);
+  const [zoneId, setZoneId] = useState("");
+
+  function changeQty(id: string, delta: number) {
     setCart((c) => {
-      const n = (c[id] ?? 0) - 1;
+      const n = (c[id] ?? 0) + delta;
       const next = { ...c };
       if (n <= 0) delete next[id];
       else next[id] = n;
       return next;
     });
   }
+  function clearCart() {
+    setCart({});
+    setView("menu");
+  }
 
   const cartCount = Object.values(cart).reduce((s, n) => s + n, 0);
-  const subtotalCents = items.reduce((s, it) => s + it.priceCents * (cart[it.id] ?? 0), 0);
+  const lines = items.filter((i) => cart[i.id] > 0).map((i) => ({ id: i.id, priceCents: i.priceCents, qty: cart[i.id] }));
+  const selectedZone = zones.find((z) => z.id === zoneId) ?? null;
+  const totals = computeCartTotals(lines, {
+    mode,
+    feeCents: mode === "DELIVERY" ? (selectedZone?.feeCents ?? 0) : 0,
+  });
+
+  function handleSuccess(res: CheckoutResult) {
+    setPixResult(res);
+    setLastOrderUrl(`/cardapio/${slug}/pedido/${res.orderId}`);
+    setView(res.payment === "online" ? "pix" : "menu");
+    if (res.payment === "on_delivery") {
+      // Pagar na entrega → vai direto ao acompanhamento.
+      window.location.href = `/cardapio/${slug}/pedido/${res.orderId}`;
+    }
+  }
+
+  // Tela Pix (pagamento online criado).
+  if (view === "pix" && pixResult?.pix) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-line bg-card p-4 text-center">
+          <h2 className="font-display text-lg font-bold text-ink">Pague com Pix</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Escaneie o QR code ou copie o código abaixo. Seu pedido é confirmado automaticamente após o pagamento.
+          </p>
+          {pixResult.pix.qrBase64 && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`data:image/png;base64,${pixResult.pix.qrBase64}`}
+              alt="QR Code Pix"
+              className="mx-auto mt-3 h-48 w-48"
+            />
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              readOnly
+              value={pixResult.pix.copiaECola}
+              className="w-full rounded-lg border border-slate-300 bg-inset px-3 py-2 text-xs text-ink dark:border-slate-700"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(pixResult.pix!.copiaECola).catch(() => {});
+              }}
+              className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white"
+            >
+              Copiar
+            </button>
+          </div>
+          {lastOrderUrl && (
+            <a href={lastOrderUrl} className="mt-4 inline-block text-sm text-brand-600 underline">
+              Acompanhar meu pedido →
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-24">
@@ -73,11 +142,7 @@ export function MenuStorefront({
               >
                 {it.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={it.photoUrl}
-                    alt={it.name}
-                    className="h-14 w-14 flex-shrink-0 rounded-lg object-cover"
-                  />
+                  <img src={it.photoUrl} alt={it.name} className="h-14 w-14 flex-shrink-0 rounded-lg object-cover" />
                 ) : (
                   <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-400 dark:bg-slate-800">
                     {it.name.charAt(0).toUpperCase()}
@@ -85,12 +150,8 @@ export function MenuStorefront({
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink">{it.name}</p>
-                  {it.description && (
-                    <p className="line-clamp-2 text-xs text-slate-500">{it.description}</p>
-                  )}
-                  <p className="mt-0.5 text-sm font-medium text-brand-600">
-                    {formatCentsBRL(it.priceCents)}
-                  </p>
+                  {it.description && <p className="line-clamp-2 text-xs text-slate-500">{it.description}</p>}
+                  <p className="mt-0.5 text-sm font-medium text-brand-600">{formatCentsBRL(it.priceCents)}</p>
                 </div>
                 {it.available ? (
                   <div className="flex items-center gap-2">
@@ -98,18 +159,17 @@ export function MenuStorefront({
                       <>
                         <button
                           type="button"
-                          onClick={() => remove(it.id)}
+                          onClick={() => changeQty(it.id, -1)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-ink dark:border-slate-600"
                         >
                           −
                         </button>
-                        <span className="w-5 text-center text-sm font-semibold text-ink">
-                          {cart[it.id]}
-                        </span>
+                        <span className="w-5 text-center text-sm font-semibold text-ink">{cart[it.id]}</span>
                         <button
                           type="button"
-                          onClick={() => add(it.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white"
+                          onClick={() => changeQty(it.id, 1)}
+                          disabled={!open}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white disabled:opacity-40"
                         >
                           +
                         </button>
@@ -117,7 +177,7 @@ export function MenuStorefront({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => add(it.id)}
+                        onClick={() => changeQty(it.id, 1)}
                         disabled={!open}
                         className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white disabled:opacity-40"
                       >
@@ -136,16 +196,47 @@ export function MenuStorefront({
         </section>
       ))}
 
-      {/* Barra de carrinho (placeholder do checkout completo da Fase 5) */}
+      {/* Barra de carrinho fixa */}
       {cartCount > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-4 pb-4">
-          <div className="flex items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-white shadow-lg">
+          <button
+            type="button"
+            onClick={() => setView("cart")}
+            className="flex w-full items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-white shadow-lg"
+          >
             <span className="text-sm font-medium">
-              {cartCount} {cartCount === 1 ? "item" : "itens"}
+              {cartCount} {cartCount === 1 ? "item" : "itens"} · Ver carrinho
             </span>
-            <span className="text-sm font-semibold">{formatCentsBRL(subtotalCents)}</span>
-          </div>
+            <span className="text-sm font-semibold">{formatCentsBRL(totals.totalCents)}</span>
+          </button>
         </div>
+      )}
+
+      {view === "cart" && (
+        <CartSheet
+          items={items}
+          cart={cart}
+          settings={settings}
+          zones={zones}
+          mode={mode}
+          zoneId={zoneId}
+          onClose={() => setView("menu")}
+          onCheckout={() => setView("checkout")}
+          onChangeQty={changeQty}
+          onClear={clearCart}
+        />
+      )}
+
+      {view === "checkout" && (
+        <CheckoutForm
+          slug={slug}
+          items={items}
+          cart={cart}
+          settings={settings}
+          zones={zones}
+          onClose={() => setView("cart")}
+          onSuccess={handleSuccess}
+        />
       )}
     </div>
   );
