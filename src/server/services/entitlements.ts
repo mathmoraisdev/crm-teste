@@ -46,6 +46,24 @@ export async function canUseFeature(userId: string, feature: PlanFeature): Promi
   return PLAN_LIMITS[owner.plan][feature];
 }
 
+/**
+ * Pode cobrar online (Pix do cardápio)? Plano com `sales` OU add-on de delivery.
+ * Grandfather (plan null) e admin liberam. Espelha a régua de [[pricing-plans-cost]].
+ *
+ * Diferente de `canUseFeature("sales")`: o add-on de delivery destrava o Pix
+ * **escopado ao cardápio** mesmo no plano Inicial (o wedge da pizzaria).
+ */
+export async function canSellOnline(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true, email: true, deliveryAddon: true },
+  });
+  if (!u) return false;
+  if (u.plan == null || isAdminEmail(u.email)) return true;
+  if (u.deliveryAddon) return true;
+  return PLAN_LIMITS[u.plan].sales === true;
+}
+
 /** Chave de mês "YYYY-MM" em UTC — usada pra resetar a cota na virada. */
 export function monthKey(d: Date = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;

@@ -247,6 +247,62 @@ describe("resolveAiModelForUser (clamp por plano)", () => {
   });
 });
 
+describe("canSellOnline", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("libera quando o plano já tem sales (Profissional+)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: "PROFISSIONAL", email: "a@b.com", deliveryAddon: false,
+    });
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(true);
+  });
+
+  it("libera no Inicial quando tem o add-on de delivery", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: "INICIAL", email: "a@b.com", deliveryAddon: true,
+    });
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(true);
+  });
+
+  it("bloqueia no Inicial sem add-on", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: "INICIAL", email: "a@b.com", deliveryAddon: false,
+    });
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(false);
+  });
+
+  it("libera grandfather (plan null)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: null, email: "a@b.com", deliveryAddon: false,
+    });
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(true);
+  });
+
+  it("libera admin mesmo no Inicial", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: "INICIAL", email: "admin@exemplo.com", deliveryAddon: false,
+    });
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(true);
+  });
+
+  it("bloqueia quando a conta não existe", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue(null);
+    const { canSellOnline } = await import("./entitlements");
+    expect(await canSellOnline("u1")).toBe(false);
+  });
+});
+
 describe("getAiUsageStatus", () => {
   beforeEach(() => vi.clearAllMocks());
   const NOW = new Date("2026-06-15T12:00:00Z");
