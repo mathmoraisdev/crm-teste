@@ -33,6 +33,9 @@ const PUBLIC_PREFIXES = [
   // (/api/agendar/<slug>/...). A regra startsWith(p + "/") cobre slug e subcaminhos.
   "/agendar",
   "/api/agendar",
+  // Cardápio online: link público sem login (/cardapio/<slug>) + sua API.
+  "/cardapio",
+  "/api/cardapio",
 ];
 
 function isPublic(pathname: string): boolean {
