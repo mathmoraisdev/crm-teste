@@ -86,6 +86,29 @@ enum OrderPayment {
   OUTRO
 }
 
+// Delivery / Cardápio online (Onda L): tipo, origem e ciclo de entrega da comanda.
+// O status financeiro (ABERTA/FECHADA/CANCELADA) é separado do fulfillment (operacional).
+enum OrderType {
+  MESA
+  DELIVERY
+  RETIRADA
+}
+
+enum OrderSource {
+  POS
+  ONLINE
+}
+
+enum FulfillmentStatus {
+  PENDENTE
+  CONFIRMADO
+  EM_PREPARO
+  PRONTO
+  SAIU_ENTREGA
+  ENTREGUE
+  RECUSADO
+}
+
 enum StockMovementKind {
   ENTRADA // compra/reposição (+)
   SAIDA // venda: baixa por comanda fechada (−)
@@ -196,6 +219,10 @@ model User {
   // ligar. Combinado com o kill-switch global de ambiente (LIFECYCLE_AUTOMATION).
   // Só faz sentido no dono (ownerId=null).
   lifecycleAutomationEnabled Boolean @default(false)
+  // Cardápio online (Onda L): gate do link público (/cardapio/<slug>) + add-on de
+  // delivery (destrava Pix escopado no plano Inicial). Só faz sentido no dono.
+  menuEnabled      Boolean  @default(false)
+  deliveryAddon    Boolean  @default(false)
   // Tenancy por dono: null = este User É o dono (tenant). Preenchido = operador
   // que compartilha os dados do dono. Billing/plano só fazem sentido no dono.
   ownerId            String?
@@ -272,6 +299,9 @@ model User {
   walkInAppointments       Appointment[]            @relation("AppointmentAccount")
   mediaAssets              MediaAsset[]
   commissionRules          CommissionRule[]         @relation("CommissionRuleAccount")
+  // Delivery / Cardápio online (Onda L): settings 1:1 e zonas de entrega da conta.
+  deliverySettings         DeliverySettings?
+  deliveryZones            DeliveryZone[]
 }
 
 // Biblioteca de mídia da CONTA (Onda E, iniciativa 7) — arquivos que o operador
@@ -411,6 +441,12 @@ model CatalogItem {
   // --- Comanda de cozinha (N3): roteia o item p/ a impressora do setor ---
   printSector String? // ex.: "cozinha", "bar", "balcao"; null = não vai p/ produção
 
+  // --- Cardápio online (Onda L): categoria/descrição do cardápio público + visibilidade.
+  // menuCategory é string flat (como variantGroup); modelo dedicado só se virar necessidade.
+  menuCategory    String?
+  menuVisible     Boolean  @default(true)
+  menuDescription String?
+
   // --- Anúncio (fotos + ficha técnica); opt-in, usado por veículos/imóveis/varejo ---
   customFields Json? // valores dos CustomFieldDef scope=PRODUCT (chaveado por 'key')
   photos       CatalogItemPhoto[]
@@ -419,6 +455,7 @@ model CatalogItem {
   @@index([accountId, active])
   @@index([accountId, trackStock])
   @@index([accountId, variantGroup])
+  @@index([accountId, menuCategory]) // Delivery: agrupar cardápio por categoria
 }
 
 // Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa
@@ -470,6 +507,22 @@ model Order {
   fiscalRequestedAt DateTime?
   fiscalIssuedAt    DateTime?
   fiscalAttempts    Int       @default(0) // tentativas do worker (backoff/limite)
+  // Delivery / Cardápio online (Onda L): tipo, origem, fulfillment de entrega,
+  // endereço, taxa (entrada do total derivado) e cobrança online (mora no Order,
+  // não no Sale — pedido online não tem Offer). fulfillmentStatus é um ciclo
+  // SEPARADO do financeiro (status); fecha a comanda só ao ENTREGUE.
+  orderType            OrderType?
+  source               OrderSource?
+  fulfillmentStatus    FulfillmentStatus?
+  deliveryAddress      Json?
+  deliveryFeeCents     Int?
+  deliveryZoneId       String?
+  deliveryZone         DeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  customerPhone        String?
+  onlineChargeProvider PaymentProvider?
+  onlineChargeId       String?
+  onlinePixCopiaECola  String?
+  onlinePaidAt         DateTime?
   items          OrderItem[]
   tenders        OrderTender[]
   stockMovements StockMovement[]
@@ -479,6 +532,8 @@ model Order {
   @@index([accountId, status])
   @@index([accountId, closedAt])
   @@index([accountId, fiscalStatus])
+  @@index([accountId, fulfillmentStatus]) // Delivery: fila de pedidos online
+  @@unique([onlineChargeProvider, onlineChargeId]) // idempotência do webhook de pagamento
 }
 
 // Linha de uma comanda. Guarda SNAPSHOT de nome/preço: reajustar o catálogo
@@ -1263,4 +1318,34 @@ model CatalogItemPhoto {
   createdAt     DateTime    @default(now())
 
   @@index([catalogItemId, order])
+}
+
+// Config de delivery/cardápio online (Onda L). 1:1 com o dono da conta.
+// Ausência = defaults (tudo liberado). hoursJson = grade de horário por dia da semana.
+model DeliverySettings {
+  accountId            String   @id
+  account              User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deliveryEnabled      Boolean  @default(true)
+  pickupEnabled        Boolean  @default(true)
+  payOnlineEnabled     Boolean  @default(true)
+  payOnDeliveryEnabled Boolean  @default(true)
+  minOrderCents        Int      @default(0)
+  defaultPrepMinutes   Int      @default(30)
+  hoursJson            Json?
+  updatedAt            DateTime @updatedAt
+}
+
+// Zona/bairro de entrega com taxa e pedido mínimo opcional (Onda L).
+model DeliveryZone {
+  id            String   @id @default(cuid())
+  accountId     String
+  account       User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name          String
+  feeCents      Int      @default(0)
+  minOrderCents Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  orders        Order[]
+
+  @@index([accountId, active])
 }
