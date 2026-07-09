@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 /** Horário por dia da semana (0=domingo..6=sábado). Cada dia = lista de janelas HH:MM. */
 export type DeliveryHours = Record<string, { open: string; close: string }[]>;
@@ -59,7 +59,7 @@ export async function updateDeliverySettings(
   accountId: string,
   patch: DeliverySettingsPatch,
 ): Promise<DeliverySettingsDTO> {
-  const data: Prisma.DeliverySettingsUncheckedUpdateInput = {
+  const data = {
     ...(patch.deliveryEnabled !== undefined ? { deliveryEnabled: patch.deliveryEnabled } : {}),
     ...(patch.pickupEnabled !== undefined ? { pickupEnabled: patch.pickupEnabled } : {}),
     ...(patch.payOnlineEnabled !== undefined ? { payOnlineEnabled: patch.payOnlineEnabled } : {}),
@@ -72,7 +72,9 @@ export async function updateDeliverySettings(
     ...(patch.defaultPrepMinutes !== undefined
       ? { defaultPrepMinutes: Math.max(0, Math.floor(patch.defaultPrepMinutes)) }
       : {}),
-    ...(patch.hours !== undefined ? { hoursJson: (patch.hours ?? null) as Prisma.InputJsonValue } : {}),
+    ...(patch.hours !== undefined
+      ? { hoursJson: patch.hours === null ? Prisma.JsonNull : (patch.hours as Prisma.InputJsonValue) }
+      : {}),
   };
   const row = await prisma.deliverySettings.upsert({
     where: { accountId },

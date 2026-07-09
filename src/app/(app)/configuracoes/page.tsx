@@ -54,6 +54,12 @@ export default async function ConfiguracoesPage() {
         <p className="mt-1 text-sm text-slate-500">
           Config global da conta. A config de cada módulo mora dentro dele (Agenda, Atendimento, Caixa).
         </p>
+        <a
+          href="/configuracoes/delivery"
+          className="mt-3 inline-flex items-center gap-1 text-sm text-brand-600 hover:underline"
+        >
+          Cardápio & Delivery →
+        </a>
       </header>
 
       <AccountSettings
