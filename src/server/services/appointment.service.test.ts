@@ -310,6 +310,23 @@ describe("appointment.service", () => {
     ).rejects.toThrow(/CONFLICT/);
   });
 
+  it("updateAppointment (reagendamento) para slot sobreposto ocupado: CONFLICT", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000804");
+    const pro = await makeProfessional(acc);
+    const item = await createCatalogItem(acc, { name: "Corte 60", priceCents: 5000 });
+    await prisma.catalogItem.update({ where: { id: item.id }, data: { durationMinutes: 60 } });
+    const base = { leadId, catalogItemId: item.id, professionalId: pro, createdById: acc, force: true };
+
+    // A ocupa 13:00–14:00; B nasce às 16:00 e é remarcado p/ 13:30 (sobrepõe A)
+    await createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-20T13:00:00.000Z") });
+    const b = await createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-20T16:00:00.000Z") });
+
+    await expect(
+      updateAppointment(acc, b.id, { scheduledAt: new Date("2026-09-20T13:30:00.000Z"), force: true }),
+    ).rejects.toThrow(/CONFLICT/);
+  });
+
   it("mesmo horário com OUTRO profissional não conflita", async () => {
     const acc = await makeOwner();
     const leadId = await makeLead(acc, "+5511900020003");

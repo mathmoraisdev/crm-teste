@@ -597,17 +597,6 @@ export async function updateAppointment(userId: string, id: string, input: Updat
       : { disconnect: true };
   }
 
-  // Conflito/expediente: só quando o resultado tem profissional. Exclui a própria
-  // linha (exceptId) p/ um reagendamento não colidir consigo mesmo.
-  if (effectiveProfessionalId) {
-    const effectiveStart = input.scheduledAt ?? current.scheduledAt;
-    await assertSlotFree(userId, effectiveProfessionalId, effectiveStart, effectiveDuration, {
-      allowOverlap: input.allowOverlap,
-      force: input.force,
-      exceptId: id,
-    });
-  }
-
   if (input.orderId !== undefined) {
     if (input.orderId) {
       await assertOrderOwned(userId, input.orderId);
@@ -616,7 +605,30 @@ export async function updateAppointment(userId: string, id: string, input: Updat
       data.order = { disconnect: true };
     }
   }
-  return prisma.appointment.update({ where: { id }, data });
+
+  // Sem profissional no resultado: sem risco de sobreposição → update direto.
+  if (!effectiveProfessionalId) {
+    return prisma.appointment.update({ where: { id }, data });
+  }
+
+  // Com profissional: trava por profissional + recheca de slot + update ATÔMICOS na
+  // mesma transação (igual aos caminhos de criação). Sem isso, dois reagendamentos
+  // concorrentes p/ o mesmo slot sobreposto passariam ambos na checagem (feita antes
+  // do update). Exclui a própria linha (exceptId) p/ não colidir consigo mesmo.
+  const profId = effectiveProfessionalId;
+  const effectiveStart = input.scheduledAt ?? current.scheduledAt;
+  return prisma.$transaction(async (tx) => {
+    await lockProfessionalForBooking(tx, profId);
+    await assertSlotFree(
+      userId,
+      profId,
+      effectiveStart,
+      effectiveDuration,
+      { allowOverlap: input.allowOverlap, force: input.force, exceptId: id },
+      tx,
+    );
+    return tx.appointment.update({ where: { id }, data });
+  });
 }
 
 /** Cancela um agendamento (mantém o registro; muda status p/ CANCELADO). */
