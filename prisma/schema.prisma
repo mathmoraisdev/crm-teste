@@ -451,6 +451,9 @@ model CatalogItem {
   customFields Json? // valores dos CustomFieldDef scope=PRODUCT (chaveado por 'key')
   photos       CatalogItemPhoto[]
 
+  // --- Adicionais precificados (onda-N): grupos de variações/adicionais por item ---
+  modifierGroups ModifierGroup[]
+
   @@unique([accountId, barcode]) // bipar resolve p/ um item; NULLs coexistem (Postgres trata como distintos)
   @@index([accountId, active])
   @@index([accountId, trackStock])
@@ -554,6 +557,10 @@ model OrderItem {
   unitPriceCents Int
   quantity       Int          @default(1)
   customFields   Json? // valores dos CustomFieldDef scope=ORDER_ITEM (chaveado por `key`)
+  // Adicionais precificados (onda-N): snapshot da seleção do cliente. O preço já
+  // está somado em unitPriceCents; isto é só p/ exibir/imprimir o detalhamento.
+  // Formato: [{ groupName, optionName, priceDeltaCents }].
+  modifiersSnapshot Json?
   // Comissão (snapshot no fechamento): profissional creditado + valor calculado.
   // professionalId é snapshot via FK SetNull (profissional é soft-delete, não some).
   professionalId  String?
@@ -1328,6 +1335,39 @@ model CatalogItemPhoto {
   createdAt     DateTime    @default(now())
 
   @@index([catalogItemId, order])
+}
+
+// Grupo de adicionais/variações de um item do catálogo (onda-N). Ex.: "Tamanho"
+// (min1/max1 = obrigatório único), "Adicionais" (min0/maxN = opcional múltiplo).
+model ModifierGroup {
+  id            String         @id @default(cuid())
+  accountId     String // tenant (User.id) — redundante c/ o item, mas simplifica escopo/queries
+  catalogItemId String
+  catalogItem   CatalogItem    @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  name          String
+  minSelect     Int            @default(0) // >=1 torna o grupo obrigatório
+  maxSelect     Int            @default(1) // 1 = escolha única; >1 = múltipla
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  options       ModifierOption[]
+
+  @@index([catalogItemId, sortOrder])
+  @@index([accountId])
+}
+
+// Opção dentro de um grupo, com delta de preço (pode ser 0 p/ variação sem custo).
+model ModifierOption {
+  id              String        @id @default(cuid())
+  groupId         String
+  group           ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDeltaCents Int           @default(0)
+  active          Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+
+  @@index([groupId, sortOrder])
 }
 
 // Config de delivery/cardápio online (Onda L). 1:1 com o dono da conta.
