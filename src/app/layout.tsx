@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Manrope, DM_Mono } from "next/font/google";
 import "./globals.css";
 import { PostHogProvider } from "@/components/app/PostHogProvider";
+import { env } from "@/lib/env";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -24,10 +25,30 @@ const mono = DM_Mono({
   display: "swap",
 });
 
+const SITE_TITLE = "Disparador.ai — Atenda e gerencie seu negócio no WhatsApp com IA";
+const SITE_DESC =
+  "A IA responde e qualifica cada cliente no WhatsApp enquanto você gerencia CRM, agenda, caixa, estoque e campanhas — tudo integrado num painel só.";
+
 export const metadata: Metadata = {
-  title: "Disparador.ai — Atenda e gerencie seu negócio no WhatsApp com IA",
-  description:
-    "A IA responde e qualifica cada cliente no WhatsApp enquanto você gerencia CRM, agenda, caixa, estoque e campanhas — tudo integrado num painel só.",
+  // Base p/ tornar as URLs de OG (incl. a opengraph-image) ABSOLUTAS — sem isso o
+  // preview do WhatsApp não acha a imagem. Vem de APP_URL (localhost em dev, o
+  // domínio em prod). Ver `[[app-url-vercel-localhost-links]]`.
+  metadataBase: new URL(env.APP_URL),
+  title: SITE_TITLE,
+  description: SITE_DESC,
+  openGraph: {
+    type: "website",
+    locale: "pt_BR",
+    siteName: "Disparador.ai",
+    url: "/",
+    title: SITE_TITLE,
+    description: SITE_DESC,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESC,
+  },
 };
 
 export const viewport: Viewport = {
