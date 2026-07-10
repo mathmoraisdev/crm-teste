@@ -13,8 +13,8 @@ import type { FulfillmentStatus, OrderType } from "@prisma/client";
  *  - CONFIRMADO: "✅ Pedido confirmado! Preparo ~<prepMin> min."
  *  - EM_PREPARO: "👨‍🍳 Em preparo."
  *  - PRONTO (retirada): "📦 Pronto para retirada!"; (delivery): "📦 Pronto."
- *  - SAIU_ENTREGA: "🛵 Saiu para entrega!"
- *  - ENTREGUE: "🎉 Entregue. Obrigado!"
+ *  - SAIU_ENTREGA (delivery): "🛵 Saiu para entrega!"; (retirada): sem mensagem
+ *  - ENTREGUE (retirada): "🎉 Pedido retirado. Obrigado!"; (delivery): "🎉 Entregue. Obrigado!"
  */
 export async function notifyCustomerOrderStatus(
   accountId: string,
@@ -74,9 +74,13 @@ async function buildMessage(
         ? `${prefix}📦 Pronto para retirada!`
         : `${prefix}📦 Seu pedido está pronto.`;
     case "SAIU_ENTREGA":
-      return `${prefix}🛵 Saiu para entrega!`;
+      // Retirada não "sai para entrega" — o PRONTO já avisou "pronto para
+      // retirada". Nada a enviar aqui (evita mensagem sem sentido no pickup).
+      return orderType === "RETIRADA" ? null : `${prefix}🛵 Saiu para entrega!`;
     case "ENTREGUE":
-      return `${prefix}🎉 Pedido entregue. Obrigado!`;
+      return orderType === "RETIRADA"
+        ? `${prefix}🎉 Pedido retirado. Obrigado!`
+        : `${prefix}🎉 Pedido entregue. Obrigado!`;
     default:
       // PENDENTE/RECUSADO não disparam mensagem ao cliente aqui.
       return null;

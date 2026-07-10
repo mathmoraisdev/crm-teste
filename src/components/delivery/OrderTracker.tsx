@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clock, Package, ChefHat, Bike, Home, Copy, Loader2, X } from "lucide-react";
+import { Check, Clock, Package, ChefHat, Bike, Home, ShoppingBag, Copy, Loader2, X } from "lucide-react";
 import { formatCentsBRL } from "@/lib/money";
 import type { FulfillmentStatus, OrderType } from "@prisma/client";
 import { AddressBlock } from "@/components/public/AddressBlock";
@@ -24,19 +24,42 @@ interface Tracking {
 
 const POLL_MS = 10_000;
 
-// Timeline do ciclo de fulfillment. RECUSADO é tratado à parte (estado final).
-const STEPS: { status: FulfillmentStatus; label: string; icon: typeof Clock }[] = [
-  { status: "PENDENTE", label: "Recebido", icon: Clock },
-  { status: "CONFIRMADO", label: "Confirmado", icon: Check },
-  { status: "EM_PREPARO", label: "Em preparo", icon: ChefHat },
-  { status: "PRONTO", label: "Pronto", icon: Package },
-  { status: "SAIU_ENTREGA", label: "Saiu p/ entrega", icon: Bike },
-  { status: "ENTREGUE", label: "Entregue", icon: Home },
+// Timeline do ciclo de fulfillment. Cada passo casa com um ou mais status do
+// servidor. RECUSADO é tratado à parte (estado final).
+interface Step {
+  label: string;
+  icon: typeof Clock;
+  statuses: FulfillmentStatus[];
+}
+
+const STEPS_DELIVERY: Step[] = [
+  { label: "Recebido", icon: Clock, statuses: ["PENDENTE"] },
+  { label: "Confirmado", icon: Check, statuses: ["CONFIRMADO"] },
+  { label: "Em preparo", icon: ChefHat, statuses: ["EM_PREPARO"] },
+  { label: "Pronto", icon: Package, statuses: ["PRONTO"] },
+  { label: "Saiu p/ entrega", icon: Bike, statuses: ["SAIU_ENTREGA"] },
+  { label: "Entregue", icon: Home, statuses: ["ENTREGUE"] },
 ];
 
-function stepIndex(s: FulfillmentStatus | null): number {
+// Retirada não "sai para entrega". O servidor, porém, ainda avança pela mesma
+// cadeia (…PRONTO→SAIU_ENTREGA→ENTREGUE), então SAIU_ENTREGA é dobrado no passo
+// "Pronto p/ retirada": o cliente nunca vê "saiu para entrega" e a barra não
+// anda pra trás se o pedido passar por esse status.
+const STEPS_PICKUP: Step[] = [
+  { label: "Recebido", icon: Clock, statuses: ["PENDENTE"] },
+  { label: "Confirmado", icon: Check, statuses: ["CONFIRMADO"] },
+  { label: "Em preparo", icon: ChefHat, statuses: ["EM_PREPARO"] },
+  { label: "Pronto p/ retirada", icon: Package, statuses: ["PRONTO", "SAIU_ENTREGA"] },
+  { label: "Retirado", icon: ShoppingBag, statuses: ["ENTREGUE"] },
+];
+
+function stepsFor(t: OrderType | null): Step[] {
+  return t === "RETIRADA" ? STEPS_PICKUP : STEPS_DELIVERY;
+}
+
+function stepIndex(steps: Step[], s: FulfillmentStatus | null): number {
   if (!s) return 0;
-  const idx = STEPS.findIndex((st) => st.status === s);
+  const idx = steps.findIndex((st) => st.statuses.includes(s));
   return idx < 0 ? 0 : idx;
 }
 
@@ -94,7 +117,8 @@ export function OrderTracker({
     }
   }
 
-  const current = stepIndex(tracking.fulfillmentStatus);
+  const steps = stepsFor(tracking.orderType);
+  const current = stepIndex(steps, tracking.fulfillmentStatus);
   const isRejected = tracking.fulfillmentStatus === "RECUSADO";
   const doc =
     tracking.onlineNumber != null
@@ -185,12 +209,12 @@ export function OrderTracker({
       ) : (
         <div className="rounded-2xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(10,20,16,.04),0_8px_24px_-16px_rgba(10,20,16,.10)]">
           <ol className="space-y-1">
-            {STEPS.map((step, i) => {
+            {steps.map((step, i) => {
               const done = i < current;
               const active = i === current;
               const Icon = step.icon;
               return (
-                <li key={step.status} className="flex items-center gap-3">
+                <li key={step.label} className="flex items-center gap-3">
                   <div className="flex flex-col items-center">
                     <div
                       className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
@@ -203,7 +227,7 @@ export function OrderTracker({
                     >
                       {done ? <Check size={16} /> : active ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />}
                     </div>
-                    {i < STEPS.length - 1 && (
+                    {i < steps.length - 1 && (
                       <div className={`h-6 w-0.5 ${done ? "bg-brand-500" : "bg-slate-200 dark:bg-slate-700"}`} />
                     )}
                   </div>
