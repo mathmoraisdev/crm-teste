@@ -358,17 +358,23 @@ export async function createAppointment(
   const durationMinutes = await resolveDuration(userId, catalogItemId, input.durationMinutes, db);
   if (input.professionalId) {
     await assertProfessionalOwned(userId, input.professionalId, db);
-    await assertSlotFree(
-      userId,
-      input.professionalId,
-      input.scheduledAt,
-      durationMinutes,
-      { allowOverlap: input.allowOverlap, force: input.force },
-      db,
-    );
   }
-  const run = async (client: Prisma.TransactionClient) =>
-    client.appointment.create({
+  // Trava + checagem de slot + insert ATÔMICOS na MESMA transação: sem isso, dois
+  // pedidos concorrentes passam ambos na checagem (feita antes do insert) e criam
+  // sobreposição. A trava é por profissional (fecha horários diferentes que se cruzam).
+  const run = async (client: Prisma.TransactionClient) => {
+    if (input.professionalId) {
+      await lockProfessionalForBooking(client, input.professionalId);
+      await assertSlotFree(
+        userId,
+        input.professionalId,
+        input.scheduledAt,
+        durationMinutes,
+        { allowOverlap: input.allowOverlap, force: input.force },
+        client,
+      );
+    }
+    return client.appointment.create({
       data: {
         leadId: scope.leadId,
         accountId: scope.accountId,
@@ -385,6 +391,7 @@ export async function createAppointment(
         ...(input.source ? { source: input.source } : {}),
       },
     });
+  };
   return tx ? run(tx) : prisma.$transaction(run);
 }
 

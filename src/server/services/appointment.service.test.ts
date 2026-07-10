@@ -247,6 +247,44 @@ describe("appointment.service", () => {
     expect(ok.id).toBeTruthy();
   });
 
+  it("dois createAppointment SOBREPOSTOS no mesmo profissional: só um entra (concorrência)", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000801");
+    const pro = await makeProfessional(acc);
+    const item = await createCatalogItem(acc, { name: "Corte 60", priceCents: 5000 });
+    await prisma.catalogItem.update({ where: { id: item.id }, data: { durationMinutes: 60 } });
+
+    const base = {
+      leadId, catalogItemId: item.id, professionalId: pro, createdById: acc,
+      force: true, // sem expediente cadastrado: pula a checagem de horário
+    };
+    // 13:00–14:00 x 13:30–14:30 se sobrepõem
+    const a = createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-01T13:00:00.000Z") });
+    const b = createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-01T13:30:00.000Z") });
+    const results = await Promise.allSettled([a, b]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+    expect(failed).toHaveLength(1);
+    expect(failed[0].reason.message).toMatch(/CONFLICT/);
+    const count = await prisma.appointment.count({ where: { professionalId: pro } });
+    expect(count).toBe(1);
+  });
+
+  it("createAppointment sobreposto a um já existente: CONFLICT (sequencial)", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000802");
+    const pro = await makeProfessional(acc);
+    const item = await createCatalogItem(acc, { name: "Corte 60", priceCents: 5000 });
+    await prisma.catalogItem.update({ where: { id: item.id }, data: { durationMinutes: 60 } });
+    const base = { leadId, catalogItemId: item.id, professionalId: pro, createdById: acc, force: true };
+
+    await createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-02T13:00:00.000Z") });
+    await expect(
+      createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-02T13:30:00.000Z") }),
+    ).rejects.toThrow(/CONFLICT/);
+  });
+
   it("mesmo horário com OUTRO profissional não conflita", async () => {
     const acc = await makeOwner();
     const leadId = await makeLead(acc, "+5511900020003");
