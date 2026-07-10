@@ -17,6 +17,7 @@ import { listActiveOffers } from "./offer.service";
 import { sendOffer } from "./sales.service";
 import { renderActiveOffers, renderBookingContext, renderCatalogForAI, renderMediaAssetsForAI } from "@/server/ai/attendance-context";
 import { listCatalogItems } from "./catalog.service";
+import { listModifiersForItems } from "./modifier.service";
 import { listMediaAssets } from "./media-asset.service";
 import { interpretAndBook, proposeSlots } from "./scheduling.service";
 import {
@@ -802,6 +803,11 @@ async function loadCatalogBlock(
   accountId: string,
 ): Promise<{ block: string | undefined; hasCatalog: boolean }> {
   const items = await listCatalogItems(accountId, { activeOnly: true });
+  // Grupos de adicionais só dos itens que têm (1 query, evita N+1 e ausência = 0).
+  const modsByItem = await listModifiersForItems(
+    accountId,
+    items.filter((i) => i.hasModifiers).map((i) => i.id),
+  );
   const block = renderCatalogForAI(
     items.map((i) => ({
       name: i.name,
@@ -809,6 +815,7 @@ async function loadCatalogBlock(
       kind: i.kind,
       trackStock: i.trackStock,
       stockQty: i.stockQty,
+      modifierGroups: modsByItem.get(i.id),
     })),
   );
   return { block: block || undefined, hasCatalog: items.length > 0 };

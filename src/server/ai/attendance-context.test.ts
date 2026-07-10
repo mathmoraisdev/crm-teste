@@ -105,6 +105,22 @@ describe("renderCatalogForAI", () => {
     expect(out).toContain("Combo");
     expect(out).not.toMatch(/INDISPON[IÍ]VEL/i);
   });
+
+  it("anexa os grupos de adicionais com preço (delta 0 não mostra preço)", () => {
+    const out = renderCatalogForAI([
+      { name: "Burger", priceCents: 2000, kind: "PRODUTO", modifierGroups: [
+        { name: "Tamanho", options: [{ name: "Média", priceDeltaCents: 0 }, { name: "Grande", priceDeltaCents: 800 }] },
+        { name: "Extras", options: [{ name: "Bacon", priceDeltaCents: 500 }] },
+      ] },
+    ]);
+    expect(out).toMatch(/Tamanho: Média, Grande \(\+R\$ 8,00\)/);
+    expect(out).toContain("Extras: Bacon (+R$ 5,00)");
+  });
+
+  it("item sem grupos não ganha ' | opções:'", () => {
+    const out = renderCatalogForAI([{ name: "Suco", priceCents: 800, kind: "PRODUTO" }]);
+    expect(out).not.toContain("opções");
+  });
 });
 
 describe("renderCatalogForTools", () => {
@@ -168,6 +184,16 @@ describe("renderCatalogForTools", () => {
 
   it("vazio → string vazia", () => {
     expect(renderCatalogForTools([])).toBe("");
+  });
+
+  it("anexa os grupos de adicionais ao item da tool", () => {
+    const out = renderCatalogForTools([
+      { id: "ci_9", name: "Pizza", priceCents: 3000, kind: "PRODUTO", modifierGroups: [
+        { name: "Borda", options: [{ name: "Catupiry", priceDeltaCents: 700 }] },
+      ] },
+    ]);
+    expect(out).toContain("id=ci_9");
+    expect(out).toContain("opções: Borda: Catupiry (+R$ 7,00)");
   });
 });
 

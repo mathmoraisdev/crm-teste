@@ -45,6 +45,26 @@ export function renderActiveOffers(offers: OfferForContext[]): string {
   return `OFERTAS DISPONÍVEIS (use o id ao escolher; o preço é fixo, não altere):\n${lines.join("\n")}`;
 }
 
+/** Grupo de adicionais reduzido ao que a IA precisa mencionar (nome + Δpreço). */
+export interface ModifierGroupForContext {
+  name: string;
+  options: { name: string; priceDeltaCents: number }[];
+}
+
+/** Resumo textual (PURO) dos grupos p/ o prompt: "Tamanho: Média, Grande (+R$8);
+ * Extras: Bacon (+R$5)". Delta 0 não mostra preço. Vazio → "". */
+export function renderModifierSummary(groups?: ModifierGroupForContext[]): string {
+  if (!groups?.length) return "";
+  return groups
+    .map((g) => {
+      const opts = g.options
+        .map((o) => (o.priceDeltaCents > 0 ? `${o.name} (+${formatCentsBRL(o.priceDeltaCents)})` : o.name))
+        .join(", ");
+      return `${g.name}: ${opts}`;
+    })
+    .join("; ");
+}
+
 export interface CatalogItemForContext {
   name: string;
   priceCents: number;
@@ -52,6 +72,8 @@ export interface CatalogItemForContext {
   /** Opcionais: quando ausentes, o item é sempre tratado como disponível (retrocompat). */
   trackStock?: boolean;
   stockQty?: number;
+  /** Adicionais precificados (onda-N): grupos p/ a IA oferecer/confirmar as opções. */
+  modifierGroups?: ModifierGroupForContext[];
 }
 
 /**
@@ -67,7 +89,9 @@ export function renderCatalogForAI(items: CatalogItemForContext[], limit = 40): 
     // NÃO expõe a quantidade — só disponível vs indisponível (decisão v1).
     const soldOut = i.trackStock && (i.stockQty ?? 0) <= 0;
     const mark = soldOut ? " — INDISPONÍVEL (sem estoque)" : "";
-    return `- ${i.name}: ${price}${mark}`;
+    const mods = renderModifierSummary(i.modifierGroups);
+    const modsText = mods ? ` | opções: ${mods}` : "";
+    return `- ${i.name}: ${price}${mark}${modsText}`;
   });
   return `SERVIÇOS E PRODUTOS (catálogo da empresa; informe preço só se listado):\n${lines.join("\n")}`;
 }
@@ -127,6 +151,8 @@ export interface CatalogItemForTools {
   stockQty?: number;
   /** Ficha técnica (specs) do anúncio — valores dos CustomFieldDef scope=PRODUCT. */
   customFields?: Record<string, unknown> | null;
+  /** Adicionais precificados (onda-N): grupos p/ a IA oferecer/confirmar as opções. */
+  modifierGroups?: ModifierGroupForContext[];
 }
 
 /**
@@ -155,7 +181,9 @@ export function renderCatalogForTools(items: CatalogItemForTools[]): string {
             .join(", ")
         : "";
     const ficha = specs ? ` | ficha: ${specs}` : "";
-    return `id=${i.id} | ${i.name} | ${price} | estoque=${stock}${mark}${ficha}`;
+    const mods = renderModifierSummary(i.modifierGroups);
+    const modsText = mods ? ` | opções: ${mods}` : "";
+    return `id=${i.id} | ${i.name} | ${price} | estoque=${stock}${mark}${ficha}${modsText}`;
   });
   return lines.join("\n");
 }

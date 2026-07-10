@@ -1,5 +1,6 @@
 import { formatCentsBRL } from "@/lib/money";
 import { listCatalogItems } from "@/server/services/catalog.service";
+import { listModifiersForItems } from "@/server/services/modifier.service";
 import { listCatalogItemPhotos } from "@/server/services/catalog-photo.service";
 import { addItem, listOpenOrders, openOrder } from "@/server/services/order.service";
 import { addNote } from "@/server/services/internal-note.service";
@@ -83,6 +84,10 @@ function consultarEstoque(ctx: AttendanceToolCtx): ToolDef {
       const filtered = query
         ? items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase()))
         : items;
+      const modsByItem = await listModifiersForItems(
+        ctx.accountId,
+        filtered.filter((i) => i.hasModifiers).map((i) => i.id),
+      );
       const render = renderCatalogForTools(
         filtered.map((i) => ({
           id: i.id,
@@ -92,6 +97,7 @@ function consultarEstoque(ctx: AttendanceToolCtx): ToolDef {
           trackStock: i.trackStock,
           stockQty: i.stockQty,
           customFields: i.customFields,
+          modifierGroups: modsByItem.get(i.id),
         })),
       );
       return {

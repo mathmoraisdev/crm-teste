@@ -63,6 +63,29 @@ export interface ModifierGroupInput {
   options: { name: string; priceDeltaCents: number; active?: boolean }[];
 }
 
+/** Grupos+opções ATIVAS de vários itens, agrupados por catalogItemId. Para o
+ * contexto da IA (uma query só, escopada por conta). Grupo sem opção ativa é
+ * omitido. Map vazio quando não há itens (evita a query). */
+export async function listModifiersForItems(
+  accountId: string,
+  catalogItemIds: string[],
+): Promise<Map<string, { name: string; options: { name: string; priceDeltaCents: number }[] }[]>> {
+  const map = new Map<string, { name: string; options: { name: string; priceDeltaCents: number }[] }[]>();
+  if (!catalogItemIds.length) return map;
+  const groups = await prisma.modifierGroup.findMany({
+    where: { accountId, catalogItemId: { in: catalogItemIds } },
+    orderBy: { sortOrder: "asc" },
+    include: { options: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
+  });
+  for (const g of groups) {
+    if (!g.options.length) continue;
+    const arr = map.get(g.catalogItemId) ?? [];
+    arr.push({ name: g.name, options: g.options.map((o) => ({ name: o.name, priceDeltaCents: o.priceDeltaCents })) });
+    map.set(g.catalogItemId, arr);
+  }
+  return map;
+}
+
 /** Lê os grupos+opções de um item (para a UI de edição e o cardápio). */
 export async function listItemModifiers(accountId: string, catalogItemId: string) {
   return prisma.modifierGroup.findMany({
