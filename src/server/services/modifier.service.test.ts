@@ -4,7 +4,11 @@ beforeAll(() => {
   process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://t:t@localhost:5432/t?schema=public";
 });
 vi.mock("@/server/db/client", () => ({
-  prisma: { modifierGroup: { findMany: vi.fn() } },
+  prisma: {
+    modifierGroup: { findMany: vi.fn(), deleteMany: vi.fn(), create: vi.fn() },
+    catalogItem: { findFirst: vi.fn() },
+    $transaction: vi.fn(),
+  },
 }));
 
 const GROUPS = [
@@ -65,5 +69,66 @@ describe("resolveModifierSelection", () => {
   it("opção que não é do item → erro", async () => {
     const { resolveModifierSelection } = await import("./modifier.service");
     await expect(resolveModifierSelection("acc", "item", ["o1", "xxx"])).rejects.toThrow(/inválid/i);
+  });
+});
+
+describe("listItemModifiers / saveItemModifiers", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("listItemModifiers busca grupos+opções do item por conta, ordenados", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.modifierGroup.findMany as any).mockResolvedValue(GROUPS);
+    const { listItemModifiers } = await import("./modifier.service");
+    const r = await listItemModifiers("acc", "item");
+    expect(prisma.modifierGroup.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { catalogItemId: "item", accountId: "acc" } }),
+    );
+    expect(r).toEqual(GROUPS);
+  });
+
+  it("saveItemModifiers substitui os grupos do item (delete + create aninhado)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.catalogItem.findFirst as any).mockResolvedValue({ id: "item" });
+    const txDeleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const txCreate = vi.fn().mockResolvedValue({});
+    (prisma.$transaction as any).mockImplementation(async (cb: any) =>
+      cb({ modifierGroup: { deleteMany: txDeleteMany, create: txCreate } }),
+    );
+    const { saveItemModifiers } = await import("./modifier.service");
+    await saveItemModifiers("acc", "item", [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 800 }] },
+    ]);
+    expect(txDeleteMany).toHaveBeenCalledWith({ where: { catalogItemId: "item", accountId: "acc" } });
+    expect(txCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accountId: "acc", catalogItemId: "item", name: "Tamanho",
+          minSelect: 1, maxSelect: 1, sortOrder: 0,
+          options: { create: [expect.objectContaining({ name: "G", priceDeltaCents: 800, active: true, sortOrder: 0 })] },
+        }),
+      }),
+    );
+  });
+
+  it("saveItemModifiers rejeita item de outra conta", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.catalogItem.findFirst as any).mockResolvedValue(null);
+    const { saveItemModifiers } = await import("./modifier.service");
+    await expect(
+      saveItemModifiers("acc", "item", [
+        { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 0 }] },
+      ]),
+    ).rejects.toThrow(/não encontrado/i);
+  });
+
+  it("saveItemModifiers rejeita limites inválidos (min>max)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.catalogItem.findFirst as any).mockResolvedValue({ id: "item" });
+    const { saveItemModifiers } = await import("./modifier.service");
+    await expect(
+      saveItemModifiers("acc", "item", [
+        { name: "Tamanho", minSelect: 2, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 0 }] },
+      ]),
+    ).rejects.toThrow(/Limites inválidos/i);
   });
 });
