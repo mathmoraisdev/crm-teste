@@ -401,6 +401,11 @@ model AccountBranding {
   logoUrl    String? // URL pública do logo no Storage; null = logo padrão
   appName    String? // nome exibido no lugar de "Disparador.ai"; null = padrão
 
+  // Tema das páginas PÚBLICAS (cardápio, agendamento, acompanhamento de pedido):
+  // "light" | "dark". Escolha do lojista; nasce claro. Não confundir com o tema
+  // do app logado (esse segue o SO/toggle da Sidebar por usuário).
+  publicTheme String @default("light")
+
   // --- Impressão de cupom (N2, opt-in por conta) ---
   printMode   String? // null/"browser" = imprime pelo navegador (N1); "escpos" = QZ Tray
   printerName String? // nome da impressora no QZ Tray (quando printMode=escpos)

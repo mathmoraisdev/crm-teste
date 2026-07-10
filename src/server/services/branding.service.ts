@@ -5,11 +5,14 @@ import type { AccountBranding } from "@prisma/client";
 
 export const DEFAULT_APP_NAME = "Disparador.ai";
 
+export type PublicTheme = "light" | "dark";
+
 export interface ResolvedBranding {
   palette: BrandPalette;
   appName: string;
   logoUrl: string | null;
   presetId: string | null; // p/ pré-selecionar o preset atual na UI
+  publicTheme: PublicTheme; // tema das páginas públicas (cardápio/agendamento); default claro
 }
 
 /** Valida que um JSON tem as 11 paradas com formato "R G B"; senão null. */
@@ -34,6 +37,8 @@ export function resolveBranding(row: AccountBranding | null): ResolvedBranding {
     appName: row?.appName?.trim() || DEFAULT_APP_NAME,
     logoUrl: row?.logoUrl ?? null,
     presetId: row?.presetId ?? null,
+    // Qualquer valor que não seja exatamente "dark" cai em claro (default seguro).
+    publicTheme: row?.publicTheme === "dark" ? "dark" : "light",
   };
 }
 

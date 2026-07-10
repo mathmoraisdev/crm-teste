@@ -102,6 +102,7 @@ export default async function ConfiguracoesPage() {
               presetId: branding.presetId ?? null,
               appName: branding.appName,
               logoUrl: branding.logoUrl,
+              publicTheme: branding.publicTheme,
             }}
           />
         </div>

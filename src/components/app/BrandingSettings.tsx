@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Sun, Moon } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { THEME_PRESETS } from "@/lib/theme/presets";
@@ -19,14 +20,17 @@ function rgb(channels: string): string {
  * nome exibido. Salva via POST multipart em /api/branding; após salvar, o
  * router.refresh() re-injeta o tema pelo layout (SSR).
  */
+type PublicTheme = "light" | "dark";
+
 export function BrandingSettings({
   initial,
 }: {
-  initial: { presetId: string | null; appName: string; logoUrl: string | null };
+  initial: { presetId: string | null; appName: string; logoUrl: string | null; publicTheme: PublicTheme };
 }) {
   const router = useRouter();
   const [presetId, setPresetId] = useState<string | null>(initial.presetId);
   const [appName, setAppName] = useState(initial.appName);
+  const [publicTheme, setPublicTheme] = useState<PublicTheme>(initial.publicTheme);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(initial.logoUrl);
   const [saving, setSaving] = useState(false);
@@ -48,6 +52,7 @@ export function BrandingSettings({
       const form = new FormData();
       if (presetId) form.set("presetId", presetId);
       form.set("appName", appName.trim());
+      form.set("publicTheme", publicTheme);
       if (logoFile) form.set("logo", logoFile);
       const res = await fetch("/api/branding", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
@@ -132,6 +137,38 @@ export function BrandingSettings({
             placeholder="Disparador.ai"
             className={inputClass}
           />
+        </div>
+
+        {/* Tema das páginas públicas (cardápio + agendamento) */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500">Tema do cardápio e agendamento</p>
+          <div className="inline-flex rounded-lg border border-line bg-inset p-0.5">
+            {([
+              { value: "light", label: "Claro", Icon: Sun },
+              { value: "dark", label: "Escuro", Icon: Moon },
+            ] as const).map(({ value, label, Icon }) => {
+              const active = publicTheme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPublicTheme(value)}
+                  className={
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
+                    (active
+                      ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
+                      : "text-slate-500 hover:text-ink")
+                  }
+                >
+                  <Icon size={15} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-slate-400">
+            Vale só para as páginas que seus clientes veem. O painel continua seguindo o tema do seu aparelho.
+          </p>
         </div>
 
         {error && <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>}

@@ -74,9 +74,9 @@ export default async function AgendarPage({
   const dateOptions = buildDateOptions(acc.bookingHorizonDays);
 
   return (
-    <>
+    <div data-theme={branding.publicTheme} className="min-h-screen bg-surface">
       <BrandingStyle palette={branding.palette} />
-      <main className="mx-auto min-h-screen w-full max-w-md px-4 py-8">
+      <main className="mx-auto w-full max-w-md px-4 py-8">
         <header className="mb-6 flex items-center gap-3">
           {branding.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -114,6 +114,6 @@ export default async function AgendarPage({
           </div>
         )}
       </main>
-    </>
+    </div>
   );
 }

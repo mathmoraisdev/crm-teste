@@ -74,9 +74,9 @@ export default async function CardapioPage({
   ].filter(Boolean) as string[];
 
   return (
-    <>
+    <div data-theme={branding.publicTheme} className="min-h-screen bg-surface">
       <BrandingStyle palette={branding.palette} />
-      <main className="mx-auto min-h-screen w-full max-w-md pb-28">
+      <main className="mx-auto w-full max-w-md pb-28">
         {/* Hero com a cor da marca */}
         <header className="bg-gradient-to-br from-brand-500 to-brand-700 px-5 pb-6 pt-8 text-white">
           <div className="flex items-center gap-3">
@@ -131,6 +131,6 @@ export default async function CardapioPage({
           />
         </div>
       </main>
-    </>
+    </div>
   );
 }

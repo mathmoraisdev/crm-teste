@@ -412,6 +412,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o serviço, o comprimento/tipo de cabelo e (se houver) o profissional antes de reservar — preço e tempo variam bastante. Serviços de química (coloração, progressiva) podem exigir avaliação ou teste de mecha; oriente chegar no horário para não atrasar os próximos.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Profissional", type: "TEXT" },
+    ],
   },
   {
     id: "barbearia",
@@ -442,6 +445,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o serviço e, se houver, o barbeiro antes de reservar. Combos (corte + barba) levam mais tempo — reserve o horário adequado.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Barbeiro", type: "TEXT" },
+    ],
   },
   {
     id: "studio-sobrancelha-cilios",
@@ -504,6 +510,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não feche preço sem ver a referência: peça foto da ideia, tamanho aproximado e região do corpo. Menores de 18 não são atendidos (ou só com responsável, conforme a política). Reforce que todo material é descartável e o ambiente é higienizado.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Região do corpo", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Tamanho aprox. (cm)", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Estilo", type: "TEXT" },
+    ],
   },
   {
     id: "spa-massagem",
@@ -697,6 +708,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O preço varia pelo porte do veículo e pelo estado — confirme o modelo antes de fechar. Polimento e vitrificação podem exigir avaliação da pintura; não garanta remoção total de riscos sem ver.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Modelo", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Porte", type: "SELECT", options: ["Hatch", "Sedan", "SUV", "Caminhonete", "Moto"] },
+    ],
   },
   {
     id: "locadora-veiculos",
@@ -725,6 +741,12 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme a disponibilidade da categoria para as datas antes de prometer reserva. Os requisitos (idade mínima, CNH, caução/cartão de crédito) são obrigatórios — informe com clareza. Explique cobertura/franquia do seguro sem omitir custos.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Modelo", type: "TEXT" },
+      { scope: "ORDER", label: "Retirada", type: "DATE" },
+      { scope: "ORDER", label: "Devolução", type: "DATE" },
+    ],
   },
   {
     id: "borracharia",
@@ -753,6 +775,10 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Preço de pneu depende de medida e marca — peça a medida (ex.: 175/70 R13). Serviços simples costumam ser na hora, por ordem de chegada. Não garanta conserto de um pneu danificado sem avaliar (pode não ter reparo).",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Placa", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Medida do pneu", type: "TEXT" },
+    ],
   },
   {
     id: "dedetizadora",
@@ -780,6 +806,10 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O orçamento depende do tamanho do imóvel e do tipo de praga — muitas vezes só após vistoria. Informe sobre segurança (crianças, idosos, pets) e o tempo de ausência recomendado. Não prometa erradicação garantida sem avaliar.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+      { scope: "ORDER", label: "Tipo de praga", type: "SELECT", options: ["Baratas", "Ratos", "Cupins", "Escorpião", "Outros"] },
+    ],
   },
   {
     id: "limpeza-diarista",
@@ -808,6 +838,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O preço depende do tamanho do imóvel e do tipo de limpeza — confirme m²/nº de cômodos e se é faxina comum ou pesada. Informe se o material está incluso. Não feche valor sem esses dados.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "eletricista",
@@ -834,6 +867,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não estime preço de reparo sem avaliar — o orçamento sai após a visita. Em situação de risco (cheiro de queimado, fumaça, choque, faíscas), oriente desligar a energia no quadro e priorize o atendimento urgente. Segurança em primeiro lugar.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "encanador",
@@ -860,6 +896,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não feche preço sem avaliar — vazamentos escondidos e entupimentos variam muito. Em emergência (vazamento grande, alagamento), oriente fechar o registro geral e priorize o atendimento.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "ar-condicionado",
@@ -886,6 +925,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O preço de instalação depende da distância entre as unidades, da infraestrutura e do BTU do aparelho — confirme esses dados ou orce na visita; não prometa valor fechado sem avaliar. Recomende o BTU adequado ao tamanho do ambiente.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "marido-de-aluguel",
@@ -911,6 +953,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o serviço e peça uma foto para ajudar no orçamento; o valor fechado às vezes só sai na visita. Serviços maiores ou de risco (elétrica/hidráulica pesada) podem exigir um especialista — seja honesto sobre isso.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "jardinagem-paisagismo",
@@ -937,6 +982,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O preço depende do tamanho da área e do estado do jardim — normalmente o orçamento sai após visita. Projetos paisagísticos exigem avaliação no local. Não feche valor sem ver a área.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "chaveiro",
@@ -963,6 +1011,9 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "O preço de chave codificada/automotiva depende do modelo — peça marca/modelo/ano do veículo. Por segurança, abertura de imóvel ou veículo pode exigir comprovação de propriedade. Em emergência, priorize o atendimento.",
     suggested: { autoReply: true, qualify: false, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Endereço do serviço", type: "TEXT" },
+    ],
   },
   {
     id: "escola-idiomas",
@@ -1221,6 +1272,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não invente sabores ou preços fora da tabela. Encomendas exigem antecedência — confirme data, sabor, tamanho/quantidade e detalhes de personalização; explique o sinal e o prazo antes de reservar.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data de entrega", type: "DATE" },
+      { scope: "ORDER_ITEM", label: "Sabor", type: "TEXT" },
+      { scope: "ORDER", label: "Personalização/Tema", type: "TEXT" },
+    ],
   },
   {
     id: "buffet-eventos",
@@ -1246,6 +1302,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Não invente cardápios, itens ou preços que não foram informados. Confirme a data, o tipo de evento, o número de convidados e o local antes de orçar — o valor é por pessoa/cardápio. Verifique a disponibilidade da data e ofereça degustação/reunião. Não feche valor sem esses dados.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data do evento", type: "DATE" },
+      { scope: "ORDER", label: "Nº de convidados", type: "NUMBER" },
+      { scope: "ORDER", label: "Tipo de evento", type: "TEXT" },
+    ],
   },
   {
     id: "loja-roupas-moda",
@@ -1272,6 +1333,10 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme tamanho, cor e disponibilidade em estoque antes de garantir a venda. Enviar foto do produto ajuda. Informe a política de trocas. Não prometa item que está esgotado.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Tamanho", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Cor", type: "TEXT" },
+    ],
     suggestedOffers: [
       { name: "Leve 3, pague 2", description: "Em peças selecionadas", priceHint: "promoção da coleção" },
       { name: "Frete grátis acima de R$ 199", description: "Para a região atendida", priceHint: "sem custo de entrega" },
@@ -1347,6 +1412,10 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme medidas/dimensões e disponibilidade antes de fechar. Prazos de encomenda variam — informe se montagem e entrega estão inclusas. Para planejados, o orçamento sai após medição.",
     suggested: { autoReply: true, qualify: false, schedule: false, sales: true },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Medidas", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Ambiente", type: "TEXT" },
+    ],
     suggestedOffers: [
       { name: "Frete + montagem grátis", description: "Na compra de móveis planejados", priceHint: "sem custo adicional" },
       { name: "Kit sala completo", description: "Sofá + rack + mesa de centro", priceHint: "a partir de R$ 2.490 ou parcelado" },
@@ -1773,6 +1842,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o tipo de ensaio/evento, a data, o local e a duração antes de orçar — o valor depende disso. A data só é reservada com sinal. Informe o prazo de entrega das fotos/vídeo. Não prometa uma data que já esteja indisponível.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data do evento", type: "DATE" },
+      { scope: "ORDER", label: "Local", type: "TEXT" },
+      { scope: "ORDER", label: "Tipo", type: "TEXT" },
+    ],
   },
   {
     id: "decoracao-festas",
@@ -1800,6 +1874,12 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme o tema, a data, o local e o número de convidados/tamanho antes de orçar. Verifique a disponibilidade da data — ela é reservada com sinal. Não feche valor sem os detalhes do tema.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data do evento", type: "DATE" },
+      { scope: "ORDER", label: "Local", type: "TEXT" },
+      { scope: "ORDER", label: "Tema", type: "TEXT" },
+      { scope: "ORDER", label: "Nº de convidados", type: "NUMBER" },
+    ],
   },
   {
     id: "aluguel-equipamentos-festa",
@@ -1824,6 +1904,10 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme os itens, a quantidade, a data e o endereço de entrega antes de fechar; verifique a disponibilidade na data. Informe frete e caução, se houver. Não prometa um item que já esteja reservado.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data do evento", type: "DATE" },
+      { scope: "ORDER", label: "Endereço de entrega", type: "TEXT" },
+    ],
   },
   {
     id: "cerimonial-casamento",
@@ -1847,6 +1931,11 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme a data, o local, o número de convidados e o tipo de assessoria desejada antes de orçar; agende uma reunião para entender o evento. Verifique a disponibilidade da data. O valor é por escopo — não feche sem entender a necessidade.",
     suggested: { autoReply: true, qualify: true, schedule: true, sales: false },
+    customFieldsPreset: [
+      { scope: "ORDER", label: "Data do evento", type: "DATE" },
+      { scope: "ORDER", label: "Local", type: "TEXT" },
+      { scope: "ORDER", label: "Nº de convidados", type: "NUMBER" },
+    ],
   },
   {
     id: "imobiliaria",
@@ -1908,6 +1997,12 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
     customInstructions:
       "Confirme destino, datas, nº de pessoas e orçamento antes de cotar — preços variam muito e mudam por disponibilidade. Não garanta preço ou disponibilidade sem consultar. Oriente sobre documentação (passaporte, visto, vacinas) sem substituir as fontes oficiais.",
     suggested: { autoReply: true, qualify: true, schedule: false, sales: true },
+    customFieldsPreset: [
+      { scope: "ORDER_ITEM", label: "Destino", type: "TEXT" },
+      { scope: "ORDER_ITEM", label: "Ida", type: "DATE" },
+      { scope: "ORDER_ITEM", label: "Volta", type: "DATE" },
+      { scope: "ORDER_ITEM", label: "Nº de pessoas", type: "NUMBER" },
+    ],
     suggestedOffers: [
       { name: "Pacote nacional", description: "Passagem + hospedagem", priceHint: "a partir de R$ 990 por pessoa" },
       { name: "Pacote internacional", description: "Roteiro com aéreo e hotel", priceHint: "sob consulta" },

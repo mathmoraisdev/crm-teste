@@ -16,9 +16,11 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const presetId = (form.get("presetId") as string | null)?.trim() || null;
   const appName = (form.get("appName") as string | null)?.trim() || null;
+  // Tema das páginas públicas: só "dark" liga o escuro; qualquer outra coisa = claro.
+  const publicTheme = (form.get("publicTheme") as string | null) === "dark" ? "dark" : "light";
   const file = form.get("logo") as File | null;
 
-  const data: Record<string, unknown> = { appName };
+  const data: Record<string, unknown> = { appName, publicTheme };
   if (presetId) {
     const preset = presetById(presetId);
     if (!preset) return NextResponse.json({ error: "preset inválido" }, { status: 400 });
