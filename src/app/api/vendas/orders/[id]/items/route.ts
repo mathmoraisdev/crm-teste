@@ -11,6 +11,7 @@ const addSchema = z.object({
   unitPriceCents: z.number().int().optional(),
   quantity: z.number().int().optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
+  modifierOptionIds: z.array(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

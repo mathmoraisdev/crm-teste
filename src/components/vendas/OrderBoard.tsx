@@ -9,6 +9,7 @@ import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 import { printReceipt, printKitchenTickets } from "@/lib/receipt/print-client";
 import { OrderCustomFields } from "@/components/vendas/OrderCustomFields";
 import { CashSessionBar } from "@/components/vendas/CashSessionBar";
+import { ModifierPicker, type PickerGroup } from "@/components/menu/ModifierPicker";
 import type { CustomFieldDefItem } from "@/server/services/custom-field.service";
 
 type Payment = "DINHEIRO" | "PIX" | "CARTAO" | "OUTRO";
@@ -20,6 +21,7 @@ interface OrderItem {
   quantity: number;
   catalogItemId: string | null;
   customFields: Record<string, unknown> | null;
+  modifiers?: { groupName: string; optionName: string; priceDeltaCents: number }[] | null;
 }
 interface Order {
   id: string;
@@ -41,7 +43,7 @@ interface Order {
   subtotalCents: number;
   totalCents: number;
 }
-interface CatalogItem { id: string; kind: "SERVICO" | "PRODUTO"; name: string; priceCents: number; active: boolean; variantGroup?: string | null; }
+interface CatalogItem { id: string; kind: "SERVICO" | "PRODUTO"; name: string; priceCents: number; active: boolean; variantGroup?: string | null; hasModifiers?: boolean; }
 interface LeadHit { id: string; name: string; phone: string; }
 
 const PAYMENTS: { value: Payment; label: string }[] = [
@@ -428,6 +430,10 @@ function OrderPanel({
   const [avulsoPrice, setAvulsoPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Adicionais (onda-N): item aberto no seletor. Carregamos os grupos sob demanda
+  // (GET) só ao clicar num item com hasModifiers — sem N+1 na listagem.
+  const [picker, setPicker] = useState<{ item: CatalogItem; groups: PickerGroup[] } | null>(null);
+  const [pickerLoading, setPickerLoading] = useState(false);
 
   const toggleExpanded = (id: string) =>
     setExpanded((prev) => {
@@ -488,16 +494,45 @@ function OrderPanel({
       body: JSON.stringify({ quantity }),
     });
 
-  // Adicionar do catálogo: se o item já está na comanda, incrementa a linha
-  // existente em vez de criar outra (resolve o hack de "repetir linha").
-  const addFromCatalog = (id: string) => {
-    const existing = order.items.find((i) => i.catalogItemId === id);
+  // Adicionar do catálogo. Item com adicionais (hasModifiers) → abre o seletor
+  // (carrega os grupos por GET). Sem adicionais → fluxo direto: se a linha já
+  // existe (e não tem adicionais), incrementa em vez de duplicar.
+  const addFromCatalog = async (id: string) => {
+    const item = catalog.find((c) => c.id === id);
+    if (item?.hasModifiers) {
+      setPickerLoading(true);
+      onError(null);
+      try {
+        const res = await fetch(`/api/vendas/catalog/${id}/modifiers`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Falha ao carregar adicionais.");
+        setPicker({ item, groups: (data.groups ?? []) as PickerGroup[] });
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Falha ao carregar adicionais.");
+      } finally {
+        setPickerLoading(false);
+      }
+      return;
+    }
+    // linhas com adicionais nunca fundem; só fundimos a linha sem modifiers.
+    const existing = order.items.find((i) => i.catalogItemId === id && !i.modifiers);
     if (existing) return setQty(existing.id, existing.quantity + 1);
     return call(`/api/vendas/orders/${order.id}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ catalogItemId: id, quantity: 1 }),
     });
+  };
+
+  // Confirmação do seletor: POST com os optionIds (sempre linha nova).
+  const confirmPicker = async (optionIds: string[]) => {
+    if (!picker) return;
+    const ok = await call(`/api/vendas/orders/${order.id}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: picker.item.id, quantity: 1, modifierOptionIds: optionIds }),
+    });
+    if (ok) setPicker(null);
   };
 
   // Bipar: resolve o código de barras → item da conta → addFromCatalog (reusa o
@@ -629,11 +664,14 @@ function OrderPanel({
                   <li>
                     <button
                       type="button"
-                      onClick={() => addFromCatalog(c.id)}
-                      disabled={busy}
+                      onClick={() => void addFromCatalog(c.id)}
+                      disabled={busy || pickerLoading}
                       className="flex w-full items-center justify-between rounded-lg border border-line-default bg-card px-3 py-1.5 text-left text-sm hover:border-brand-300 disabled:opacity-50"
                     >
-                      <span className="truncate text-ink">{c.name}</span>
+                      <span className="truncate text-ink">
+                        {c.name}
+                        {c.hasModifiers && <span className="ml-1 text-[11px] text-slate-400">• opções</span>}
+                      </span>
                       <span className="text-xs text-slate-400">{formatCentsBRL(c.priceCents)}</span>
                     </button>
                   </li>
@@ -642,6 +680,17 @@ function OrderPanel({
             </ul>
           )}
         </div>
+
+        {picker && (
+          <ModifierPicker
+            itemName={picker.item.name}
+            basePriceCents={picker.item.priceCents}
+            groups={picker.groups}
+            busy={busy}
+            onConfirm={(optionIds) => void confirmPicker(optionIds)}
+            onClose={() => setPicker(null)}
+          />
+        )}
 
         {/* Linha avulsa */}
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
@@ -676,7 +725,14 @@ function OrderPanel({
             {order.items.map((it) => (
               <li key={it.id} className="rounded-lg border border-line-default bg-card">
                 <div className="flex items-center justify-between px-3 py-2">
-                  <span className="min-w-0 truncate text-sm text-ink">{it.nameSnapshot}</span>
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm text-ink">{it.nameSnapshot}</span>
+                    {it.modifiers && it.modifiers.length > 0 && (
+                      <span className="block truncate text-[11px] text-slate-400">
+                        {it.modifiers.map((m) => `+ ${m.optionName}`).join(", ")}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
                     {/* Stepper de quantidade */}
                     <div className="flex items-center gap-1">

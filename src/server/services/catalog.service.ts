@@ -25,6 +25,9 @@ export interface CatalogItemDTO {
   menuVisible: boolean;
   menuCategory: string | null;
   menuDescription: string | null;
+  // Adicionais precificados (onda-N): tem grupos? (determina se o PDV abre o
+  // seletor ao adicionar). Vem do _count no listCatalogItems — sem N+1 por clique.
+  hasModifiers: boolean;
 }
 
 const upsertSchema = z.object({
@@ -67,6 +70,7 @@ function toDTO(o: {
   trackStock: boolean; sku: string | null; barcode: string | null; variantGroup: string | null; stockQty: number; minStock: number; costCents: number | null;
   printSector: string | null; durationMinutes: number | null; customFields: Prisma.JsonValue | null;
   menuVisible: boolean; menuCategory: string | null; menuDescription: string | null;
+  _count?: { modifierGroups: number };
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
@@ -74,6 +78,7 @@ function toDTO(o: {
     printSector: o.printSector, durationMinutes: o.durationMinutes,
     customFields: (o.customFields as Record<string, unknown> | null) ?? null,
     menuVisible: o.menuVisible, menuCategory: o.menuCategory, menuDescription: o.menuDescription,
+    hasModifiers: (o._count?.modifierGroups ?? 0) > 0,
   };
 }
 
@@ -117,6 +122,7 @@ export async function listCatalogItems(accountId: string, opts?: { activeOnly?: 
   const items = await prisma.catalogItem.findMany({
     where: { accountId, ...(opts?.activeOnly ? { active: true } : {}) },
     orderBy: [{ active: "desc" }, { name: "asc" }],
+    include: { _count: { select: { modifierGroups: true } } },
   });
   return items.map(toDTO);
 }
