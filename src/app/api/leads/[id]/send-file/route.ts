@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { sendManualMedia } from "@/server/services/conversation.service";
 import { uploadInboundMedia } from "@/server/storage/media-storage";
 import { getTenantUserId } from "@/lib/tenant";
+import { prisma } from "@/server/db/client";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,13 @@ export async function POST(
   const userId = await getTenantUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
+
+  // Gate de posse ANTES de ler o corpo/subir ao storage: um id de outra conta não
+  // pode nem gravar um blob órfão sob o prefixo desse lead (nem forçar a leitura de
+  // um upload de 16MB). sendManualMedia repete o gate ao persistir a Message, mas o
+  // upload acontece antes dele — este check fecha essa janela.
+  const owns = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!owns) return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

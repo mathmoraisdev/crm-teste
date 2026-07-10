@@ -32,7 +32,7 @@ describe("claimConversation", () => {
       leadId: "L1", tenantUserId: "T", userId: "ana", now: NOW,
     });
     expect(m.prisma.lead.updateMany).toHaveBeenCalledWith({
-      where: { id: "L1", OR: [{ attendingUserId: null }, { attendingUserId: "ana" }] },
+      where: { id: "L1", userId: "T", OR: [{ attendingUserId: null }, { attendingUserId: "ana" }] },
       data: { attendingUserId: "ana", attendingAt: NOW },
     });
     expect(r).toEqual({ ok: true, heldBy: null });
@@ -57,10 +57,10 @@ describe("claimConversation", () => {
 describe("takeoverConversation", () => {
   it("assume à força e publica (o anterior recebe o evento)", async () => {
     const m = await mods();
-    m.prisma.lead.update.mockResolvedValue({});
+    m.prisma.lead.updateMany.mockResolvedValue({ count: 1 });
     await m.svc.takeoverConversation({ leadId: "L1", tenantUserId: "T", userId: "ana", now: NOW });
-    expect(m.prisma.lead.update).toHaveBeenCalledWith({
-      where: { id: "L1" },
+    expect(m.prisma.lead.updateMany).toHaveBeenCalledWith({
+      where: { id: "L1", userId: "T" },
       data: { attendingUserId: "ana", attendingAt: NOW },
     });
     expect(m.publish).toHaveBeenCalledWith("T", { type: "conversation:changed", leadId: "L1" });
@@ -73,7 +73,7 @@ describe("releaseConversation", () => {
     m.prisma.lead.updateMany.mockResolvedValue({ count: 1 });
     await m.svc.releaseConversation({ leadId: "L1", tenantUserId: "T", userId: "ana" });
     expect(m.prisma.lead.updateMany).toHaveBeenCalledWith({
-      where: { id: "L1", attendingUserId: "ana" },
+      where: { id: "L1", userId: "T", attendingUserId: "ana" },
       data: { attendingUserId: null, attendingAt: null },
     });
     expect(m.publish).toHaveBeenCalledWith("T", { type: "conversation:changed", leadId: "L1" });

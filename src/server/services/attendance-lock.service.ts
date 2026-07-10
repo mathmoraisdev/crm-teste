@@ -29,8 +29,14 @@ export async function claimConversation(args: {
 }): Promise<ClaimResult> {
   const now = args.now ?? new Date();
   // updateMany condicional serializa dois operadores no mesmo tick: só um vê count=1.
+  // `userId: tenantUserId` deixa a trava auto-escopada: um leadId de outra conta dá
+  // count=0 (não depende do gate de posse do chamador).
   const res = await prisma.lead.updateMany({
-    where: { id: args.leadId, OR: [{ attendingUserId: null }, { attendingUserId: args.userId }] },
+    where: {
+      id: args.leadId,
+      userId: args.tenantUserId,
+      OR: [{ attendingUserId: null }, { attendingUserId: args.userId }],
+    },
     data: { attendingUserId: args.userId, attendingAt: now },
   });
   if (res.count === 1) {
@@ -39,7 +45,7 @@ export async function claimConversation(args: {
   }
   // Ocupada por outro: devolve quem segura (pro front mostrar "Fulano está atendendo").
   const lead = await prisma.lead.findFirst({
-    where: { id: args.leadId },
+    where: { id: args.leadId, userId: args.tenantUserId },
     select: { attendingUserId: true, attendingAt: true, attendingTo: { select: { id: true, name: true } } },
   });
   const holder = lead?.attendingTo
@@ -55,11 +61,15 @@ export async function takeoverConversation(args: {
   userId: string;
   now?: Date;
 }): Promise<void> {
-  await prisma.lead.update({
-    where: { id: args.leadId },
+  // updateMany (não update) p/ poder cravar `userId: tenantUserId` no where: um leadId
+  // de outra conta dá count=0 e não publica evento nem escreve nada.
+  const res = await prisma.lead.updateMany({
+    where: { id: args.leadId, userId: args.tenantUserId },
     data: { attendingUserId: args.userId, attendingAt: args.now ?? new Date() },
   });
-  await publishTenantEvent(args.tenantUserId, { type: "conversation:changed", leadId: args.leadId });
+  if (res.count === 1) {
+    await publishTenantEvent(args.tenantUserId, { type: "conversation:changed", leadId: args.leadId });
+  }
 }
 
 /** Libera a trava — SÓ se eu ainda for o dono (não apaga a trava de quem assumiu). */
@@ -69,7 +79,7 @@ export async function releaseConversation(args: {
   userId: string;
 }): Promise<void> {
   const res = await prisma.lead.updateMany({
-    where: { id: args.leadId, attendingUserId: args.userId },
+    where: { id: args.leadId, userId: args.tenantUserId, attendingUserId: args.userId },
     data: { attendingUserId: null, attendingAt: null },
   });
   if (res.count === 1) {

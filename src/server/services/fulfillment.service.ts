@@ -115,7 +115,7 @@ export async function confirmOnlineOrder(
   if (o.fulfillmentStatus !== "PENDENTE") {
     throw new Error("Pedido já foi confirmado ou recusado.");
   }
-  await prisma.order.update({ where: { id: orderId }, data: { fulfillmentStatus: "CONFIRMADO" } });
+  await prisma.order.updateMany({ where: { id: orderId, accountId }, data: { fulfillmentStatus: "CONFIRMADO" } });
   // Avisa o cliente (best-effort: não bloqueia a confirmação se falhar).
   void notifyCustomerOrderStatus(accountId, orderId, "CONFIRMADO").catch(() => {});
   const kitchen = await getKitchenOrder(accountId, orderId);
@@ -134,8 +134,8 @@ export async function rejectOnlineOrder(
     throw new Error("Pedido já foi confirmado ou recusado.");
   }
   const note = reason.trim() || "Pedido recusado pelo estabelecimento.";
-  await prisma.order.update({
-    where: { id: orderId },
+  await prisma.order.updateMany({
+    where: { id: orderId, accountId },
     data: {
       fulfillmentStatus: "RECUSADO",
       note: o.onlinePaidAt ? `${note}\n[Atenção: pedido pago online — estornar manualmente]` : note,
@@ -171,7 +171,7 @@ export async function advanceOnlineOrder(
       await closeOrder(accountId, orderId, { payment });
     }
   }
-  await prisma.order.update({ where: { id: orderId }, data: { fulfillmentStatus: next } });
+  await prisma.order.updateMany({ where: { id: orderId, accountId }, data: { fulfillmentStatus: next } });
 
   // Avisa o cliente da nova etapa (best-effort: não bloqueia o avanço).
   void notifyCustomerOrderStatus(accountId, orderId, next).catch(() => {});
