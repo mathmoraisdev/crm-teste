@@ -14,6 +14,15 @@ import {
 
 const TZ = env.SCHEDULING_TIMEZONE;
 
+/**
+ * Client de banco: a instância global OU um client de transação. Os helpers de
+ * leitura/validação aceitam este tipo para poderem correr DENTRO de uma transação
+ * interativa (ex.: `confirmBooking`) usando a MESMA conexão. Sem isso, um `prisma`
+ * global chamado dentro de uma `$transaction` pede uma 2ª conexão ao pool e, com
+ * `connection_limit=1`, trava (self-deadlock → pool timeout). Default = `prisma`.
+ */
+type Db = Prisma.TransactionClient;
+
 export interface ApptTransition {
   status: "CONFIRMADO" | "CANCELADO" | null; // null = não mexe no status
   needsReview: boolean;
@@ -65,14 +74,18 @@ export async function applyApptTransition(userId: string, id: string, t: ApptTra
  */
 
 /** Confere que o lead é da conta antes de agendar (evita gravar em lead de outro dono). */
-async function assertLeadOwned(userId: string, leadId: string): Promise<void> {
-  const lead = await prisma.lead.findFirst({ where: { id: leadId, userId }, select: { id: true } });
+async function assertLeadOwned(userId: string, leadId: string, db: Db = prisma): Promise<void> {
+  const lead = await db.lead.findFirst({ where: { id: leadId, userId }, select: { id: true } });
   if (!lead) throw new Error("Cliente não encontrado.");
 }
 
 /** Confere que o profissional é da conta antes de vincular (evita referência cross-tenant). */
-async function assertProfessionalOwned(userId: string, professionalId: string): Promise<void> {
-  const p = await prisma.professional.findFirst({
+async function assertProfessionalOwned(
+  userId: string,
+  professionalId: string,
+  db: Db = prisma,
+): Promise<void> {
+  const p = await db.professional.findFirst({
     where: { id: professionalId, accountId: userId },
     select: { id: true },
   });
@@ -84,10 +97,11 @@ async function resolveServiceName(
   userId: string,
   catalogItemId: string | null | undefined,
   serviceName: string | null | undefined,
+  db: Db = prisma,
 ): Promise<{ catalogItemId: string | null; serviceName: string | null }> {
   const name = serviceName?.trim();
   if (catalogItemId) {
-    const ci = await prisma.catalogItem.findFirst({
+    const ci = await db.catalogItem.findFirst({
       where: { id: catalogItemId, accountId: userId },
       select: { id: true, name: true },
     });
@@ -106,10 +120,11 @@ async function resolveDuration(
   userId: string,
   catalogItemId: string | null | undefined,
   durationMinutes: number | null | undefined,
+  db: Db = prisma,
 ): Promise<number | null> {
   if (durationMinutes != null) return durationMinutes;
   if (catalogItemId) {
-    const ci = await prisma.catalogItem.findFirst({
+    const ci = await db.catalogItem.findFirst({
       where: { id: catalogItemId, accountId: userId },
       select: { durationMinutes: true },
     });
@@ -131,9 +146,13 @@ interface ResolvedScope {
  * (accountId fica null, retrocompat). Sem leadId (walk-in): exige customerName e
  * escopa por accountId = conta. Uma linha tem SEMPRE leadId OU accountId.
  */
-async function resolveScope(userId: string, input: CreateAppointmentInput): Promise<ResolvedScope> {
+async function resolveScope(
+  userId: string,
+  input: CreateAppointmentInput,
+  db: Db = prisma,
+): Promise<ResolvedScope> {
   if (input.leadId) {
-    await assertLeadOwned(userId, input.leadId);
+    await assertLeadOwned(userId, input.leadId, db);
     return { leadId: input.leadId, accountId: null, customerName: null, customerPhone: null };
   }
   const name = input.customerName?.trim();
@@ -156,16 +175,17 @@ async function loadWorkingWindows(
   userId: string,
   professionalId: string,
   start: Date,
+  db: Db = prisma,
 ): Promise<DayWindow[]> {
   const { weekday } = localWeekdayAndMinutes(start, TZ);
-  const own = await prisma.workingHours.findMany({
+  const own = await db.workingHours.findMany({
     where: { accountId: userId, professionalId, weekday },
     select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
   });
   const rows =
     own.length > 0
       ? own
-      : await prisma.workingHours.findMany({
+      : await db.workingHours.findMany({
           where: { accountId: userId, professionalId: null, weekday },
           select: { startMinute: true, endMinute: true, breakStart: true, breakEnd: true },
         });
@@ -187,8 +207,9 @@ async function isOutsideWorkingHours(
   professionalId: string,
   start: Date,
   end: Date,
+  db: Db = prisma,
 ): Promise<boolean> {
-  const windows = await loadWorkingWindows(userId, professionalId, start);
+  const windows = await loadWorkingWindows(userId, professionalId, start, db);
   if (windows.length === 0) return false;
   const { minuteOfDay: slotStartMin } = localWeekdayAndMinutes(start, TZ);
   const { minuteOfDay: slotEndMin } = localWeekdayAndMinutes(end, TZ);
@@ -208,11 +229,12 @@ export async function conflictsFor(
   start: Date,
   end: Date,
   exceptId?: string,
+  db: Db = prisma,
 ): Promise<{ id: string; scheduledAt: Date; serviceName: string | null }[]> {
   // Janela grosseira p/ trás: cobre agendamentos que começam antes mas se estendem
   // até `start`. 24h folga com sobra a durações reais (minutos/horas).
   const COARSE_BACK_MS = 24 * 60 * 60 * 1000;
-  const candidates = await prisma.appointment.findMany({
+  const candidates = await db.appointment.findMany({
     where: {
       professionalId,
       professional: { accountId },
@@ -247,15 +269,16 @@ async function assertSlotFree(
   start: Date,
   durationMinutes: number | null,
   opts: SlotGuardOpts,
+  db: Db = prisma,
 ): Promise<void> {
   const end = appointmentEnd(start, durationMinutes);
   if (!opts.allowOverlap) {
-    const conflicts = await conflictsFor(userId, professionalId, start, end, opts.exceptId);
+    const conflicts = await conflictsFor(userId, professionalId, start, end, opts.exceptId, db);
     if (conflicts.length > 0) {
       throw new Error("CONFLICT: Profissional já tem agendamento nesse horário.");
     }
   }
-  if (!opts.force && (await isOutsideWorkingHours(userId, professionalId, start, end))) {
+  if (!opts.force && (await isOutsideWorkingHours(userId, professionalId, start, end, db))) {
     throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
   }
 }
@@ -306,22 +329,30 @@ export async function createAppointment(
   input: CreateAppointmentInput,
   tx?: Prisma.TransactionClient,
 ) {
-  const scope = await resolveScope(userId, input);
+  // Dentro de uma transação (tx presente), TODAS as leituras/validações correm no
+  // MESMO client — senão pedem uma 2ª conexão ao pool e travam com connection_limit=1.
+  const db = tx ?? prisma;
+  const scope = await resolveScope(userId, input, db);
   const { catalogItemId, serviceName } = await resolveServiceName(
     userId,
     input.catalogItemId,
     input.serviceName,
+    db,
   );
-  const durationMinutes = await resolveDuration(userId, catalogItemId, input.durationMinutes);
+  const durationMinutes = await resolveDuration(userId, catalogItemId, input.durationMinutes, db);
   if (input.professionalId) {
-    await assertProfessionalOwned(userId, input.professionalId);
-    await assertSlotFree(userId, input.professionalId, input.scheduledAt, durationMinutes, {
-      allowOverlap: input.allowOverlap,
-      force: input.force,
-    });
+    await assertProfessionalOwned(userId, input.professionalId, db);
+    await assertSlotFree(
+      userId,
+      input.professionalId,
+      input.scheduledAt,
+      durationMinutes,
+      { allowOverlap: input.allowOverlap, force: input.force },
+      db,
+    );
   }
-  const run = async (db: Prisma.TransactionClient) =>
-    db.appointment.create({
+  const run = async (client: Prisma.TransactionClient) =>
+    client.appointment.create({
       data: {
         leadId: scope.leadId,
         accountId: scope.accountId,
@@ -334,7 +365,7 @@ export async function createAppointment(
         professionalId: input.professionalId ?? null,
         note: input.note?.trim() || null,
         createdById: input.createdById,
-        number: await reserveAppointmentNumbers(db, userId),
+        number: await reserveAppointmentNumbers(client, userId),
         ...(input.source ? { source: input.source } : {}),
       },
     });

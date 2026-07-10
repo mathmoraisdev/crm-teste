@@ -307,16 +307,19 @@ export async function confirmBooking(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
 
     // Pré-checa o conflito ANTES de resolver o cliente (evita lead órfão no slot tomado).
+    // TODAS as queries daqui usam `tx` (a conexão já segurada pela transação): com
+    // `connection_limit=1` (pooler Supabase), pedir uma 2ª conexão ao pool trava.
     const end = appointmentEnd(start, service.durationMinutes);
-    const conflicts = await conflictsFor(accountId, input.professionalId, start, end);
+    const conflicts = await conflictsFor(accountId, input.professionalId, start, end, undefined, tx);
     if (conflicts.length > 0) {
       throw new Error("CONFLICT: Esse horário acabou de ser preenchido.");
     }
 
-    const lead = await resolveOrCreatePublicLead(accountId, {
-      name: input.customerName,
-      phone: input.customerPhone,
-    });
+    const lead = await resolveOrCreatePublicLead(
+      accountId,
+      { name: input.customerName, phone: input.customerPhone },
+      tx,
+    );
 
     const appt = await createAppointment(
       accountId,

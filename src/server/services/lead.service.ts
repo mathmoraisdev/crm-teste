@@ -16,8 +16,9 @@ import { invalidateLeadCaches } from "@/server/cache/keys";
  */
 export async function contactCapacity(
   userId: string,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<{ unlimited: boolean; max: number; used: number; remaining: number }> {
-  const owner = await prisma.user.findUnique({
+  const owner = await db.user.findUnique({
     where: { id: userId },
     select: { email: true, plan: true },
   });
@@ -26,13 +27,16 @@ export async function contactCapacity(
     return { unlimited: true, max: Infinity, used: 0, remaining: Infinity };
   }
   const max = PLAN_LIMITS[owner.plan].maxContacts;
-  const used = await prisma.lead.count({ where: { userId } });
+  const used = await db.lead.count({ where: { userId } });
   return { unlimited: false, max, used, remaining: Math.max(0, max - used) };
 }
 
 /** Lança se o plano já atingiu o teto de contatos (criação deliberada). */
-export async function assertContactQuota(userId: string): Promise<void> {
-  const cap = await contactCapacity(userId);
+export async function assertContactQuota(
+  userId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<void> {
+  const cap = await contactCapacity(userId, db);
   if (!cap.unlimited && cap.remaining <= 0) {
     throw new Error(
       `Seu plano permite ${cap.max.toLocaleString("pt-BR")} contatos (limite atingido). Faça upgrade para adicionar mais.`,
@@ -240,6 +244,7 @@ export async function createLead(
 export async function resolveOrCreatePublicLead(
   accountId: string,
   input: { name: string; phone: string },
+  db: Prisma.TransactionClient = prisma,
 ): Promise<Lead | null> {
   const phone = normalizePhone(input.phone);
   if (!phone) throw new Error(`Telefone inválido: ${input.phone}`);
@@ -247,12 +252,12 @@ export async function resolveOrCreatePublicLead(
 
   // Chip primário: um CONECTADO de preferência; senão qualquer; senão nenhum.
   const chip =
-    (await prisma.whatsAppNumber.findFirst({
+    (await db.whatsAppNumber.findFirst({
       where: { userId: accountId, status: "CONNECTED" },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     })) ??
-    (await prisma.whatsAppNumber.findFirst({
+    (await db.whatsAppNumber.findFirst({
       where: { userId: accountId },
       select: { id: true },
       orderBy: { createdAt: "asc" },
@@ -261,20 +266,20 @@ export async function resolveOrCreatePublicLead(
   // Dedupe pela identidade do contato: com chip, por (whatsAppNumberId, phone);
   // sem chip, por (userId, phone).
   const existing = chip
-    ? await prisma.lead.findFirst({
+    ? await db.lead.findFirst({
         where: { whatsAppNumberId: chip.id, phone },
         select: { id: true, name: true },
       })
-    : await prisma.lead.findFirst({
+    : await db.lead.findFirst({
         where: { userId: accountId, phone },
         select: { id: true, name: true },
       });
   if (existing) {
     // Atualiza o nome só se antes era o placeholder (o próprio telefone).
     if (existing.name === phone && name !== phone) {
-      return prisma.lead.update({ where: { id: existing.id }, data: { name } });
+      return db.lead.update({ where: { id: existing.id }, data: { name } });
     }
-    return prisma.lead.findUniqueOrThrow({ where: { id: existing.id } });
+    return db.lead.findUniqueOrThrow({ where: { id: existing.id } });
   }
 
   // Sem chip e sem lead pré-existente → walk-in (não cria contato que não seria lembrado).
@@ -282,11 +287,11 @@ export async function resolveOrCreatePublicLead(
 
   // Novo contato COM chip: respeita o teto do plano. Estourou → null (vira walk-in).
   try {
-    await assertContactQuota(accountId);
+    await assertContactQuota(accountId, db);
   } catch {
     return null;
   }
-  const lead = await prisma.lead.create({
+  const lead = await db.lead.create({
     data: {
       userId: accountId,
       whatsAppNumberId: chip.id,
