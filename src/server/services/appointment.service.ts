@@ -39,6 +39,19 @@ export async function lockProfessionalForBooking(
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking|${professionalId}`}))`;
 }
 
+/**
+ * Trava anti-corrida POR CONTA, para o modo "recurso único" (negócio de uma pessoa
+ * SEM profissional cadastrado): todos os agendamentos disputam uma única agenda.
+ * Serializa criações/edições sem profissional na mesma conta. Chave em namespace
+ * próprio (`booking|acct|…`), não colide com a trava por profissional (UUID).
+ */
+export async function lockAccountForBooking(
+  tx: Prisma.TransactionClient,
+  accountId: string,
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking|acct|${accountId}`}))`;
+}
+
 export interface ApptTransition {
   status: "CONFIRMADO" | "CANCELADO" | null; // null = não mexe no status
   needsReview: boolean;
@@ -299,6 +312,65 @@ async function assertSlotFree(
   }
 }
 
+/**
+ * Conta em modo "recurso único": NENHUM profissional ativo cadastrado. Nesse caso o
+ * negócio é uma pessoa/uma agenda só, então agendamentos SEM profissional disputam
+ * o mesmo horário. Com profissional cadastrado, "sem profissional" = "não atribuído"
+ * e mantém o comportamento antigo (não bloqueia).
+ */
+async function isSingleResourceAccount(accountId: string, db: Db = prisma): Promise<boolean> {
+  const n = await db.professional.count({ where: { accountId, active: true } });
+  return n === 0;
+}
+
+/**
+ * Agendamentos SEM profissional da conta (walk-in por accountId OU lead da conta)
+ * cujo intervalo sobrepõe [start, end). Espelha `conflictsFor`, mas na agenda única
+ * do modo "recurso único".
+ */
+async function accountConflictsFor(
+  accountId: string,
+  start: Date,
+  end: Date,
+  exceptId: string | undefined,
+  db: Db = prisma,
+): Promise<{ id: string }[]> {
+  const COARSE_BACK_MS = 24 * 60 * 60 * 1000;
+  const candidates = await db.appointment.findMany({
+    where: {
+      professionalId: null,
+      OR: [{ accountId }, { lead: { userId: accountId } }],
+      status: { in: ["AGENDADO", "CONFIRMADO"] },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+      scheduledAt: { gte: new Date(start.getTime() - COARSE_BACK_MS), lt: end },
+    },
+    select: { id: true, scheduledAt: true, durationMinutes: true },
+  });
+  return candidates
+    .filter((c) => overlaps(start, end, c.scheduledAt, appointmentEnd(c.scheduledAt, c.durationMinutes)))
+    .map((c) => ({ id: c.id }));
+}
+
+/**
+ * Guarda de sobreposição do modo "recurso único" (conta sem profissional): trava por
+ * conta e barra outro agendamento sem profissional que cruze [start, fim). Roda
+ * DENTRO da transação. Assume que já se decidiu guardar (conta solo, sem allowOverlap).
+ */
+async function assertAccountSlotFree(
+  accountId: string,
+  start: Date,
+  durationMinutes: number | null,
+  exceptId: string | undefined,
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  await lockAccountForBooking(tx, accountId);
+  const end = appointmentEnd(start, durationMinutes);
+  const conflicts = await accountConflictsFor(accountId, start, end, exceptId, tx);
+  if (conflicts.length > 0) {
+    throw new Error("CONFLICT: Já existe agendamento nesse horário.");
+  }
+}
+
 export interface CreateAppointmentInput {
   leadId?: string | null; // opcional: walk-in não tem lead
   customerName?: string | null; // walk-in: nome livre (obrigatório sem lead)
@@ -373,6 +445,9 @@ export async function createAppointment(
         { allowOverlap: input.allowOverlap, force: input.force },
         client,
       );
+    } else if (!input.allowOverlap && (await isSingleResourceAccount(userId, client))) {
+      // Sem profissional numa conta de uma pessoa só → agenda única: barra sobreposição.
+      await assertAccountSlotFree(userId, input.scheduledAt, durationMinutes, undefined, client);
     }
     return client.appointment.create({
       data: {
@@ -450,6 +525,11 @@ export async function createSeries(
         if (!base.force && (await isOutsideWorkingHours(userId, profId, at, end, tx))) {
           throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
         }
+      }
+    } else if (!base.allowOverlap && (await isSingleResourceAccount(userId, tx))) {
+      // Conta de uma pessoa só (sem profissional) → agenda única: cada sessão barra sobreposição.
+      for (const at of sessions) {
+        await assertAccountSlotFree(userId, at, durationMinutes, undefined, tx);
       }
     }
     const startNumber = await reserveAppointmentNumbers(tx, userId);
@@ -606,9 +686,18 @@ export async function updateAppointment(userId: string, id: string, input: Updat
     }
   }
 
-  // Sem profissional no resultado: sem risco de sobreposição → update direto.
+  // Sem profissional no resultado: conta de uma pessoa só (recurso único) ainda barra
+  // sobreposição na agenda única; conta COM profissionais trata "sem profissional"
+  // como "não atribuído" e faz o update direto (sem risco de disputa de recurso).
   if (!effectiveProfessionalId) {
-    return prisma.appointment.update({ where: { id }, data });
+    const effectiveStart = input.scheduledAt ?? current.scheduledAt;
+    if (input.allowOverlap || !(await isSingleResourceAccount(userId))) {
+      return prisma.appointment.update({ where: { id }, data });
+    }
+    return prisma.$transaction(async (tx) => {
+      await assertAccountSlotFree(userId, effectiveStart, effectiveDuration, id, tx);
+      return tx.appointment.update({ where: { id }, data });
+    });
   }
 
   // Com profissional: trava por profissional + recheca de slot + update ATÔMICOS na
