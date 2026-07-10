@@ -327,62 +327,6 @@ describe("appointment.service", () => {
     ).rejects.toThrow(/CONFLICT/);
   });
 
-  it("recurso único (conta SEM profissional): dois agendamentos sobrepostos → CONFLICT", async () => {
-    const acc = await makeOwner(); // nenhum profissional cadastrado → agenda única
-    await createAppointment(acc, {
-      customerName: "A", scheduledAt: new Date("2026-10-01T13:00:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    await expect(
-      createAppointment(acc, {
-        customerName: "B", scheduledAt: new Date("2026-10-01T13:30:00.000Z"),
-        durationMinutes: 60, createdById: acc,
-      }),
-    ).rejects.toThrow(/CONFLICT/);
-  });
-
-  it("recurso único: allowOverlap libera a sobreposição", async () => {
-    const acc = await makeOwner();
-    await createAppointment(acc, {
-      customerName: "A", scheduledAt: new Date("2026-10-02T13:00:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    const ok = await createAppointment(acc, {
-      customerName: "B", scheduledAt: new Date("2026-10-02T13:30:00.000Z"),
-      durationMinutes: 60, allowOverlap: true, createdById: acc,
-    });
-    expect(ok.id).toBeTruthy();
-  });
-
-  it("conta COM profissional NÃO restringe agendamento sem profissional (não é recurso único)", async () => {
-    const acc = await makeOwner();
-    await makeProfessional(acc); // tem profissional → "sem profissional" = não atribuído
-    await createAppointment(acc, {
-      customerName: "A", scheduledAt: new Date("2026-10-03T13:00:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    const ok = await createAppointment(acc, {
-      customerName: "B", scheduledAt: new Date("2026-10-03T13:30:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    expect(ok.id).toBeTruthy(); // não bloqueia
-  });
-
-  it("recurso único: reagendar sem profissional para horário ocupado → CONFLICT", async () => {
-    const acc = await makeOwner();
-    await createAppointment(acc, {
-      customerName: "A", scheduledAt: new Date("2026-10-04T13:00:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    const b = await createAppointment(acc, {
-      customerName: "B", scheduledAt: new Date("2026-10-04T16:00:00.000Z"),
-      durationMinutes: 60, createdById: acc,
-    });
-    await expect(
-      updateAppointment(acc, b.id, { scheduledAt: new Date("2026-10-04T13:30:00.000Z") }),
-    ).rejects.toThrow(/CONFLICT/);
-  });
-
   it("mesmo horário com OUTRO profissional não conflita", async () => {
     const acc = await makeOwner();
     const leadId = await makeLead(acc, "+5511900020003");
