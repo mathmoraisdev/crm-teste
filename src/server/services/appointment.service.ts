@@ -23,6 +23,22 @@ const TZ = env.SCHEDULING_TIMEZONE;
  */
 type Db = Prisma.TransactionClient;
 
+/**
+ * Trava anti-corrida de agendamento, POR PROFISSIONAL (não por horário exato).
+ * Serializa QUALQUER criação no mesmo profissional dentro da transação — fecha a
+ * janela em que dois horários DIFERENTES que se sobrepõem (ex.: serviço de 60 min
+ * às 10:00 vs 10:15) passariam ambos na checagem. Vive até o commit; contenção
+ * desprezível (agendamento é raro, transação curta). `hashtext` → int4, cabe no
+ * bigint do advisory lock. Chave única: use SEMPRE este helper (nunca monte a chave
+ * na mão), senão dois caminhos travam em chaves diferentes e não serializam.
+ */
+export async function lockProfessionalForBooking(
+  tx: Prisma.TransactionClient,
+  professionalId: string,
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking|${professionalId}`}))`;
+}
+
 export interface ApptTransition {
   status: "CONFIRMADO" | "CANCELADO" | null; // null = não mexe no status
   needsReview: boolean;

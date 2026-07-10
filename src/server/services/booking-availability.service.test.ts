@@ -36,6 +36,12 @@ async function makeOwner() {
   return u.id;
 }
 
+/** Profissional cru (retorna só o id) — igual ao helper de appointment.service.test.ts. */
+async function makeProfessional(userId: string, name = "Profissional") {
+  const p = await prisma.professional.create({ data: { accountId: userId, name } });
+  return p.id;
+}
+
 async function makeChip(accountId: string, status: "CONNECTED" | "PAUSED" = "CONNECTED") {
   const n = await prisma.whatsAppNumber.create({
     data: {
@@ -263,9 +269,9 @@ describe("booking-availability.service — confirmBooking", () => {
     ).rejects.toThrow(/janela/i);
   });
 
-  it("conta sem chip → walk-in (sem lead) e SEM confirmação", async () => {
+  it("conta sem chip → cria lead solto (vira Cliente) mas SEM confirmação por WhatsApp", async () => {
     const { acc, pro, svc, startISO } = await readyAccount();
-    // sem makeChip → sem chip
+    // sem makeChip → conta sem WhatsApp conectado
 
     const res = await confirmBooking(acc, {
       catalogItemId: svc.id,
@@ -275,11 +281,54 @@ describe("booking-availability.service — confirmBooking", () => {
       customerPhone: "+5511955556666",
     });
 
-    expect(res.isWalkIn).toBe(true);
-    expect(res.leadId).toBeNull();
+    // agora o contato é materializado (aparece em Leads/Clientes)…
+    expect(res.isWalkIn).toBe(false);
+    expect(res.leadId).toBeTruthy();
     const appt = await prisma.appointment.findUnique({ where: { id: res.appointmentId } });
-    expect(appt?.leadId).toBeNull();
-    expect(appt?.customerName).toBe("Walk Inn");
+    expect(appt?.leadId).toBe(res.leadId);
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: res.leadId! } });
+    expect(lead.whatsAppNumberId).toBeNull(); // solto: sem chip p/ lembrete
+    expect(lead.consentSource).toBe("public_booking");
+    // …mas sem chip não há por onde mandar a confirmação.
     expect(sendWhatsAppMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("booking-availability.service — confirmBooking anti-corrida", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("dois confirmBooking SOBREPOSTOS (horários diferentes) no mesmo profissional: só um entra", async () => {
+    const acc = await makeOwner();
+    await prisma.user.update({ where: { id: acc }, data: { bookingEnabled: true } });
+    const pro = await makeProfessional(acc);
+    const item = await createCatalogItem(acc, { name: "Corte 60", priceCents: 5000 });
+    await prisma.catalogItem.update({ where: { id: item.id }, data: { durationMinutes: 60 } });
+
+    // Inícios calculados a partir de AGORA (não fixados numa hora do dia, p/ não
+    // depender do wall-clock): +3h e +3h30 estão > bookingLeadMinutes=120 e <<
+    // horizonte=30d. Serviço de 60 min → [+3h,+4h) x [+3h30,+4h30) se sobrepõem.
+    const at = (offsetMin: number) =>
+      new Date(Date.now() + 3 * 60 * 60 * 1000 + offsetMin * 60 * 1000).toISOString();
+    const mk = (startISO: string) =>
+      confirmBooking(acc, {
+        catalogItemId: item.id,
+        professionalId: pro,
+        startISO,
+        customerName: "Cliente",
+        customerPhone: "+5511999990000",
+      });
+
+    const results = await Promise.allSettled([mk(at(0)), mk(at(30))]);
+    const ok = results.filter((r) => r.status === "fulfilled");
+    const failed = results.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(failed).toHaveLength(1);
+    expect((failed[0] as PromiseRejectedResult).reason.message).toMatch(/CONFLICT/);
+
+    // E só existe UM agendamento ativo para o profissional
+    const count = await prisma.appointment.count({
+      where: { professionalId: pro, status: { in: ["AGENDADO", "CONFIRMADO"] } },
+    });
+    expect(count).toBe(1);
   });
 });

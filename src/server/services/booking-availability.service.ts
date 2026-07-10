@@ -7,7 +7,7 @@ import {
   enumerateLocalDates,
 } from "@/lib/agenda/availability";
 import { resolveWorkingWindows } from "./professional.service";
-import { conflictsFor, createAppointment } from "./appointment.service";
+import { conflictsFor, createAppointment, lockProfessionalForBooking } from "./appointment.service";
 import { resolveOrCreatePublicLead } from "./lead.service";
 import { sendWhatsAppMessage } from "./messaging";
 
@@ -299,12 +299,11 @@ export async function confirmBooking(
   if (!pro) throw new Error("Profissional não encontrado.");
 
   // 2. guarda anti-corrida + 3./4. resolve cliente e cria — tudo sob a trava do slot.
-  const lockKey = `booking|${input.professionalId}|${input.startISO}`;
   const created = await prisma.$transaction(async (tx) => {
-    // A trava vive até o fim da transação: enquanto este confirm roda, outro no
-    // MESMO slot fica bloqueado aqui — quando destrava, já vê o agendamento e cai
-    // no CONFLICT. `hashtext` → int4 (cabe no bigint do advisory lock).
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+    // Trava POR PROFISSIONAL: enquanto este confirm roda, QUALQUER outro pedido no
+    // mesmo profissional (mesmo horário OU horário sobreposto) espera aqui; quando
+    // destrava, a recheca de conflito abaixo já vê o agendamento e cai no CONFLICT.
+    await lockProfessionalForBooking(tx, input.professionalId);
 
     // Pré-checa o conflito ANTES de resolver o cliente (evita lead órfão no slot tomado).
     // TODAS as queries daqui usam `tx` (a conexão já segurada pela transação): com
