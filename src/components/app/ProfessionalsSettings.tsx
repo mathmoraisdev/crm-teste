@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock, Plus } from "lucide-react";
+import { Clock, Pencil, Plus } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -41,6 +41,8 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
   const [error, setError] = useState<string | null>(null);
 
   const [adding, setAdding] = useState(false);
+  // id do profissional em edição (reusa o mesmo form do "Adicionar" via PATCH); null = criando.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>("slate");
   const [userId, setUserId] = useState<string>("");
@@ -81,9 +83,20 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
 
   function resetForm() {
     setAdding(false);
+    setEditingId(null);
     setName("");
     setColor("slate");
     setUserId("");
+    setError(null);
+  }
+
+  /** Abre o form já preenchido para editar um profissional existente (PATCH). */
+  function startEdit(p: ProfessionalDTO) {
+    setAdding(false);
+    setEditingId(p.id);
+    setName(p.name);
+    setColor(p.color);
+    setUserId(p.userId ?? "");
     setError(null);
   }
 
@@ -93,11 +106,18 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
       return;
     }
     const payload = { name: name.trim(), color, userId: userId || null };
-    const res = await fetch("/api/professionals", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    // Mesmo form serve p/ criar (POST) e editar (PATCH no id).
+    const res = editingId
+      ? await fetch(`/api/professionals/${editingId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch("/api/professionals", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Falha ao salvar profissional");
@@ -131,7 +151,8 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
         subtitle="Equipe que atende. Cada agendamento pode ser atribuído a um profissional, com sua própria cor e grade de expediente."
         action={
           canEdit &&
-          !adding && (
+          !adding &&
+          !editingId && (
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus size={14} /> Adicionar
             </Button>
@@ -143,8 +164,11 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
           <p className="rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>
         )}
 
-        {adding && (
+        {(adding || editingId) && (
           <div className="space-y-2.5 rounded-xl border border-brand-200 bg-brand-50/40 p-3">
+            <p className="text-xs font-semibold text-ink">
+              {editingId ? "Editar profissional" : "Novo profissional"}
+            </p>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-600">Nome</label>
@@ -243,6 +267,11 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
                 >
                   <Clock size={14} /> Horários
                 </Button>
+                {canEdit && (
+                  <Button size="sm" variant="ghost" onClick={() => startEdit(p)}>
+                    <Pencil size={14} /> Editar
+                  </Button>
+                )}
                 {canEdit &&
                   (p.active ? (
                     <Button size="sm" variant="ghost" onClick={() => setActive(p, false)}>
