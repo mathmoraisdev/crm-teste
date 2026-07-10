@@ -37,3 +37,28 @@ describe("seedCustomFieldPreset (escopo PRODUCT)", () => {
     expect(second.created).toBe(0);
   });
 });
+
+describe("seedCustomFieldPreset (presets curados por ramo)", () => {
+  it("semeia campo ORDER de serviço (salão → profissional)", async () => {
+    const a = await makeOwner();
+    await seedCustomFieldPreset(a, "salao-beleza");
+    const defs = await listDefs(a, "ORDER");
+    expect(defs.some((d) => d.key === "profissional")).toBe(true);
+  });
+
+  it("semeia campo DATE (fotografia → data do evento)", async () => {
+    const a = await makeOwner();
+    await seedCustomFieldPreset(a, "fotografia-filmagem");
+    const defs = await listDefs(a, "ORDER");
+    const data = defs.find((d) => d.key === "data_do_evento");
+    expect(data?.type).toBe("DATE");
+  });
+
+  it("semeia campos por item (viagens → destino)", async () => {
+    const a = await makeOwner();
+    await seedCustomFieldPreset(a, "agencia-viagens");
+    const defs = await listDefs(a, "ORDER_ITEM");
+    expect(defs.some((d) => d.key === "destino")).toBe(true);
+    expect(defs.some((d) => d.key === "n_de_pessoas")).toBe(true);
+  });
+});
