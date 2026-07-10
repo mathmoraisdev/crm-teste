@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ShoppingBag } from "lucide-react";
 import type { PublicMenuDTO } from "@/server/services/menu.service";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
@@ -52,6 +53,9 @@ export function MenuStorefront({
   function clearCart() {
     setCart({});
     setView("menu");
+  }
+  function scrollToCat(idx: number) {
+    document.getElementById(`cat-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const cartCount = Object.values(cart).reduce((s, n) => s + n, 0);
@@ -116,98 +120,127 @@ export function MenuStorefront({
   }
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="pb-24">
       {!open && (
-        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
           Loja fechada no momento. Você pode ver o cardápio, mas o pedido só é aceito no horário de funcionamento.
         </div>
       )}
 
       {menu.categories.length === 0 && (
-        <p className="rounded-xl border border-slate-200 bg-card px-4 py-10 text-center text-sm text-slate-500">
+        <p className="rounded-2xl border border-line bg-card px-4 py-12 text-center text-sm text-slate-500">
           Nenhum item no cardápio ainda.
         </p>
       )}
 
-      {menu.categories.map((cat) => (
-        <section key={cat.name}>
-          <h2 className="mb-2 font-display text-base font-bold text-ink">{cat.name}</h2>
-          <div className="space-y-2">
-            {cat.items.map((it) => (
-              <div
-                key={it.id}
-                className={`flex items-center gap-3 rounded-xl border border-slate-200 bg-card px-3 py-3 dark:border-slate-700 ${
-                  !it.available ? "opacity-60" : ""
-                }`}
-              >
-                {it.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.photoUrl} alt={it.name} className="h-14 w-14 flex-shrink-0 rounded-lg object-cover" />
-                ) : (
-                  <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-400 dark:bg-slate-800">
-                    {it.name.charAt(0).toUpperCase()}
+      {/* Navegação de categorias (fixa ao rolar) */}
+      {menu.categories.length > 1 && (
+        <nav className="sticky top-0 z-10 -mx-4 mb-4 flex gap-2 overflow-x-auto border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {menu.categories.map((cat, idx) => (
+            <button
+              key={cat.name}
+              type="button"
+              onClick={() => scrollToCat(idx)}
+              className="shrink-0 rounded-full border border-line bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-brand-400 hover:text-brand-600"
+            >
+              {cat.name}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      <div className="space-y-7">
+        {menu.categories.map((cat, idx) => (
+          <section key={cat.name} id={`cat-${idx}`} className="scroll-mt-20">
+            <h2 className="mb-3 font-display text-lg font-bold tracking-[-0.01em] text-ink">{cat.name}</h2>
+            <div className="space-y-3">
+              {cat.items.map((it) => (
+                <div
+                  key={it.id}
+                  className={`flex gap-3 rounded-2xl border border-line bg-card p-3 transition-shadow hover:shadow-sm ${
+                    !it.available ? "opacity-60" : ""
+                  }`}
+                >
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <p className="font-semibold leading-snug text-ink">{it.name}</p>
+                    {it.description && (
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{it.description}</p>
+                    )}
+                    <p className="mt-auto pt-2 text-sm font-bold text-ink">{formatCentsBRL(it.priceCents)}</p>
                   </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-ink">{it.name}</p>
-                  {it.description && <p className="line-clamp-2 text-xs text-slate-500">{it.description}</p>}
-                  <p className="mt-0.5 text-sm font-medium text-brand-600">{formatCentsBRL(it.priceCents)}</p>
-                </div>
-                {it.available ? (
-                  <div className="flex items-center gap-2">
-                    {cart[it.id] ? (
-                      <>
+
+                  <div className="relative shrink-0">
+                    {it.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.photoUrl} alt={it.name} className="h-24 w-24 rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-inset text-2xl font-bold text-slate-300 dark:text-slate-600">
+                        {it.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {!it.available ? (
+                      <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 shadow-sm dark:bg-rose-500/20 dark:text-rose-300">
+                        Esgotado
+                      </span>
+                    ) : cart[it.id] ? (
+                      <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-raised px-1 py-1 shadow-md">
                         <button
                           type="button"
                           onClick={() => changeQty(it.id, -1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-ink dark:border-slate-600"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-ink hover:bg-inset"
+                          aria-label="Remover um"
                         >
                           −
                         </button>
-                        <span className="w-5 text-center text-sm font-semibold text-ink">{cart[it.id]}</span>
+                        <span className="min-w-5 text-center text-sm font-bold text-ink">{cart[it.id]}</span>
                         <button
                           type="button"
                           onClick={() => changeQty(it.id, 1)}
                           disabled={!open}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white disabled:opacity-40"
+                          className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-white disabled:opacity-40"
+                          aria-label="Adicionar um"
                         >
                           +
                         </button>
-                      </>
+                      </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => changeQty(it.id, 1)}
                         disabled={!open}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white disabled:opacity-40"
+                        className="absolute -bottom-2 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-lg font-bold text-white shadow-md disabled:opacity-40"
+                        aria-label={`Adicionar ${it.name}`}
                       >
                         +
                       </button>
                     )}
                   </div>
-                ) : (
-                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-400">
-                    Esgotado
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
 
       {/* Barra de carrinho fixa */}
       {cartCount > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-4 pb-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md px-4 pb-4">
           <button
             type="button"
             onClick={() => setView("cart")}
-            className="flex w-full items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-white shadow-lg"
+            className="flex w-full items-center justify-between rounded-2xl bg-brand-500 px-4 py-3.5 text-white shadow-xl shadow-brand-500/25 transition-transform active:scale-[0.99]"
           >
-            <span className="text-sm font-medium">
-              {cartCount} {cartCount === 1 ? "item" : "itens"} · Ver carrinho
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <span className="relative">
+                <ShoppingBag size={20} />
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-brand-600">
+                  {cartCount}
+                </span>
+              </span>
+              Ver carrinho
             </span>
-            <span className="text-sm font-semibold">{formatCentsBRL(totals.totalCents)}</span>
+            <span className="text-base font-bold">{formatCentsBRL(totals.totalCents)}</span>
           </button>
         </div>
       )}
