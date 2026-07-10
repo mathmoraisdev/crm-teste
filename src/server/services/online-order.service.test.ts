@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
+import { saveItemModifiers, listItemModifiers } from "./modifier.service";
 
 beforeAll(() => {
   process.env.DATABASE_URL =
@@ -237,6 +238,58 @@ describe("placeOnlineOrder", () => {
     expect(m.createOnlinePixCharge).toHaveBeenCalledWith(acc, res.orderId, 2000, "Pix");
     // O mock substitui createOnlinePixCharge (não persiste o charge no Order); só
     // conferimos que foi chamado com o total = subtotal + taxa (aqui 2000 + 0).
+  });
+
+  it("adicionais: subtotal inclui os deltas e o Pix cobra o total somado", async () => {
+    const acc = await makeOwner();
+    const itemId = await seedMenuItem(acc, "Burger", 2000);
+    await saveItemModifiers(acc, itemId, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [
+        { name: "Média", priceDeltaCents: 0 }, { name: "Grande", priceDeltaCents: 800 } ] },
+      { name: "Extras", minSelect: 0, maxSelect: 2, options: [{ name: "Bacon", priceDeltaCents: 500 }] },
+    ]);
+    const groups = await listItemModifiers(acc, itemId);
+    const grande = groups[0].options.find((o) => o.name === "Grande")!;
+    const bacon = groups[1].options.find((o) => o.name === "Bacon")!;
+    const m = await mods();
+    const { placeOnlineOrder } = await import("./online-order.service");
+    const res = await placeOnlineOrder(acc, {
+      mode: "RETIRADA", customerName: "Zé", customerPhone: "11999998888",
+      items: [{ catalogItemId: itemId, quantity: 2, optionIds: [grande.id, bacon.id] }],
+      payment: "online",
+    });
+    const o = await prisma.order.findUnique({ where: { id: res.orderId }, include: { items: true } });
+    expect(o?.items[0]?.unitPriceCents).toBe(3300); // 2000 + 800 + 500
+    // Pix cobra o total somado: 3300 × 2 = 6600 (sem taxa em retirada)
+    expect(m.createOnlinePixCharge).toHaveBeenCalledWith(acc, res.orderId, 6600, "Zé");
+  });
+
+  it("adicionais: opção inválida → rejeita (MODIFIER → 409)", async () => {
+    const acc = await makeOwner();
+    const itemId = await seedMenuItem(acc, "Suco", 800);
+    await saveItemModifiers(acc, itemId, [
+      { name: "Tamanho", minSelect: 0, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 0 }] },
+    ]);
+    const { placeOnlineOrder } = await import("./online-order.service");
+    await expect(placeOnlineOrder(acc, {
+      mode: "RETIRADA", customerName: "A", customerPhone: "11999997777",
+      items: [{ catalogItemId: itemId, quantity: 1, optionIds: ["xxx"] }],
+      payment: "on_delivery",
+    })).rejects.toThrow(/MODIFIER/);
+  });
+
+  it("adicionais: grupo obrigatório sem escolha → rejeita (MODIFIER → 409)", async () => {
+    const acc = await makeOwner();
+    const itemId = await seedMenuItem(acc, "Pizza", 3000);
+    await saveItemModifiers(acc, itemId, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 0 }] },
+    ]);
+    const { placeOnlineOrder } = await import("./online-order.service");
+    await expect(placeOnlineOrder(acc, {
+      mode: "RETIRADA", customerName: "A", customerPhone: "11999996666",
+      items: [{ catalogItemId: itemId, quantity: 1 }],
+      payment: "on_delivery",
+    })).rejects.toThrow(/MODIFIER/);
   });
 
   it("pagamento online sem entitlement → rejeita (PAY_OFF)", async () => {

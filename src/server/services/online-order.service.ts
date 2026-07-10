@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { env } from "@/lib/env";
 import { openOrder, addItem } from "./order.service";
+import { resolveModifierSelection } from "./modifier.service";
 import { getDeliverySettings } from "./delivery-settings.service";
 import { resolveZoneFee } from "./delivery-zone.service";
 import { getPublicMenu } from "./menu.service";
@@ -14,7 +15,7 @@ export interface PlaceOnlineOrderInput {
   mode: "DELIVERY" | "RETIRADA";
   customerName: string;
   customerPhone: string;
-  items: { catalogItemId: string; quantity: number; note?: string }[];
+  items: { catalogItemId: string; quantity: number; note?: string; optionIds?: string[] }[];
   address?: {
     neighborhoodZoneId?: string;
     street?: string;
@@ -52,9 +53,15 @@ export async function placeOnlineOrder(accountId: string, input: PlaceOnlineOrde
     const m = validById.get(li.catalogItemId);
     if (!m || !m.available) throw new Error("ITEM_UNAVAILABLE:Um item saiu do cardápio.");
   }
-  // Snapshot de preço pelo servidor (nunca confia no client).
+  // Adicionais: resolve cada linha CONTRA o banco (fonte de verdade do preço; nunca
+  // confia no client). É async → resolve antes do subtotal (não cabe no reduce).
+  // Lança "MODIFIER:..." p/ o handler mapear p/ 409 (código já em KNOWN_CODES).
+  const resolved = await Promise.all(
+    input.items.map((li) => resolveModifierSelection(accountId, li.catalogItemId, li.optionIds ?? [])),
+  );
+  // Snapshot de preço pelo servidor: base do cardápio + Σ deltas dos adicionais.
   const subtotal = input.items.reduce(
-    (s, li) => s + validById.get(li.catalogItemId)!.priceCents * Math.max(1, li.quantity),
+    (s, li, i) => s + (validById.get(li.catalogItemId)!.priceCents + resolved[i].deltaCents) * Math.max(1, li.quantity),
     0,
   );
 
@@ -94,6 +101,7 @@ export async function placeOnlineOrder(accountId: string, input: PlaceOnlineOrde
     await addItem(accountId, dto.id, {
       catalogItemId: li.catalogItemId,
       quantity: li.quantity,
+      ...(li.optionIds?.length ? { modifierOptionIds: li.optionIds } : {}),
       ...(li.note ? { customFields: { obs: li.note } } : {}),
     });
   }

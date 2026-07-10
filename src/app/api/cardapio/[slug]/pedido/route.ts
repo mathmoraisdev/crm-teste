@@ -23,6 +23,7 @@ const bodySchema = z.object({
         catalogItemId: z.string().min(1),
         quantity: z.number().int().min(1).max(99),
         note: z.string().trim().max(280).optional(),
+        optionIds: z.array(z.string()).optional(),
       }),
     )
     .min(1, "Carrinho vazio."),
@@ -40,7 +41,7 @@ const bodySchema = z.object({
 });
 
 // Erros de regra do serviço, prefixados "CODE:mensagem" → 409 (conflito de estado).
-const KNOWN_CODES = ["STORE_CLOSED", "MODE_OFF", "ITEM_UNAVAILABLE", "ZONE_REQUIRED", "MIN_ORDER", "PAY_OFF", "EMPTY"];
+const KNOWN_CODES = ["STORE_CLOSED", "MODE_OFF", "ITEM_UNAVAILABLE", "ZONE_REQUIRED", "MIN_ORDER", "PAY_OFF", "EMPTY", "MODIFIER"];
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
