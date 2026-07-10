@@ -36,6 +36,7 @@ import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
 import { shouldCreateContact } from "./inbound-resolve";
 import { isAccountActiveByLead } from "@/server/services/account.service";
+import { getBusinessAddress } from "@/server/services/branding.service";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
@@ -711,12 +712,16 @@ export async function respondToLead(leadId: string): Promise<void> {
   // 4d. Atendimento: responde a dúvida no contexto da empresa (sempre que autoReply).
   if (mode.reply) {
     const { block: catalogBlock, hasCatalog } = await loadCatalogBlock(lead.userId);
+    // Endereço da conta (branding) p/ a IA responder "onde vocês ficam?" sem o
+    // operador digitar à mão. Fail-open: null quando não cadastrado (omite a linha).
+    const businessAddress = await getBusinessAddress(lead.userId);
     const companyForReply = {
       displayName: company?.displayName ?? company?.label ?? null,
       systemPromptOverride: company?.systemPromptOverride ?? null,
       persona: company?.persona ?? null,
       knowledgeBase: company?.knowledgeBase ?? null,
       businessHours: company?.businessHours ?? null,
+      businessAddress,
       customInstructions: company?.customInstructions ?? null,
     };
 
@@ -868,6 +873,7 @@ export async function suggestAttendanceReply(
   );
 
   const { block: catalogBlock } = await loadCatalogBlock(lead.userId);
+  const businessAddress = await getBusinessAddress(lead.userId);
 
   return generateAttendanceReply({
     ai,
@@ -877,6 +883,7 @@ export async function suggestAttendanceReply(
       persona: company?.persona ?? null,
       knowledgeBase: company?.knowledgeBase ?? null,
       businessHours: company?.businessHours ?? null,
+      businessAddress,
       customInstructions: company?.customInstructions ?? null,
     },
     catalogBlock,

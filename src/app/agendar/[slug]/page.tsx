@@ -10,6 +10,7 @@ import {
 } from "@/server/services/booking-availability.service";
 import { enumerateLocalDates } from "@/lib/agenda/availability";
 import { BookingWidget } from "@/components/agendar/BookingWidget";
+import { AddressBlock } from "@/components/public/AddressBlock";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,12 @@ export default async function AgendarPage({
             <p className="text-sm text-slate-500">Agende seu horário online</p>
           </div>
         </header>
+
+        {branding.businessAddress && (
+          <div className="mb-6">
+            <AddressBlock address={branding.businessAddress} label="Onde vai ser" />
+          </div>
+        )}
 
         {ready ? (
           <BookingWidget

@@ -22,4 +22,10 @@ describe("resolveBranding", () => {
     const r = resolveBranding({ brandScale: { "500": "1 2 3" }, appName: null, logoUrl: null, presetId: null } as never);
     expect(r.palette).toEqual(DEFAULT_PALETTE);
   });
+
+  it("businessAddress: trim; vazio/ausente → null", () => {
+    expect(resolveBranding(null).businessAddress).toBeNull();
+    expect(resolveBranding({ businessAddress: "  Rua A, 1  " } as never).businessAddress).toBe("Rua A, 1");
+    expect(resolveBranding({ businessAddress: "   " } as never).businessAddress).toBeNull();
+  });
 });

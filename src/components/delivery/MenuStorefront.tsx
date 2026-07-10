@@ -25,12 +25,15 @@ export function MenuStorefront({
   settings,
   zones,
   open,
+  businessAddress,
 }: {
   slug: string;
   menu: PublicMenuDTO;
   settings: DeliverySettingsDTO;
   zones: DeliveryZoneDTO[];
   open: boolean;
+  /** Endereço do estabelecimento p/ o bloco de retirada no checkout. null = não exibe. */
+  businessAddress: string | null;
 }) {
   const items = menu.categories.flatMap((c) => c.items);
   // Carrinho keyed por combinação (item + adicionais). Item sem adicional usa a
@@ -316,6 +319,7 @@ export function MenuStorefront({
           cart={cart}
           settings={settings}
           zones={zones}
+          businessAddress={businessAddress}
           onClose={() => setView("cart")}
           onSuccess={handleSuccess}
         />

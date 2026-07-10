@@ -406,6 +406,12 @@ model AccountBranding {
   // do app logado (esse segue o SO/toggle da Sidebar por usuário).
   publicTheme String @default("light")
 
+  // Endereço físico do estabelecimento (texto livre, uma linha). Universal a
+  // todo ramo — mostrado ao cliente na RETIRADA (cardápio + acompanhamento) e no
+  // agendamento presencial, e injetado no contexto da IA (onda-P). null = não
+  // cadastrado (superfícies omitem o bloco).
+  businessAddress String?
+
   // --- Impressão de cupom (N2, opt-in por conta) ---
   printMode   String? // null/"browser" = imprime pelo navegador (N1); "escpos" = QZ Tray
   printerName String? // nome da impressora no QZ Tray (quando printMode=escpos)

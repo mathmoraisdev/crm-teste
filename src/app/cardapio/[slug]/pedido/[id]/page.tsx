@@ -71,7 +71,12 @@ export default async function PedidoTrackingPage({
           </div>
         </header>
 
-        <OrderTracker slug={slug} orderId={id} initial={tracking} />
+        <OrderTracker
+          slug={slug}
+          orderId={id}
+          initial={tracking}
+          businessAddress={branding.businessAddress}
+        />
       </main>
     </div>
   );

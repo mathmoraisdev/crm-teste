@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Clock, Package, ChefHat, Bike, Home, Copy, Loader2, X } from "lucide-react";
 import { formatCentsBRL } from "@/lib/money";
 import type { FulfillmentStatus, OrderType } from "@prisma/client";
+import { AddressBlock } from "@/components/public/AddressBlock";
 
 // Espelha PublicOrderTracking (order-tracking.service). Mantido local para o
 // client não importar do servidor.
@@ -47,10 +48,13 @@ export function OrderTracker({
   slug,
   orderId,
   initial,
+  businessAddress,
 }: {
   slug: string;
   orderId: string;
   initial: Tracking;
+  /** Endereço do estabelecimento — exibido só em pedido de RETIRADA. null = não exibe. */
+  businessAddress: string | null;
 }) {
   const [tracking, setTracking] = useState<Tracking>(initial);
   const [copied, setCopied] = useState(false);
@@ -123,6 +127,11 @@ export function OrderTracker({
           <p className="mt-3 rounded-lg bg-inset px-3 py-2 text-xs text-slate-600">
             Obs: {tracking.note}
           </p>
+        )}
+        {tracking.orderType === "RETIRADA" && businessAddress && (
+          <div className="mt-3">
+            <AddressBlock address={businessAddress} label="Retirar em" />
+          </div>
         )}
       </div>
 

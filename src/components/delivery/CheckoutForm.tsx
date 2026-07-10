@@ -5,6 +5,7 @@ import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.se
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
 import { formatCentsBRL } from "@/lib/money";
 import { computeCartTotals, entryUnitPriceCents, type FulfillMode, type CartEntry } from "@/lib/delivery/cart";
+import { AddressBlock } from "@/components/public/AddressBlock";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-inset dark:text-ink";
@@ -25,6 +26,7 @@ export function CheckoutForm({
   cart,
   settings,
   zones,
+  businessAddress,
   onClose,
   onSuccess,
 }: {
@@ -32,6 +34,8 @@ export function CheckoutForm({
   cart: Record<string, CartEntry>;
   settings: DeliverySettingsDTO;
   zones: DeliveryZoneDTO[];
+  /** Endereço do estabelecimento p/ o bloco "Retirar em". null = não exibe. */
+  businessAddress: string | null;
   onClose: () => void;
   onSuccess: (res: CheckoutResult) => void;
 }) {
@@ -201,6 +205,11 @@ export function CheckoutForm({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Retirada: onde o cliente busca o pedido */}
+          {mode === "RETIRADA" && businessAddress && (
+            <AddressBlock address={businessAddress} label="Retirar em" />
           )}
 
           {/* Pagamento */}

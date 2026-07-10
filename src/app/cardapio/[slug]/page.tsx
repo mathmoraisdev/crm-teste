@@ -128,6 +128,7 @@ export default async function CardapioPage({
             settings={settings}
             zones={zones}
             open={open}
+            businessAddress={branding.businessAddress}
           />
         </div>
       </main>

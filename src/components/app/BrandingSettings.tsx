@@ -25,12 +25,19 @@ type PublicTheme = "light" | "dark";
 export function BrandingSettings({
   initial,
 }: {
-  initial: { presetId: string | null; appName: string; logoUrl: string | null; publicTheme: PublicTheme };
+  initial: {
+    presetId: string | null;
+    appName: string;
+    logoUrl: string | null;
+    publicTheme: PublicTheme;
+    businessAddress: string | null;
+  };
 }) {
   const router = useRouter();
   const [presetId, setPresetId] = useState<string | null>(initial.presetId);
   const [appName, setAppName] = useState(initial.appName);
   const [publicTheme, setPublicTheme] = useState<PublicTheme>(initial.publicTheme);
+  const [businessAddress, setBusinessAddress] = useState(initial.businessAddress ?? "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(initial.logoUrl);
   const [saving, setSaving] = useState(false);
@@ -53,6 +60,7 @@ export function BrandingSettings({
       if (presetId) form.set("presetId", presetId);
       form.set("appName", appName.trim());
       form.set("publicTheme", publicTheme);
+      form.set("businessAddress", businessAddress.trim());
       if (logoFile) form.set("logo", logoFile);
       const res = await fetch("/api/branding", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
@@ -137,6 +145,22 @@ export function BrandingSettings({
             placeholder="Disparador.ai"
             className={inputClass}
           />
+        </div>
+
+        {/* Endereço do estabelecimento */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500">Endereço do estabelecimento</p>
+          <textarea
+            value={businessAddress}
+            onChange={(e) => setBusinessAddress(e.target.value)}
+            rows={2}
+            placeholder="Ex.: Rua das Flores, 123 — Centro, São Paulo/SP"
+            className={inputClass}
+          />
+          <p className="mt-1.5 text-xs text-slate-400">
+            Mostrado ao cliente na retirada e no agendamento presencial, e usado pela IA quando
+            perguntarem onde você fica. Deixe em branco para não exibir.
+          </p>
         </div>
 
         {/* Tema das páginas públicas (cardápio + agendamento) */}

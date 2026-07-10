@@ -8,23 +8,32 @@ import {
 } from "./attendance-context";
 
 describe("buildAttendanceContext", () => {
-  it("inclui persona, base e horário quando presentes", () => {
+  it("inclui persona, base, horário e endereço quando presentes", () => {
     const out = buildAttendanceContext({
       displayName: "Acme",
       persona: "descontraído",
       knowledgeBase: "Vendemos guarda-chuvas. Frete grátis acima de R$100.",
       businessHours: "Seg–Sex 9h–18h",
+      businessAddress: "Rua das Flores, 123 — Centro",
     });
     expect(out).toContain("Acme");
     expect(out).toContain("descontraído");
     expect(out).toContain("guarda-chuvas");
     expect(out).toContain("Seg–Sex 9h–18h");
+    expect(out).toContain("Rua das Flores, 123 — Centro");
   });
 
   it("omite seções ausentes sem quebrar", () => {
-    const out = buildAttendanceContext({ displayName: null, persona: null, knowledgeBase: null, businessHours: null });
+    const out = buildAttendanceContext({
+      displayName: null,
+      persona: null,
+      knowledgeBase: null,
+      businessHours: null,
+      businessAddress: null,
+    });
     expect(out).not.toContain("Persona:");
     expect(out).not.toContain("Horário");
+    expect(out).not.toContain("Endereço");
     expect(typeof out).toBe("string");
   });
 });

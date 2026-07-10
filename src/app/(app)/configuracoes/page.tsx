@@ -103,6 +103,7 @@ export default async function ConfiguracoesPage() {
               appName: branding.appName,
               logoUrl: branding.logoUrl,
               publicTheme: branding.publicTheme,
+              businessAddress: branding.businessAddress,
             }}
           />
         </div>

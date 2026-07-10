@@ -124,6 +124,7 @@ interface AttendanceCompany {
   persona?: string | null;
   knowledgeBase?: string | null;
   businessHours?: string | null;
+  businessAddress?: string | null;
   customInstructions?: string | null;
 }
 

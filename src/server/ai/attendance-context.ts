@@ -13,11 +13,14 @@ export function buildAttendanceContext(c: {
   persona?: string | null;
   knowledgeBase?: string | null;
   businessHours?: string | null;
+  businessAddress?: string | null;
 }): string {
   const parts: string[] = [];
   if (c.displayName) parts.push(`Empresa: ${c.displayName}`);
   if (c.persona) parts.push(`Persona/estilo: ${c.persona}`);
   if (c.businessHours) parts.push(`Horário de atendimento: ${c.businessHours}`);
+  if (c.businessAddress)
+    parts.push(`Endereço (para retirada e atendimento presencial): ${c.businessAddress}`);
   if (c.knowledgeBase) parts.push(`Base de conhecimento:\n${c.knowledgeBase}`);
   return parts.join("\n\n");
 }

@@ -13,6 +13,7 @@ export interface ResolvedBranding {
   logoUrl: string | null;
   presetId: string | null; // p/ pré-selecionar o preset atual na UI
   publicTheme: PublicTheme; // tema das páginas públicas (cardápio/agendamento); default claro
+  businessAddress: string | null; // endereço físico (retirada/agendamento/IA); null = não cadastrado
 }
 
 /** Valida que um JSON tem as 11 paradas com formato "R G B"; senão null. */
@@ -39,7 +40,25 @@ export function resolveBranding(row: AccountBranding | null): ResolvedBranding {
     presetId: row?.presetId ?? null,
     // Qualquer valor que não seja exatamente "dark" cai em claro (default seguro).
     publicTheme: row?.publicTheme === "dark" ? "dark" : "light",
+    businessAddress: row?.businessAddress?.trim() || null,
   };
+}
+
+/**
+ * Lê SÓ o endereço físico da conta (barato: 1 query, 1 coluna). Fail-open: se a
+ * leitura falhar (coluna ainda não migrada em prod, hiccup) devolve null — a IA e
+ * as superfícies só omitem o bloco, nunca quebram. Usado pelo contexto da IA.
+ */
+export async function getBusinessAddress(tenantUserId: string): Promise<string | null> {
+  try {
+    const row = await prisma.accountBranding.findUnique({
+      where: { accountId: tenantUserId },
+      select: { businessAddress: true },
+    });
+    return row?.businessAddress?.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Lê o branding do dono da conta e resolve (com fallback). Barato: 1 query. */
