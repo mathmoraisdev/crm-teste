@@ -155,15 +155,21 @@ export async function advanceOnlineOrder(
     throw new Error("Não há próximo status para este pedido.");
   }
   const next = NEXT[o.fulfillmentStatus as Exclude<FulfillmentStatus, "RECUSADO" | "ENTREGUE">];
-  await prisma.order.update({ where: { id: orderId }, data: { fulfillmentStatus: next } });
 
   if (next === "ENTREGUE") {
-    // Fecha a comanda financeiramente: PIX se havia cobrança online (mesmo se o
-    // webhook ainda não confirmou — o lojista só avança a ENTREGUE se recebeu),
+    // Fecha a comanda financeiramente ANTES de marcar ENTREGUE. Se closeOrder falhar
+    // (ex.: baixa de estoque), o pedido permanece no status anterior e o lojista pode
+    // reprocessar — não fica preso em ENTREGUE+ABERTA. Só fecha se ainda ABERTA (uma
+    // retomada após fechamento parcial pula direto para marcar ENTREGUE).
+    // PIX se havia cobrança online (o lojista só avança a ENTREGUE se recebeu),
     // DINHEIRO se era pagar-na-entrega.
-    const payment = o.onlineChargeProvider ? "PIX" : "DINHEIRO";
-    await closeOrder(accountId, orderId, { payment });
+    if (o.status === "ABERTA") {
+      const payment = o.onlineChargeProvider ? "PIX" : "DINHEIRO";
+      await closeOrder(accountId, orderId, { payment });
+    }
   }
+  await prisma.order.update({ where: { id: orderId }, data: { fulfillmentStatus: next } });
+
   // Avisa o cliente da nova etapa (best-effort: não bloqueia o avanço).
   void notifyCustomerOrderStatus(accountId, orderId, next).catch(() => {});
   return { fulfillmentStatus: next, status: next === "ENTREGUE" ? "FECHADA" : "ABERTA" };

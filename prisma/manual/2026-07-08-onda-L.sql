@@ -70,3 +70,10 @@ CREATE TABLE IF NOT EXISTS "DeliveryZone" (
 );
 CREATE INDEX IF NOT EXISTS "DeliveryZone_accountId_active_idx"
   ON "DeliveryZone" ("accountId","active");
+
+-- 7) FK Order.deliveryZoneId -> DeliveryZone (onDelete: SetNull, como no schema).
+-- Precisa vir DEPOIS do CREATE TABLE "DeliveryZone" acima. Guardada p/ idempotência.
+DO $$ BEGIN
+  ALTER TABLE "Order" ADD CONSTRAINT "Order_deliveryZoneId_fkey"
+    FOREIGN KEY ("deliveryZoneId") REFERENCES "DeliveryZone"("id") ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN null; END $$;

@@ -8,6 +8,7 @@ import { isStoreOpen } from "@/lib/delivery/hours";
 import { canSellOnline } from "./entitlements";
 import { isAccountActive } from "@/server/services/account.service";
 import { createOnlinePixCharge } from "./online-payment.service";
+import { notifyMerchantNewOnlineOrder } from "./fulfillment-notify.service";
 
 export interface PlaceOnlineOrderInput {
   mode: "DELIVERY" | "RETIRADA";
@@ -116,6 +117,10 @@ export async function placeOnlineOrder(accountId: string, input: PlaceOnlineOrde
   if (wantsOnline) {
     const totalCents = subtotal + deliveryFeeCents;
     pix = await createOnlinePixCharge(accountId, dto.id, totalCents, input.customerName);
+  } else {
+    // Pagar-na-entrega já entra "vivo": avisa o lojista na hora (best-effort).
+    // Pago-online só vira pedido válido quando o webhook confirma → aviso sai lá.
+    void notifyMerchantNewOnlineOrder(accountId, dto.id).catch(() => {});
   }
 
   return { orderId: dto.id, payment: input.payment, pix };

@@ -5,6 +5,7 @@ import { resolvePaymentForUser } from "@/server/payments/resolve";
 import { gatewayFor } from "@/server/payments/gateway";
 import { isAccountActive } from "@/server/services/account.service";
 import { sendWhatsAppMessage } from "./messaging";
+import { notifyMerchantNewOnlineOrder } from "./fulfillment-notify.service";
 import { formatCentsBRL } from "@/lib/money";
 
 /** Lead mínimo p/ enviar a cobrança (mesmos campos que `sendWhatsAppMessage` usa). */
@@ -182,7 +183,8 @@ async function confirmOnlineOrderCharge(
     where: { id: order.id },
     data: { onlinePaidAt: new Date() },
   });
-  // TODO(Fase 8): notifyMerchantNewOnlineOrder(order.accountId, order.id) — avisa o lojista que entrou pedido pago.
+  // Avisa o lojista que entrou um pedido pago-online (best-effort, não bloqueia).
+  await notifyMerchantNewOnlineOrder(order.accountId, order.id).catch(() => {});
   return { confirmed: true };
 }
 

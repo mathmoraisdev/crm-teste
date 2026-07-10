@@ -125,6 +125,35 @@ describe("fulfillment.service", () => {
     expect(online?.status).toBe("FECHADA");
   });
 
+  it("DELIVERY: ao ENTREGUE fecha a comanda com a taxa de entrega inclusa no tender", async () => {
+    const acc = await makeOwner();
+    const itemId = await seedItem(acc, "Pizza", 1500, "Cozinha");
+    const { createZone } = await import("./delivery-zone.service");
+    const zone = await createZone(acc, { name: "Centro", feeCents: 800 });
+    const res = await placeOnlineOrder(acc, {
+      mode: "DELIVERY",
+      customerName: "Cliente",
+      customerPhone: "11999990000",
+      items: [{ catalogItemId: itemId, quantity: 2 }],
+      address: { neighborhoodZoneId: zone.id, street: "Rua A", number: "10" },
+      payment: "on_delivery",
+    });
+    const { confirmOnlineOrder, advanceOnlineOrder } = await import("./fulfillment.service");
+    await confirmOnlineOrder(acc, res.orderId);
+    await advanceOnlineOrder(acc, res.orderId); // EM_PREPARO
+    await advanceOnlineOrder(acc, res.orderId); // PRONTO
+    await advanceOnlineOrder(acc, res.orderId); // SAIU_ENTREGA
+    await advanceOnlineOrder(acc, res.orderId); // ENTREGUE → fecha
+
+    const order = await prisma.order.findUnique({ where: { id: res.orderId }, select: { status: true, payment: true } });
+    expect(order?.status).toBe("FECHADA");
+    expect(order?.payment).toBe("DINHEIRO");
+    // O tender tem que cobrir subtotal (3000) + taxa (800) = 3800, não só o subtotal.
+    const tenders = await prisma.orderTender.findMany({ where: { orderId: res.orderId }, select: { amountCents: true } });
+    const paid = tenders.reduce((s, t) => s + t.amountCents, 0);
+    expect(paid).toBe(3800);
+  });
+
   it("rejectOnlineOrder: PENDENTE → RECUSADO (não fecha comanda, não baixa estoque)", async () => {
     const acc = await makeOwner();
     const itemId = await seedItem(acc, "Estoque", 1000);

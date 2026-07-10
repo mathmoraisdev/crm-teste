@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db/client";
 import { formatCentsBRL } from "@/lib/money";
+import { orderTotalCents } from "./order.service";
 import { logger } from "@/lib/logger";
 
 const loadPool = () => import("@/server/whatsapp/baileys/pool");
@@ -22,11 +23,11 @@ export async function notifyMerchantNewOnlineOrder(accountId: string, orderId: s
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, accountId },
-      select: { number: true, orderType: true, fulfillmentStatus: true, customerPhone: true, onlinePaidAt: true, items: { select: { unitPriceCents: true, quantity: true } } },
+      select: { number: true, orderType: true, fulfillmentStatus: true, customerPhone: true, onlinePaidAt: true, deliveryFeeCents: true, items: { select: { unitPriceCents: true, quantity: true } } },
     });
     if (!order) return;
 
-    const total = order.items.reduce((s, i) => s + i.unitPriceCents * i.quantity, 0);
+    const total = orderTotalCents({ items: order.items, deliveryFeeCents: order.deliveryFeeCents });
     const doc = order.number != null ? `#${order.number}` : orderId.slice(0, 8);
     const tipo = order.orderType === "DELIVERY" ? "Entrega" : order.orderType === "RETIRADA" ? "Retirada" : "Pedido";
     const pago = order.onlinePaidAt ? " (Pago online)" : " (Pagar na entrega)";

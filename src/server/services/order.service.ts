@@ -251,11 +251,14 @@ export async function closeOrder(
   }
 
   // Total derivado COM os ajustes da comanda — é a base do saldo e do troco.
+  // Inclui a taxa de entrega (pedido ONLINE/DELIVERY) p/ o tender/cupom bater com
+  // o que foi cobrado no Pix e com o total exibido na fila de pedidos.
   const total = orderTotalCents({
     items: order.items,
     discountCents: order.discountCents,
     surchargeCents: order.surchargeCents,
     tipCents: order.tipCents,
+    deliveryFeeCents: order.deliveryFeeCents,
   });
 
   // Resolve os meios de pagamento. Retrocompat: o antigo { payment } vira um
