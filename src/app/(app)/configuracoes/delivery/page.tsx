@@ -6,6 +6,8 @@ import { prisma } from "@/server/db/client";
 import { getDeliverySettings } from "@/server/services/delivery-settings.service";
 import { listZones } from "@/server/services/delivery-zone.service";
 import { canUseDelivery } from "@/server/services/entitlements";
+import { getBusinessTemplateId } from "@/server/services/account.service";
+import { getTemplate } from "@/lib/business-templates";
 import { DeliveryConfig } from "@/components/delivery/DeliveryConfig";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ export default async function DeliveryConfigPage() {
   if (!ctx) redirect("/login");
   const ownerId = ctx.tenantUserId;
 
-  const [settings, zones, u, entitled, catRows] = await Promise.all([
+  const [settings, zones, u, entitled, catRows, businessTemplateId] = await Promise.all([
     getDeliverySettings(ownerId),
     listZones(ownerId, { includeInactive: true }),
     prisma.user.findUnique({ where: { id: ownerId }, select: { publicSlug: true, menuEnabled: true } }),
@@ -28,10 +30,13 @@ export default async function DeliveryConfigPage() {
       where: { accountId: ownerId, active: true, menuVisible: true },
       select: { menuCategory: true },
     }),
+    getBusinessTemplateId(ownerId),
   ]);
 
   const slug = u?.publicSlug ?? null;
   const publicUrl = slug ? `${env.APP_URL}/cardapio/${slug}` : null;
+  // Ramo alimentação fala "cardápio"; demais ramos falam "vitrine" (mesmo recurso).
+  const isFood = (businessTemplateId ? getTemplate(businessTemplateId)?.category : null) === "alimentacao";
 
   // Nomes distintos de categoria (trim), em ordem alfabética; sem o balde "Outros".
   const menuCategories = [
@@ -45,16 +50,19 @@ export default async function DeliveryConfigPage() {
           ← Configurações
         </a>
         <h1 className="mt-2 font-display text-2xl font-bold tracking-[-0.02em] text-ink sm:text-[26px]">
-          Cardápio & Delivery
+          {isFood ? "Cardápio & Delivery" : "Vitrine & Delivery"}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Publique seu cardápio online, configure entrega/retirada, taxas por bairro e pagamento Pix.
+          {isFood
+            ? "Publique seu cardápio online, configure entrega/retirada, taxas por bairro e pagamento Pix."
+            : "Publique sua vitrine online, configure entrega/retirada, taxas por bairro e pagamento Pix."}
         </p>
       </header>
 
       <DeliveryConfig
         canEdit={ctx.perms.canSettings}
         entitled={entitled}
+        isFood={isFood}
         menuCategories={menuCategories}
         initialCategoryOrder={settings.categoryOrder}
         initial={{

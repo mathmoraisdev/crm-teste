@@ -367,6 +367,32 @@ export function CatalogManager({
   const accountSeed =
     accountTemplate && catalogSeedItems(accountTemplate).length > 0 ? accountTemplate : null;
 
+  // Vocabulário do link público conforme o ramo: alimentação fala "cardápio", os
+  // demais ramos falam "vitrine" (é o mesmo recurso — a página pública em /cardapio).
+  const isFood = accountTemplate?.category === "alimentacao";
+  const menuVocab = isFood
+    ? {
+        section: "Cardápio online",
+        show: "Mostrar no cardápio",
+        hidden: "Oculto no cardápio",
+        categoryLabel: "Categoria (tópico do cardápio)",
+        categoryPlaceholder: "ex.: Lanches, Bebidas — opcional",
+        descLabel: "Descrição no cardápio",
+        descPlaceholder: "ex.: Pão brioche, hambúrguer 180g, queijo — opcional",
+      }
+    : {
+        section: "Vitrine online",
+        show: "Mostrar na vitrine",
+        hidden: "Oculto na vitrine",
+        categoryLabel: "Categoria (tópico da vitrine)",
+        categoryPlaceholder: "ex.: Serviços, Pacotes — opcional",
+        descLabel: "Descrição na vitrine",
+        descPlaceholder: "ex.: o que está incluído, duração — opcional",
+      };
+  // "Setor de produção" nasceu p/ roteirizar comanda de cozinha; fora da alimentação
+  // o exemplo "cozinha, bar" não faz sentido — placeholder neutro.
+  const sectorPlaceholder = isFood ? "ex.: cozinha, bar — opcional" : "ex.: sala, setor — opcional";
+
   return (
     <Card>
       <CardHeader
@@ -477,7 +503,7 @@ export function CatalogManager({
                     <input
                       value={editSector}
                       onChange={(e) => setEditSector(e.target.value)}
-                      placeholder="ex.: cozinha, bar — opcional"
+                      placeholder={sectorPlaceholder}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                   </Field>
@@ -495,7 +521,7 @@ export function CatalogManager({
                   {menuEnabled && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-slate-600">Cardápio online</p>
+                        <p className="text-[11px] font-semibold text-slate-600">{menuVocab.section}</p>
                         <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                           <input
                             type="checkbox"
@@ -503,25 +529,25 @@ export function CatalogManager({
                             onChange={(e) => setEditMenuVisible(e.target.checked)}
                             className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
                           />
-                          Mostrar no cardápio
+                          {menuVocab.show}
                         </label>
                       </div>
-                      <Field label="Categoria (tópico do cardápio)">
+                      <Field label={menuVocab.categoryLabel}>
                         <input
                           list="menu-cats"
                           value={editMenuCategory}
                           onChange={(e) => setEditMenuCategory(e.target.value)}
-                          placeholder="ex.: Lanches, Bebidas — opcional"
+                          placeholder={menuVocab.categoryPlaceholder}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                         />
                       </Field>
-                      <Field label="Descrição no cardápio">
+                      <Field label={menuVocab.descLabel}>
                         <textarea
                           value={editMenuDescription}
                           onChange={(e) => setEditMenuDescription(e.target.value)}
                           rows={2}
                           maxLength={280}
-                          placeholder="ex.: Pão brioche, hambúrguer 180g, queijo — opcional"
+                          placeholder={menuVocab.descPlaceholder}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                         />
                       </Field>
@@ -632,7 +658,7 @@ export function CatalogManager({
                       )}
                       {menuEnabled && !it.menuVisible && (
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                          Oculto no cardápio
+                          {menuVocab.hidden}
                         </span>
                       )}
                       {it.trackStock && (
@@ -731,7 +757,7 @@ export function CatalogManager({
               <input
                 value={sector}
                 onChange={(e) => setSector(e.target.value)}
-                placeholder="ex.: cozinha, bar — opcional"
+                placeholder={sectorPlaceholder}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </Field>
@@ -749,7 +775,7 @@ export function CatalogManager({
             {menuEnabled && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold text-slate-600">Cardápio online</p>
+                  <p className="text-[11px] font-semibold text-slate-600">{menuVocab.section}</p>
                   <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                     <input
                       type="checkbox"
@@ -757,25 +783,25 @@ export function CatalogManager({
                       onChange={(e) => setMenuVisible(e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
                     />
-                    Mostrar no cardápio
+                    {menuVocab.show}
                   </label>
                 </div>
-                <Field label="Categoria (tópico do cardápio)">
+                <Field label={menuVocab.categoryLabel}>
                   <input
                     list="menu-cats"
                     value={menuCategory}
                     onChange={(e) => setMenuCategory(e.target.value)}
-                    placeholder="ex.: Lanches, Bebidas — opcional"
+                    placeholder={menuVocab.categoryPlaceholder}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
                 </Field>
-                <Field label="Descrição no cardápio">
+                <Field label={menuVocab.descLabel}>
                   <textarea
                     value={menuDescription}
                     onChange={(e) => setMenuDescription(e.target.value)}
                     rows={2}
                     maxLength={280}
-                    placeholder="ex.: Pão brioche, hambúrguer 180g, queijo — opcional"
+                    placeholder={menuVocab.descPlaceholder}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   />
                 </Field>

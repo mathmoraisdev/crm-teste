@@ -76,6 +76,7 @@ export function DeliveryConfig({
   initialZones,
   canEdit = true,
   entitled = true,
+  isFood = true,
   menuCategories = [],
   initialCategoryOrder = [],
 }: {
@@ -84,6 +85,8 @@ export function DeliveryConfig({
   canEdit?: boolean;
   /** Conta tem o add-on de Delivery ativo? Sem ele, não dá pra publicar o cardápio. */
   entitled?: boolean;
+  /** Ramo alimentação → fala "cardápio"; demais ramos → "vitrine" (mesmo link público). */
+  isFood?: boolean;
   /** Categorias (menuCategory) em uso no cardápio hoje. */
   menuCategories?: string[];
   /** Ordem manual salva das categorias. */
@@ -252,8 +255,12 @@ export function DeliveryConfig({
   return (
     <Card>
       <CardHeader
-        title="Cardápio & Delivery"
-        subtitle="Publique seu cardápio em um link público (sem login) com carrinho, entrega/retirada, taxa por bairro e Pix online."
+        title={isFood ? "Cardápio & Delivery" : "Vitrine & Delivery"}
+        subtitle={
+          isFood
+            ? "Publique seu cardápio em um link público (sem login) com carrinho, entrega/retirada, taxa por bairro e Pix online."
+            : "Publique sua vitrine em um link público (sem login) com carrinho, entrega/retirada, taxa por bairro e Pix online."
+        }
       />
       <div className="space-y-5 px-4 py-3">
         {/* Add-on pago: sem ele, o cardápio não pode ser publicado. */}
@@ -263,7 +270,7 @@ export function DeliveryConfig({
               Add-on de Delivery — {formatCentsBRL(DELIVERY_ADDON_PRICE_CENTS)}/mês
             </p>
             <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400/80">
-              Publique o cardápio, receba pedidos de entrega/retirada e cobre Pix online. Fale com o
+              Publique {isFood ? "o cardápio" : "a vitrine"}, receba pedidos de entrega/retirada e cobre Pix online. Fale com o
               suporte para ativar — você já pode deixar tudo configurado aqui enquanto isso.
             </p>
           </div>
@@ -282,7 +289,7 @@ export function DeliveryConfig({
             className="mt-0.5"
           />
           <span>
-            <span className="block text-sm font-medium text-ink">Publicar cardápio online</span>
+            <span className="block text-sm font-medium text-ink">Publicar {isFood ? "cardápio" : "vitrine"} online</span>
             <span className="block text-xs text-slate-500">
               {entitled
                 ? "Enquanto desligado, o link responde como inexistente (404)."
@@ -305,7 +312,7 @@ export function DeliveryConfig({
             className={inputClass}
           />
           <span className="mt-1 block text-xs text-slate-500">
-            Mesmo endereço do agendamento. O cardápio fica em <code>/cardapio/&lt;endereço&gt;</code>.
+            Mesmo endereço do agendamento. {isFood ? "O cardápio" : "A vitrine"} fica em <code>/cardapio/&lt;endereço&gt;</code>.
           </span>
           {publicUrl && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -328,7 +335,7 @@ export function DeliveryConfig({
         {catOrder.length >= 2 && (
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">
-              Ordem das categorias no cardápio
+              Ordem das categorias {isFood ? "no cardápio" : "na vitrine"}
             </label>
             <div className="space-y-2">
               {catOrder.map((cat, i) => (
@@ -364,7 +371,7 @@ export function DeliveryConfig({
               ))}
             </div>
             <span className="mt-1 block text-xs text-slate-500">
-              A ordem aqui é a ordem dos tópicos no cardápio. &quot;Outros&quot; (sem categoria)
+              A ordem aqui é a ordem dos tópicos {isFood ? "no cardápio" : "na vitrine"}. &quot;Outros&quot; (sem categoria)
               aparece sempre por último. Salve para aplicar.
             </span>
           </div>
