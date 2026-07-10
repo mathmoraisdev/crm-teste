@@ -1,6 +1,19 @@
 import { prisma } from "@/server/db/client";
 import { createMediaSignedUrl } from "@/server/storage/media-storage";
 
+export interface MenuModifierOptionDTO {
+  id: string;
+  name: string;
+  priceDeltaCents: number;
+}
+export interface MenuModifierGroupDTO {
+  id: string;
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  options: MenuModifierOptionDTO[];
+}
+
 export interface MenuItemDTO {
   id: string;
   name: string;
@@ -9,6 +22,9 @@ export interface MenuItemDTO {
   available: boolean;
   photoUrl: string | null;
   variantGroup: string | null;
+  // Adicionais precificados (onda-N): grupos com opções ATIVAS p/ o picker montar
+  // sem fetch extra (a página é server-rendered). Vazio = item sem adicionais.
+  modifierGroups: MenuModifierGroupDTO[];
 }
 
 export interface MenuCategoryDTO {
@@ -32,7 +48,13 @@ export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
     prisma.catalogItem.findMany({
       where: { accountId, active: true, menuVisible: true },
       orderBy: [{ menuCategory: "asc" }, { name: "asc" }],
-      include: { photos: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], take: 1 } },
+      include: {
+        photos: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], take: 1 },
+        modifierGroups: {
+          orderBy: { sortOrder: "asc" },
+          include: { options: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
+        },
+      },
     }),
     prisma.deliverySettings.findUnique({
       where: { accountId },
@@ -61,6 +83,16 @@ export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
         available: !r.trackStock || r.stockQty > 0,
         photoUrl,
         variantGroup: r.variantGroup ?? null,
+        // grupo sem opção ativa não vai p/ o cardápio (evita grupo obrigatório vazio).
+        modifierGroups: r.modifierGroups
+          .filter((g) => g.options.length > 0)
+          .map((g) => ({
+            id: g.id,
+            name: g.name,
+            minSelect: g.minSelect,
+            maxSelect: g.maxSelect,
+            options: g.options.map((o) => ({ id: o.id, name: o.name, priceDeltaCents: o.priceDeltaCents })),
+          })),
       };
       return { row: r, item };
     }),

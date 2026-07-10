@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { prisma } from "@/server/db/client";
 import { createCatalogItem } from "./catalog.service";
 import { getPublicMenu } from "./menu.service";
+import { saveItemModifiers } from "./modifier.service";
 
 // O helper de assinatura de Storage mora fora do serviço (chama Supabase).
 // Mockamos p/ o teste não depender do Storage: devolve null (item sem foto visível).
@@ -131,5 +132,38 @@ describe("menu.service", () => {
     const acc = await makeOwner();
     const menu = await getPublicMenu(acc);
     expect(menu.categories).toEqual([]);
+  });
+
+  it("expõe os grupos de adicionais por item (só opções ativas)", async () => {
+    const acc = await makeOwner();
+    const burger = await createCatalogItem(acc, { name: "Burger", priceCents: 2000, kind: "PRODUTO" });
+    await setMenuFields(burger.id, { menuCategory: "Lanches" });
+    await saveItemModifiers(acc, burger.id, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [
+        { name: "Média", priceDeltaCents: 0 }, { name: "Grande", priceDeltaCents: 800 } ] },
+      { name: "Extras", minSelect: 0, maxSelect: 2, options: [
+        { name: "Bacon", priceDeltaCents: 500 }, { name: "Fora de linha", priceDeltaCents: 100, active: false } ] },
+    ]);
+
+    const menu = await getPublicMenu(acc);
+    const item = menu.categories.flatMap((c) => c.items).find((i) => i.id === burger.id)!;
+    expect(item.modifierGroups).toHaveLength(2);
+    const tamanho = item.modifierGroups.find((g) => g.name === "Tamanho")!;
+    expect(tamanho).toMatchObject({ minSelect: 1, maxSelect: 1 });
+    expect(tamanho.options.map((o) => o.name)).toEqual(["Média", "Grande"]);
+    const extras = item.modifierGroups.find((g) => g.name === "Extras")!;
+    // opção inativa NÃO vaza no cardápio público
+    expect(extras.options.map((o) => o.name)).toEqual(["Bacon"]);
+    expect(extras.options[0]).toMatchObject({ priceDeltaCents: 500 });
+    expect(typeof extras.options[0].id).toBe("string");
+  });
+
+  it("item sem grupos → modifierGroups vazio", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Suco", priceCents: 800, kind: "PRODUTO" });
+    await setMenuFields(item.id, { menuCategory: "Bebidas" });
+    const menu = await getPublicMenu(acc);
+    const dto = menu.categories.flatMap((c) => c.items).find((i) => i.id === item.id)!;
+    expect(dto.modifierGroups).toEqual([]);
   });
 });
