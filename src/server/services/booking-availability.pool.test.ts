@@ -62,14 +62,16 @@ describe("confirmBooking sob connection_limit=1 (pool de produção)", () => {
       });
 
       expect(result.appointmentId).toBeTruthy();
-      // Conta sem chip conectado → cai para walk-in (sem lead/lembrete).
-      expect(result.isWalkIn).toBe(true);
+      // Conta sem chip conectado → contato ainda é materializado (lead solto, sem lembrete).
+      expect(result.isWalkIn).toBe(false);
+      expect(result.leadId).toBeTruthy();
 
       const appt = await prisma.appointment.findUniqueOrThrow({
         where: { id: result.appointmentId },
       });
       expect(appt.professionalId).toBe(pro.id);
       expect(appt.source).toBe("ONLINE");
+      expect(appt.leadId).toBe(result.leadId);
     },
     25_000,
   );

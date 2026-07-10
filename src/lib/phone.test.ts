@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { brPhoneVariants } from "./phone";
+import { brPhoneVariants, isBrMobile, maskBrPhone } from "./phone";
 
 describe("brPhoneVariants", () => {
   it("celular BR salvo COM o 9 também casa SEM o 9 (JID canônico)", () => {
@@ -29,5 +29,40 @@ describe("brPhoneVariants", () => {
     // local com 9 dígitos que não começa com 9 → sem variante de remoção
     const r = brPhoneVariants("+5511788881111");
     expect(r).toEqual(["+5511788881111"]);
+  });
+});
+
+describe("isBrMobile", () => {
+  it("aceita celular BR (mascarado ou cru)", () => {
+    expect(isBrMobile("(11) 99999-8888")).toBe(true);
+    expect(isBrMobile("11999998888")).toBe(true);
+    expect(isBrMobile("+5541999998888")).toBe(true);
+  });
+
+  it("rejeita fixo (10 dígitos, sem 9º dígito)", () => {
+    expect(isBrMobile("(11) 3333-4444")).toBe(false);
+  });
+
+  it("rejeita número fake/incompleto", () => {
+    expect(isBrMobile("699999999")).toBe(false); // caso real dos prints
+    expect(isBrMobile("6999999999")).toBe(false);
+    expect(isBrMobile("abc")).toBe(false);
+    expect(isBrMobile("")).toBe(false);
+  });
+
+  it("rejeita internacional (não-BR) no link público", () => {
+    expect(isBrMobile("+14155552671")).toBe(false);
+  });
+});
+
+describe("maskBrPhone", () => {
+  it("formata progressivamente sem completar o que falta", () => {
+    expect(maskBrPhone("11")).toBe("11");
+    expect(maskBrPhone("1199")).toBe("(11) 99");
+    expect(maskBrPhone("11999998888")).toBe("(11) 99999-8888");
+  });
+
+  it("ignora não-dígitos e trava em 11 dígitos", () => {
+    expect(maskBrPhone("(11) 99999-8888 99")).toBe("(11) 99999-8888");
   });
 });

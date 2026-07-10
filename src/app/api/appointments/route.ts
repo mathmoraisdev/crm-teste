@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { AppointmentStatus } from "@prisma/client";
 import { createAppointment, createSeries, listAppointments } from "@/server/services/appointment.service";
+import { resolveOrCreateLightLead } from "@/server/services/lead.service";
 import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -101,8 +102,24 @@ export async function POST(req: NextRequest) {
     note,
     series,
   } = parsed.data;
+  // Walk-in COM telefone → materializa o contato (vira Lead/Cliente), igual ao
+  // agendamento público. Sem telefone (só nome) segue walk-in "adicionar rápido".
+  // Telefone inválido ou teto de contatos estourado → cai de volta p/ walk-in.
+  let effectiveLeadId = leadId ?? null;
+  if (!effectiveLeadId && customerPhone?.trim()) {
+    try {
+      const lead = await resolveOrCreateLightLead(
+        ctx.tenantUserId,
+        { name: customerName?.trim() || customerPhone, phone: customerPhone },
+        "manual",
+      );
+      if (lead) effectiveLeadId = lead.id;
+    } catch {
+      /* telefone inválido → mantém o walk-in por nome */
+    }
+  }
   const base = {
-    leadId: leadId ?? null,
+    leadId: effectiveLeadId,
     scheduledAt: new Date(scheduledAt),
     catalogItemId: catalogItemId ?? null,
     serviceName: serviceName ?? null,

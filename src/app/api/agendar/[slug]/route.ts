@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import { confirmBooking } from "@/server/services/booking-availability.service";
+import { isBrMobile } from "@/lib/phone";
 
 // PÚBLICO (sem auth): o widget de /agendar/<slug> confirma a marcação por aqui.
 // A porta pública é a allowlist do middleware; aqui só resolvemos a conta pelo slug
@@ -16,7 +17,12 @@ const bodySchema = z.object({
   professionalId: z.string().min(1, "Profissional obrigatório."),
   startISO: z.string().datetime({ message: "Horário inválido." }),
   customerName: z.string().trim().min(1, "Informe seu nome."),
-  customerPhone: z.string().trim().min(8, "Informe um telefone válido."),
+  // Celular BR com WhatsApp: DDD + 9 + 8 dígitos. Barra número fake/incompleto
+  // já na porta pública (o walk-in interno segue leniente).
+  customerPhone: z
+    .string()
+    .trim()
+    .refine(isBrMobile, "Informe um celular válido com DDD (ex.: (11) 99999-8888)."),
 });
 
 function clientIp(req: NextRequest): string {

@@ -1,7 +1,12 @@
 import { prisma } from "@/server/db/client";
 import type { Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
-import { dispatchOutboundJob, dispatchManualReplyJob, MANUAL_REPLY_KIND } from "@/server/services/messaging";
+import {
+  dispatchOutboundJob,
+  dispatchManualReplyJob,
+  MANUAL_REPLY_KIND,
+  SYSTEM_MESSAGE_KIND,
+} from "@/server/services/messaging";
 import { selectNumber } from "@/server/whatsapp/baileys/selection";
 import { decideNoChipAction } from "./nochip";
 
@@ -156,7 +161,7 @@ export async function claimNextJobForAccount(userId: string, now: Date): Promise
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      kind: { not: MANUAL_REPLY_KIND }, // resposta manual tem dreno próprio (worker)
+      kind: { notIn: [MANUAL_REPLY_KIND, SYSTEM_MESSAGE_KIND] }, // reativos têm dreno próprio (worker)
       // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
       lead: { is: { userId, user: { is: activeAccountWhere(now) } } },
       OR: [
@@ -202,7 +207,7 @@ export async function processNextJob(now: Date): Promise<boolean> {
     where: {
       status: "PENDING",
       scheduledFor: { lte: now },
-      kind: { not: MANUAL_REPLY_KIND }, // resposta manual tem dreno próprio (worker)
+      kind: { notIn: [MANUAL_REPLY_KIND, SYSTEM_MESSAGE_KIND] }, // reativos têm dreno próprio (worker)
       // conta suspensa/vencida não dispara (job fica PENDING, flui ao reativar)
       lead: { is: { user: { is: activeAccountWhere(now) } } },
       OR: [
@@ -303,8 +308,10 @@ export async function processNextJob(now: Date): Promise<boolean> {
 }
 
 /**
- * Drena as respostas MANUAIS do operador (kind=manual_reply) enfileiradas pelo web
- * — que não tem socket Baileys. Roda a cada tick do worker. Claim atômico
+ * Drena os jobs REATIVOS enfileirados pelo web (que não tem socket Baileys):
+ * respostas manuais do operador (kind=manual_reply) e notificações transacionais
+ * do sistema (kind=system_notify, ex.: confirmação de agendamento). Roda a cada
+ * tick do worker. Claim atômico
  * (PENDING→SENDING) por job, envia pelo chip do lead e persiste o Message. Falha
  * volta p/ PENDING (retry rápido) até 3 tentativas, depois FAILED. Crash entre o
  * claim e o envio é coberto pelo reaper (recupera SENDING órfão). Retorna quantas
@@ -312,7 +319,11 @@ export async function processNextJob(now: Date): Promise<boolean> {
  */
 export async function processManualReplies(now: Date): Promise<number> {
   const jobs = await prisma.outboundJob.findMany({
-    where: { kind: MANUAL_REPLY_KIND, status: "PENDING", scheduledFor: { lte: now } },
+    where: {
+      kind: { in: [MANUAL_REPLY_KIND, SYSTEM_MESSAGE_KIND] },
+      status: "PENDING",
+      scheduledFor: { lte: now },
+    },
     orderBy: { scheduledFor: "asc" },
     take: 20,
     select: { id: true },

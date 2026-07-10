@@ -230,20 +230,23 @@ export async function createLead(
 }
 
 /**
- * Lead "leve" a partir do auto-agendamento público (Onda F). Difere do `createLead`
- * interno: escolhe o CHIP primário da conta (p/ o lembrete ter por onde sair) e
- * deduplica pela identidade real do contato — (whatsAppNumberId, phone) quando há
- * chip, senão (userId, phone). Retorna `null` = SINAL de "cai para walk-in" (o
- * confirm marca sem virar contato nem lembrete) em dois casos:
- *  - **sem chip** e sem lead pré-existente: um lead chip-less não recebe lembrete
- *    (o worker/`sendWhatsAppMessage` exigem chip), então não vale criar contato;
- *  - **teto de contatos** estourado.
- * Sem chip mas COM lead já existente (ex.: import antigo), reusa esse lead (dedupe).
- * `consentSource: "public_booking"` registra a origem do opt-in (o cliente marcou).
+ * Lead "leve" a partir de um agendamento (público OU walk-in interno com telefone).
+ * Difere do `createLead` interno: escolhe o CHIP primário da conta (p/ o lembrete
+ * ter por onde sair, se houver) e deduplica pela identidade real do contato —
+ * (whatsAppNumberId, phone) quando há chip, senão (userId, phone). SEMPRE
+ * materializa o contato: todo agendamento com telefone vira Lead (→ aparece em
+ * Leads e Clientes), mesmo que a conta ainda não tenha WhatsApp conectado — nesse
+ * caso o lead nasce sem chip (`whatsAppNumberId: null`), só sem lembrete automático
+ * (o worker pula quem não tem por onde enviar). `consentSource` registra a origem
+ * do opt-in ("public_booking" = o cliente marcou; "manual" = a conta digitou no
+ * balcão). Retorna `null` = SINAL de "cai para walk-in" APENAS quando o **teto de
+ * contatos** do plano estourou (gate de billing) — aí a marcação ainda acontece,
+ * mas sem criar contato novo.
  */
-export async function resolveOrCreatePublicLead(
+export async function resolveOrCreateLightLead(
   accountId: string,
   input: { name: string; phone: string },
+  consentSource: string,
   db: Prisma.TransactionClient = prisma,
 ): Promise<Lead | null> {
   const phone = normalizePhone(input.phone);
@@ -282,27 +285,38 @@ export async function resolveOrCreatePublicLead(
     return db.lead.findUniqueOrThrow({ where: { id: existing.id } });
   }
 
-  // Sem chip e sem lead pré-existente → walk-in (não cria contato que não seria lembrado).
-  if (!chip) return null;
-
-  // Novo contato COM chip: respeita o teto do plano. Estourou → null (vira walk-in).
+  // Novo contato: respeita o teto do plano. Estourou → null (único caso de walk-in).
   try {
     await assertContactQuota(accountId, db);
   } catch {
     return null;
   }
+  // Vincula ao chip primário se houver; senão nasce "solto" (whatsAppNumberId: null),
+  // ainda assim um contato de verdade — só não recebe lembrete automático.
   const lead = await db.lead.create({
     data: {
       userId: accountId,
-      whatsAppNumberId: chip.id,
+      whatsAppNumberId: chip?.id ?? null,
       phone,
       name,
       status: "NOVO",
-      consentSource: "public_booking",
+      consentSource,
     },
   });
   await invalidateLeadCaches(accountId);
   return lead;
+}
+
+/**
+ * Agendamento público (Onda F): `consentSource: "public_booking"` (o cliente marcou
+ * pelo link). Fino wrapper sobre `resolveOrCreateLightLead`.
+ */
+export function resolveOrCreatePublicLead(
+  accountId: string,
+  input: { name: string; phone: string },
+  db: Prisma.TransactionClient = prisma,
+): Promise<Lead | null> {
+  return resolveOrCreateLightLead(accountId, input, "public_booking", db);
 }
 
 /**

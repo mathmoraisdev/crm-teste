@@ -27,6 +27,16 @@ export interface OutboundMedia {
 export const MANUAL_REPLY_KIND = "manual_reply";
 
 /**
+ * `kind` das notificações transacionais do SISTEMA (ex.: confirmação de
+ * agendamento) originadas no WEB. Mesma motivação do manual_reply — o web não tem
+ * socket Baileys —, então o web enfileira e o worker drena pelo MESMO dreno reativo
+ * (envio imediato, SEM rodapé de opt-out, sem janela/cap). A única diferença é o
+ * `source` gravado na Message (SYSTEM, não OPERATOR). O dispatcher de CAMPANHA
+ * também ignora este kind.
+ */
+export const SYSTEM_MESSAGE_KIND = "system_notify";
+
+/**
  * O pool Baileys é importado de forma PREGUIÇOSA (só quando WHATSAPP_MODE=baileys).
  * Assim os modos mock/cloud-api — e o bundle do Next que importa este módulo —
  * nunca carregam a lib não-oficial (pesada, só-Node).
@@ -228,6 +238,32 @@ export async function enqueueManualReply(
 }
 
 /**
+ * Enfileira uma notificação transacional do SISTEMA (ex.: confirmação de
+ * agendamento). Roda no WEB (sem socket Baileys): grava um OutboundJob que o worker
+ * drena pelo mesmo `processManualReplies`/`dispatchManualReplyJob` (source SYSTEM).
+ * Best-effort: se a conta não tem chip saudável, apenas NÃO enfileira (retorna
+ * false) — a notificação é opcional e não deve derrubar o fluxo chamador.
+ */
+export async function enqueueSystemMessage(
+  lead: { id: string; phone: string; userId: string; whatsAppNumberId?: string | null },
+  text: string,
+): Promise<boolean> {
+  const numberId = await resolveReplyChip(lead.userId, lead.whatsAppNumberId ?? null);
+  if (!numberId) return false; // sem chip → nada a enviar (silencioso, não lança)
+  await prisma.outboundJob.create({
+    data: {
+      leadId: lead.id,
+      kind: SYSTEM_MESSAGE_KIND,
+      content: text, // transacional: SEM rodapé de opt-out
+      status: "PENDING",
+      whatsAppNumberId: numberId,
+      scheduledFor: new Date(),
+    },
+  });
+  return true;
+}
+
+/**
  * Enfileira o ENVIO de um anexo pelo operador (modo Baileys). O web já subiu o
  * arquivo ao storage (media.mediaPath); aqui só grava a intenção. O worker baixa
  * o buffer e envia pelo chip (dispatchManualReplyJob). `caption` é a legenda
@@ -268,7 +304,10 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
     where: { id: jobId },
     include: { lead: { select: { id: true, phone: true, userId: true } } },
   });
-  if (!job || !job.lead || job.kind !== MANUAL_REPLY_KIND) return;
+  if (!job || !job.lead || (job.kind !== MANUAL_REPLY_KIND && job.kind !== SYSTEM_MESSAGE_KIND))
+    return;
+  // Notificação do sistema (confirmação) → SYSTEM; resposta do operador → OPERATOR.
+  const source: MessageSource = job.kind === SYSTEM_MESSAGE_KIND ? "SYSTEM" : "OPERATOR";
 
   const pool = await loadPool();
   // Chip de envio: o do job; se o socket não estiver vivo neste worker (o reaper
@@ -320,7 +359,7 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
         status: "SENT",
         whatsAppNumberId: numberId,
         replyToId: quoted?.messageId ?? null,
-        source: "OPERATOR", // resposta manual do operador (inbox CRM)
+        source, // OPERATOR (resposta manual) ou SYSTEM (notificação transacional)
         ...(media
           ? {
               mediaPath: job.mediaPath,

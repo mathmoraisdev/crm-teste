@@ -15,10 +15,10 @@ import {
   getAvailableSlots,
   confirmBooking,
 } from "./booking-availability.service";
-import { sendWhatsAppMessage } from "./messaging";
+import { SYSTEM_MESSAGE_KIND } from "./messaging";
 
-// Não dispara WhatsApp de verdade nos testes — só verifica se foi chamado.
-vi.mock("./messaging", () => ({ sendWhatsAppMessage: vi.fn() }));
+// Sem mock de envio: a confirmação é ENFILEIRADA (enqueueSystemMessage só grava um
+// OutboundJob, sem tocar no socket Baileys). Os testes verificam a fila direto.
 
 const TZ = env.SCHEDULING_TIMEZONE;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -203,7 +203,7 @@ describe("booking-availability.service — confirmBooking", () => {
     return { acc, pro, svc, target, startISO };
   }
 
-  it("cria Appointment ligado ao lead leve e envia confirmação (conta com chip)", async () => {
+  it("cria Appointment ligado ao lead leve e ENFILEIRA a confirmação (conta com chip)", async () => {
     const { acc, pro, svc, startISO } = await readyAccount();
     await makeChip(acc); // há chip → cria lead + confirma
 
@@ -224,8 +224,11 @@ describe("booking-availability.service — confirmBooking", () => {
     // lead leve com a origem correta
     const lead = await prisma.lead.findUnique({ where: { id: res.leadId! } });
     expect(lead?.consentSource).toBe("public_booking");
-    // confirmação enviada (mock)
-    expect(sendWhatsAppMessage).toHaveBeenCalledTimes(1);
+    // confirmação ENFILEIRADA (quem envia é o worker): job system_notify p/ o lead
+    const jobs = await prisma.outboundJob.findMany({
+      where: { leadId: res.leadId!, kind: SYSTEM_MESSAGE_KIND },
+    });
+    expect(jobs).toHaveLength(1);
   });
 
   it("slot ocupado → CONFLICT e não cria novo agendamento", async () => {
@@ -289,8 +292,11 @@ describe("booking-availability.service — confirmBooking", () => {
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: res.leadId! } });
     expect(lead.whatsAppNumberId).toBeNull(); // solto: sem chip p/ lembrete
     expect(lead.consentSource).toBe("public_booking");
-    // …mas sem chip não há por onde mandar a confirmação.
-    expect(sendWhatsAppMessage).not.toHaveBeenCalled();
+    // …mas sem chip não há por onde enfileirar a confirmação (enqueue é no-op).
+    const jobs = await prisma.outboundJob.findMany({
+      where: { leadId: res.leadId!, kind: SYSTEM_MESSAGE_KIND },
+    });
+    expect(jobs).toHaveLength(0);
   });
 });
 

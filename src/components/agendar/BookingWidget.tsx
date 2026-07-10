@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { isBrMobile, maskBrPhone } from "@/lib/phone";
 
 export interface WidgetService {
   id: string;
@@ -181,7 +182,8 @@ export function BookingWidget({
     );
   }
 
-  const canConfirm = slot && name.trim().length > 0 && phone.trim().length >= 8;
+  const phoneValid = isBrMobile(phone);
+  const canConfirm = slot && name.trim().length > 0 && phoneValid;
 
   return (
     <div className="space-y-4">
@@ -278,11 +280,16 @@ export function BookingWidget({
             />
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Seu WhatsApp (com DDD)"
+              onChange={(e) => setPhone(maskBrPhone(e.target.value))}
+              placeholder="Seu WhatsApp — (DD) 99999-8888"
               inputMode="tel"
               className={inputClass}
             />
+            {phone.trim().length > 0 && !phoneValid && (
+              <p className="text-xs text-danger">
+                Informe um celular com DDD e WhatsApp (ex.: (11) 99999-8888).
+              </p>
+            )}
             {professionals.length > 1 && professionalId === "any" && (
               <p className="text-xs text-slate-400">
                 Com <strong>{slot.professionalName}</strong> às {fmtTime(slot.startISO)}.

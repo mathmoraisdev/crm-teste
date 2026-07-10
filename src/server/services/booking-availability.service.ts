@@ -9,7 +9,7 @@ import {
 import { resolveWorkingWindows } from "./professional.service";
 import { conflictsFor, createAppointment, lockProfessionalForBooking } from "./appointment.service";
 import { resolveOrCreatePublicLead } from "./lead.service";
-import { sendWhatsAppMessage } from "./messaging";
+import { enqueueSystemMessage } from "./messaging";
 
 /**
  * Disponibilidade pública do auto-agendamento (Onda F). Monta os insumos do banco
@@ -343,10 +343,13 @@ export async function confirmBooking(
     maxWait: 10_000,
   });
 
-  // 5. confirmação por WhatsApp — só p/ lead COM chip. Falha aqui não derruba a marcação.
-  if (created.lead?.whatsAppNumberId) {
+  // 5. confirmação por WhatsApp — ENFILEIRADA (o confirmBooking roda no web, que não
+  // tem socket Baileys; o worker drena e envia). `enqueueSystemMessage` resolve o
+  // chip saudável da conta: se houver, enfileira; se não, é no-op. Best-effort:
+  // falha aqui não derruba a marcação.
+  if (created.lead) {
     try {
-      await sendWhatsAppMessage(
+      await enqueueSystemMessage(
         {
           id: created.lead.id,
           phone: created.lead.phone,
@@ -362,11 +365,10 @@ export async function confirmBooking(
           appointmentId: created.appt.id,
           number: created.appt.number,
         }),
-        { source: "SYSTEM" },
       );
     } catch (e) {
       console.error(
-        `[booking] confirmação WhatsApp falhou (appt=${created.appt.id}):`,
+        `[booking] enfileirar confirmação falhou (appt=${created.appt.id}):`,
         e instanceof Error ? e.message : e,
       );
     }

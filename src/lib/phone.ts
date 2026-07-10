@@ -40,6 +40,31 @@ function isPlausibleE164(value: string): boolean {
 }
 
 /**
+ * Valida se a entrada é um CELULAR brasileiro plausível — o que o WhatsApp
+ * espera: DDD (11–99) + 9º dígito + 8 dígitos. Aceita valor mascarado ou cru
+ * (normaliza antes). Rejeita fixo (10 dígitos) e internacional DE PROPÓSITO:
+ * é usada só no link público, onde queremos um número com WhatsApp. O walk-in
+ * interno segue leniente (pode anotar um fixo só p/ ter o contato).
+ */
+export function isBrMobile(raw: string): boolean {
+  const e164 = normalizePhone(raw);
+  if (!e164) return false;
+  return /^\+55[1-9][0-9]9\d{8}$/.test(e164);
+}
+
+/**
+ * Máscara progressiva de celular BR p/ inputs: "41999998888" → "(41) 99999-8888".
+ * Só formata o que o usuário digitou (não completa), então é seguro em onChange.
+ */
+export function maskBrPhone(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+/**
  * Variantes de um número BR para CASAMENTO (não para envio).
  *
  * O WhatsApp registra muitos celulares brasileiros SEM o 9º dígito, então um

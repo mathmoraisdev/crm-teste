@@ -82,9 +82,19 @@ export async function dispatchDueAppointmentReminders(now: Date): Promise<number
     where: {
       status: { in: ["AGENDADO", "CONFIRMADO"] },
       scheduledAt: { gt: now },
-      // Só agendamentos com lead são lembrados: walk-in (sem cadastro/chip) não
-      // tem para onde enviar. Lembrete de walk-in está fora de escopo.
+      // Só agendamentos com lead são lembrados: walk-in (sem cadastro) não tem
+      // para onde enviar. Lembrete de walk-in está fora de escopo.
       leadId: { not: null },
+      // …e precisa existir um chip por onde enviar: o do próprio lead OU algum
+      // saudável da conta (fallback do sendWhatsAppMessage). Sem isso o envio
+      // falharia todo tick — casos de lead "solto" (agendamento público numa conta
+      // sem WhatsApp) ficam de fora até a conta conectar um número.
+      lead: {
+        OR: [
+          { whatsAppNumberId: { not: null } },
+          { user: { whatsAppNumbers: { some: { status: { in: ["CONNECTED", "WARMING"] } } } } },
+        ],
+      },
       OR: [{ remindedDayBeforeAt: null }, { remindedHourBeforeAt: null }],
     },
     select: {

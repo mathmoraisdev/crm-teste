@@ -89,15 +89,26 @@ describe("resolveOrCreatePublicLead", () => {
     expect(db.lead.create).not.toHaveBeenCalled();
   });
 
-  it("sem chip e sem lead pré-existente → null (walk-in), sem criar contato", async () => {
-    db.whatsAppNumber.findFirst.mockResolvedValue(null);
+  it("sem chip e sem lead pré-existente → cria lead solto (whatsAppNumberId null)", async () => {
+    db.whatsAppNumber.findFirst.mockResolvedValue(null); // conta sem WhatsApp conectado
     db.lead.findFirst.mockResolvedValue(null);
+    unlimitedAccount();
+    db.lead.create.mockResolvedValue({ id: "L2", name: "Bea" });
 
     const fn = await subject();
     const lead = await fn("acc1", { name: "Bea", phone: PHONE });
 
-    expect(lead).toBeNull();
-    expect(db.lead.create).not.toHaveBeenCalled();
+    // vira contato de verdade (aparece em Leads/Clientes), só sem chip p/ lembrete
+    expect(lead).toMatchObject({ id: "L2" });
+    const data = db.lead.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      userId: "acc1",
+      whatsAppNumberId: null,
+      phone: PHONE,
+      name: "Bea",
+      status: "NOVO",
+      consentSource: "public_booking",
+    });
   });
 
   it("teto de contatos estourado → null (sinal de walk-in), sem criar lead", async () => {
@@ -115,5 +126,27 @@ describe("resolveOrCreatePublicLead", () => {
   it("telefone inválido → lança", async () => {
     const fn = await subject();
     await expect(fn("acc1", { name: "Ana", phone: "abc" })).rejects.toThrow(/inválido/i);
+  });
+});
+
+describe("resolveOrCreateLightLead — variante walk-in interno (consentSource manual)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("walk-in com telefone → cria lead com consentSource 'manual'", async () => {
+    db.whatsAppNumber.findFirst.mockResolvedValue({ id: "chip1" });
+    db.lead.findFirst.mockResolvedValue(null);
+    unlimitedAccount();
+    db.lead.create.mockResolvedValue({ id: "L3", name: "Zé" });
+
+    const mod = await import("./lead.service");
+    const lead = await mod.resolveOrCreateLightLead("acc1", { name: "Zé", phone: PHONE }, "manual");
+
+    expect(lead).toMatchObject({ id: "L3" });
+    expect(db.lead.create.mock.calls[0][0].data).toMatchObject({
+      userId: "acc1",
+      whatsAppNumberId: "chip1",
+      phone: PHONE,
+      consentSource: "manual",
+    });
   });
 });
