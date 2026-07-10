@@ -44,6 +44,7 @@ export type NavCtx = {
   isAdmin: boolean; // admin DA PLATAFORMA (Administração / billing SaaS)
   isAccountAdmin: boolean; // dono/ADMIN DA CONTA (Equipe)
   category: BusinessCategory | null; // ramo da conta (Fase 3); null = mostra tudo
+  menuEnabled?: boolean; // cardápio online publicado → destrava Pedidos/Produção fora da alimentação
 };
 
 // Descreve um item com o papel/condição que o torna visível. `show`
@@ -89,8 +90,12 @@ export function moduleVisibleFor(category: BusinessCategory | null, moduleKey: s
 
 export function buildNav(ctx: NavCtx): NavGroup[] {
   const { isAdmin, isAccountAdmin, category } = ctx;
-  // Produção (comanda de cozinha) só faz sentido em ramos de alimentação.
+  // Pedidos online e Produção (comanda de cozinha) são primários na alimentação,
+  // mas também para QUALQUER conta que publicou o cardápio online (menuEnabled) —
+  // ex.: ramos não-alimentícios usando delivery. Sem isto, quem liga o cardápio
+  // recebe pedidos mas não vê a fila no menu.
   const isFood = category === "alimentacao";
+  const showOrders = isFood || ctx.menuEnabled === true;
 
   const groups: { title: string; items: NavItemSpec[] }[] = [
     {
@@ -100,8 +105,8 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
         { href: "/inbox", label: "Atendimento", icon: Inbox, badge: "inbox" },
         { href: "/agenda", label: "Agenda", icon: CalendarClock, badge: "agenda", key: "agenda" },
         { href: "/caixa", label: "Caixa", icon: Receipt },
-        { href: "/pedidos", label: "Pedidos online", icon: ShoppingBag, show: isFood },
-        { href: "/producao", label: "Produção", icon: ChefHat, show: isFood },
+        { href: "/pedidos", label: "Pedidos online", icon: ShoppingBag, show: showOrders },
+        { href: "/producao", label: "Produção", icon: ChefHat, show: showOrders },
       ],
     },
     {

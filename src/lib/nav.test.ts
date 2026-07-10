@@ -36,6 +36,12 @@ describe("buildNav", () => {
     const opBeleza = buildNav(base).find((g) => g.title === "Operação")!;
     expect(opBeleza.items.some((i) => i.href === "/pedidos")).toBe(false);
   });
+  it("cardápio online (menuEnabled) destrava Pedidos/Produção fora da alimentação", () => {
+    // Conta de imóveis/estética que publicou o cardápio online passa a ver a fila.
+    const op = buildNav({ ...base, menuEnabled: true }).find((g) => g.title === "Operação")!;
+    expect(op.items.some((i) => i.href === "/pedidos")).toBe(true);
+    expect(op.items.some((i) => i.href === "/producao")).toBe(true);
+  });
 });
 
 describe("moduleVisibleFor", () => {

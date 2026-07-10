@@ -7,6 +7,7 @@ import { getBranding } from "@/server/services/branding.service";
 import { BrandingStyle } from "@/components/app/BrandingStyle";
 import { getBusinessTemplateId } from "@/server/services/account.service";
 import { getTemplate } from "@/lib/business-templates";
+import { prisma } from "@/server/db/client";
 
 export default async function AppLayout({
   children,
@@ -15,16 +16,19 @@ export default async function AppLayout({
 }) {
   const userId = await getCurrentUserId();
   const ctx = await getTenantContext();
-  const [user, branding, businessTemplateId] = await Promise.all([
+  const [user, branding, businessTemplateId, account] = await Promise.all([
     userId ? getUserById(userId) : null,
     ctx ? getBranding(ctx.tenantUserId) : null,
     ctx ? getBusinessTemplateId(ctx.tenantUserId) : null,
+    ctx ? prisma.user.findUnique({ where: { id: ctx.tenantUserId }, select: { menuEnabled: true } }) : null,
   ]);
   const isAdmin = isAdminEmail(user?.email);
   // Dono da conta (ADMIN sem ownerId) vê a aba "Equipe".
   const isAccountAdmin = ctx?.role === "ADMIN";
   // Ramo da conta → categoria (Fase 3 adapta o menu; null = mostra tudo).
   const category = businessTemplateId ? getTemplate(businessTemplateId)?.category ?? null : null;
+  // Cardápio online publicado → destrava Pedidos/Produção mesmo fora da alimentação.
+  const menuEnabled = account?.menuEnabled ?? false;
 
   return (
     <div className="min-h-screen bg-slate-50 lg:flex">
@@ -33,6 +37,7 @@ export default async function AppLayout({
         isAdmin={isAdmin}
         isAccountAdmin={isAccountAdmin}
         category={category}
+        menuEnabled={menuEnabled}
         branding={branding ? { logoUrl: branding.logoUrl, appName: branding.appName } : undefined}
       />
       <main className="min-w-0 flex-1">

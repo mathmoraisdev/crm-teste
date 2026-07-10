@@ -14,11 +14,13 @@ export function Sidebar({
   isAdmin = false,
   isAccountAdmin = false,
   category = null,
+  menuEnabled = false,
   branding,
 }: {
   isAdmin?: boolean; // admin DA PLATAFORMA (Administração)
   isAccountAdmin?: boolean; // dono/ADMIN DA CONTA (Equipe)
   category?: BusinessCategory | null; // ramo da conta (Fase 3); null = mostra tudo
+  menuEnabled?: boolean; // cardápio online publicado → destrava Pedidos/Produção
   branding?: { logoUrl: string | null; appName: string }; // marca da conta (null = padrão)
 }) {
   const pathname = usePathname();
@@ -119,7 +121,7 @@ export function Sidebar({
   }, [isAdmin, pathname]);
   // Estrutura de navegação vem de `buildNav` (dado puro, testável). Equipe é do
   // dono da conta; Administração é do admin da plataforma.
-  const navGroups = buildNav({ isAdmin, isAccountAdmin, category });
+  const navGroups = buildNav({ isAdmin, isAccountAdmin, category, menuEnabled });
 
   // Render de um item de nav (reusado nos grupos normais e no "Mais").
   const renderNavItem = ({ href, label, icon: Icon, badge }: NavItem) => {
