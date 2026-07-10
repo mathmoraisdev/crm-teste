@@ -47,6 +47,19 @@ describe("buildEscposBytes", () => {
     expect(ascii).toContain("TOTAL");
   });
 
+  it("imprime as sub-linhas de adicionais sob o item", () => {
+    const m = buildReceiptModel(
+      { ...order, items: [
+        { nameSnapshot: "X-Burger", quantity: 1, unitPriceCents: 3300, modifiers: [{ optionName: "Grande" }, { optionName: "Bacon" }] },
+      ] },
+      business,
+    );
+    const bytes = buildEscposBytes(m);
+    const ascii = Array.from(bytes).map((b) => String.fromCharCode(b)).join("");
+    expect(ascii).toContain("Grande");
+    expect(ascii).toContain("Bacon");
+  });
+
   it("corta o papel (GS V) ao final", () => {
     const bytes = buildEscposBytes(model);
     expect(has(bytes, [GS, 0x56])).toBe(true);

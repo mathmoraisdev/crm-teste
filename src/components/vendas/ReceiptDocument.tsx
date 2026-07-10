@@ -19,7 +19,12 @@ export function ReceiptDocument({ model }: { model: ReceiptModel }) {
       {model.header.customer && <div>{`Cliente: ${model.header.customer}`}</div>}
       <div>{divider}</div>
       {model.lines.map((l, i) => (
-        <div key={i}>{l.rendered}</div>
+        <div key={i}>
+          <div>{l.rendered}</div>
+          {l.subLines.map((s, j) => (
+            <div key={j} style={{ opacity: 0.75 }}>{s}</div>
+          ))}
+        </div>
       ))}
       <div>{divider}</div>
       {model.summary.map((s, i) => (

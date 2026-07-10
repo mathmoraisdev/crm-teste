@@ -11,7 +11,7 @@ vi.mock("@/server/crypto", () => ({
 }));
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
-import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, voidOrder, reopenOrder } from "./order.service";
+import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, getKitchenOrder, voidOrder, reopenOrder } from "./order.service";
 import { saveItemModifiers, listItemModifiers } from "./modifier.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 import { openSession } from "./cash-session.service";
@@ -485,7 +485,7 @@ describe("getReceiptData (dados do recibo, escopado)", () => {
     expect(data.order.customerName).toBe("João");
     expect(data.order.payment).toBe("DINHEIRO");
     expect(data.order.items).toEqual([
-      { nameSnapshot: "Corte", quantity: 2, unitPriceCents: 4000 },
+      { nameSnapshot: "Corte", quantity: 2, unitPriceCents: 4000, modifiers: [] },
     ]);
     expect(data.business.name).toBeTruthy();
   });
@@ -540,6 +540,25 @@ describe("addItem — adicionais precificados (onda-N)", () => {
     ]);
     const o = await openOrder(acc, { openedById: acc, customerName: "X" });
     await expect(addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 })).rejects.toThrow(/Tamanho/);
+  });
+
+  it("cupom e cozinha carregam os nomes dos adicionais (preço só no cupom)", async () => {
+    const acc = await makeOwner();
+    const burger = await createCatalogItem(acc, { name: "Burger", priceCents: 2000, kind: "PRODUTO", printSector: "cozinha" });
+    await saveItemModifiers(acc, burger.id, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [{ name: "Grande", priceDeltaCents: 800 }] },
+    ]);
+    const grande = (await listItemModifiers(acc, burger.id))[0].options[0];
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await addItem(acc, o.id, { catalogItemId: burger.id, quantity: 1, modifierOptionIds: [grande.id] });
+    await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
+
+    const receipt = await getReceiptData(acc, o.id);
+    expect(receipt.order.items[0].modifiers).toEqual([{ optionName: "Grande" }]);
+    expect(receipt.order.items[0].unitPriceCents).toBe(2800); // preço já somado
+
+    const kitchen = await getKitchenOrder(acc, o.id);
+    expect(kitchen.items[0].modifiers).toEqual(["Grande"]);
   });
 });
 

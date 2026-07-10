@@ -74,8 +74,12 @@ export function buildEscposBytes(model: ReceiptModel, opts: EscposOptions = {}):
   if (model.header.customer) b.line(`Cliente: ${model.header.customer}`);
   b.line(divider);
 
-  // Itens (já vêm padronizados em `rendered`, largura fixa e valor à direita)
-  for (const l of model.lines) b.line(l.rendered);
+  // Itens (já vêm padronizados em `rendered`, largura fixa e valor à direita).
+  // Sub-linhas de adicionais (onda-N) impressas logo abaixo, sem valor.
+  for (const l of model.lines) {
+    b.line(l.rendered);
+    for (const sub of l.subLines) b.line(sub);
+  }
   b.line(divider);
 
   // Desdobramento (subtotal/desconto/taxa/gorjeta) + TOTAL + troco + pagamento
@@ -121,6 +125,7 @@ export function buildKitchenEscposBytes(ticket: KitchenTicket, width: 32 | 24 = 
 
   for (const l of ticket.lines) {
     b.bold(true).line(`${l.quantity}x ${l.name}`).bold(false);
+    for (const m of l.modifiers ?? []) b.line(`   + ${m}`);
     if (l.note) b.line(`   * ${l.note}`);
   }
   if (ticket.header.note) {

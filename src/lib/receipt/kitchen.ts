@@ -10,6 +10,7 @@ export interface KitchenItemInput {
   quantity: number;
   sector: string | null; // null = item não roteado p/ produção (ex.: taxa, serviço)
   note?: string | null; // observação do item (ex.: "sem cebola")
+  modifiers?: string[]; // adicionais/variações (só nomes; produção não vê valor)
 }
 
 export interface KitchenOrderInput {
@@ -24,6 +25,7 @@ export interface KitchenTicketLine {
   name: string;
   quantity: number;
   note?: string | null;
+  modifiers?: string[]; // adicionais do item (só nomes)
 }
 
 export interface KitchenTicket {
@@ -40,7 +42,12 @@ export function buildKitchenTickets(order: KitchenOrderInput): KitchenTicket[] {
   for (const it of order.items) {
     if (!it.sector) continue; // não vai p/ produção
     const lines = bySector.get(it.sector) ?? [];
-    lines.push({ name: it.name, quantity: Math.max(1, Math.floor(it.quantity)), note: it.note ?? null });
+    lines.push({
+      name: it.name,
+      quantity: Math.max(1, Math.floor(it.quantity)),
+      note: it.note ?? null,
+      ...(it.modifiers && it.modifiers.length ? { modifiers: it.modifiers } : {}),
+    });
     bySector.set(it.sector, lines);
   }
 

@@ -583,6 +583,7 @@ export async function getReceiptData(accountId: string, orderId: string): Promis
         nameSnapshot: i.nameSnapshot,
         quantity: i.quantity,
         unitPriceCents: i.unitPriceCents,
+        modifiers: (asModifierArray(i.modifiersSnapshot) ?? []).map((m) => ({ optionName: m.optionName })),
       })),
     },
     business: { name: branding.appName, subtitle: null },
@@ -623,6 +624,7 @@ export async function getKitchenOrder(accountId: string, orderId: string): Promi
       quantity: i.quantity,
       sector: i.catalogItem?.printSector ?? null,
       note: extractItemNote(i.customFields),
+      modifiers: (asModifierArray(i.modifiersSnapshot) ?? []).map((m) => m.optionName),
     })),
   };
 }

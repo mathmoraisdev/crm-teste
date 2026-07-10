@@ -59,6 +59,35 @@ describe("buildReceiptModel", () => {
     expect(m.totals.totalCents).toBe(8850);
   });
 
+  it("linha sem adicionais tem subLines vazio", () => {
+    const m = buildReceiptModel(order, business);
+    expect(m.lines.every((l) => Array.isArray(l.subLines) && l.subLines.length === 0)).toBe(true);
+  });
+
+  it("adicionais viram subLines (cosmético) e NÃO alteram o total", () => {
+    const withMods = buildReceiptModel(
+      { ...order, items: [
+        { nameSnapshot: "X-Burger", quantity: 1, unitPriceCents: 3300,
+          modifiers: [{ optionName: "Grande" }, { optionName: "Bacon" }] },
+      ] },
+      business,
+    );
+    const line = withMods.lines[0];
+    expect(line.subLines).toHaveLength(2);
+    expect(line.subLines.some((s) => s.includes("Grande"))).toBe(true);
+    expect(line.subLines.some((s) => s.includes("Bacon"))).toBe(true);
+    // subLines NÃO carregam valor à direita (cosméticas)
+    expect(line.subLines.every((s) => !/\d,\d{2}/.test(s))).toBe(true);
+
+    // total imutável: o MESMO item sem `modifiers` fecha o mesmo total
+    const noMods = buildReceiptModel(
+      { ...order, items: [{ nameSnapshot: "X-Burger", quantity: 1, unitPriceCents: 3300 }] },
+      business,
+    );
+    expect(withMods.totals.totalCents).toBe(noMods.totals.totalCents);
+    expect(withMods.totals.totalCents).toBe(3300);
+  });
+
   it("multi-pagamento + troco: uma linha por tender e a linha de troco", () => {
     const m = buildReceiptModel(
       {

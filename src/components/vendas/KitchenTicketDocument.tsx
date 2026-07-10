@@ -17,6 +17,9 @@ export function KitchenTicketDocument({ ticket }: { ticket: KitchenTicket }) {
       {ticket.lines.map((l, i) => (
         <div key={i}>
           <div style={{ fontWeight: 700 }}>{`${l.quantity}x ${l.name}`}</div>
+          {(l.modifiers ?? []).map((m, k) => (
+            <div key={k}>{`   + ${m}`}</div>
+          ))}
           {l.note && <div>{`   * ${l.note}`}</div>}
         </div>
       ))}

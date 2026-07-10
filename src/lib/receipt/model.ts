@@ -21,6 +21,9 @@ export interface ReceiptOrderItem {
   nameSnapshot: string;
   quantity: number;
   unitPriceCents: number;
+  // Adicionais precificados (onda-N): só os NOMES, p/ imprimir sob o item. O preço
+  // já está embutido em unitPriceCents — sub-linhas NÃO carregam valor (cosméticas).
+  modifiers?: { optionName: string }[];
 }
 
 export interface ReceiptTender {
@@ -48,6 +51,9 @@ export interface ReceiptLine {
   quantity: number;
   totalCents: number; // qtd × preço unitário
   rendered: string; // linha monoespaçada de largura fixa (label + valor à direita)
+  // Adicionais (onda-N): linhas já renderizadas SEM totalCents → o reduce do total
+  // as ignora. Puramente cosméticas ("  + Grande"), impressas sob a linha do item.
+  subLines: string[];
 }
 
 export interface ReceiptModel {
@@ -114,6 +120,8 @@ export function buildReceiptModel(order: ReceiptOrderInput, business: ReceiptBus
       quantity: qty,
       totalCents,
       rendered: padRow(label, formatCentsBRL(totalCents), width),
+      // só o nome, indentado, sem valor — o preço já está no total da linha acima.
+      subLines: (it.modifiers ?? []).map((m) => padRow(`  + ${m.optionName}`, "", width)),
     };
   });
 

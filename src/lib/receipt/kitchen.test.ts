@@ -46,6 +46,18 @@ describe("buildKitchenTickets", () => {
     }
   });
 
+  it("lista os adicionais do item na comanda de cozinha (sem valor)", () => {
+    const tickets = buildKitchenTickets({
+      ...order,
+      items: [{ name: "X-Burger", quantity: 1, sector: "cozinha", note: "bem passado", modifiers: ["Grande", "Bacon"] }],
+    });
+    const cozinha = tickets.find((t) => t.sector === "cozinha")!;
+    const line = cozinha.lines.find((l) => l.name === "X-Burger")!;
+    expect(line.modifiers).toEqual(["Grande", "Bacon"]);
+    // produção não vê valor mesmo com adicionais
+    expect(JSON.stringify(tickets)).not.toMatch(/[Cc]ents|preç|price|R\$/);
+  });
+
   it("comanda sem itens de produção → nenhum ticket", () => {
     const tickets = buildKitchenTickets({ ...order, items: [{ name: "Só serviço", quantity: 1, sector: null, note: null }] });
     expect(tickets).toEqual([]);
