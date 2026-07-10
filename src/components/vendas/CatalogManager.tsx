@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Loader2, Pencil, Check, X, Sparkles, Copy } from "lucide-react";
+import { Loader2, Pencil, Check, X, Sparkles, Copy, Plus } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDeleteButton } from "@/components/ui/ConfirmDeleteButton";
@@ -88,6 +88,8 @@ export function CatalogManager({
   const [menuDescription, setMenuDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Form de "Adicionar item": nasce fechado (era sempre aberto e comia a tela).
+  const [adding, setAdding] = useState(false);
 
   // Semear a partir do ramo (estado-vazio).
   const [seedTemplateId, setSeedTemplateId] = useState("");
@@ -167,6 +169,12 @@ export function CatalogManager({
     setMenuVisible(true);
     setMenuCategory("");
     setMenuDescription("");
+  }
+
+  function closeAddForm() {
+    resetAddForm();
+    setError(null);
+    setAdding(false);
   }
 
   async function addItem() {
@@ -469,7 +477,28 @@ export function CatalogManager({
                 )}
                 {editingId === it.id ? (
                 // ── Modo edição ──────────────────────────────────────────
-                <li className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5">
+                <li
+                  className="space-y-2 rounded-lg border border-brand-200 bg-card px-3 py-2.5"
+                  onKeyDown={(e) => {
+                    // Esc recolhe a edição (padrão de painel expansível). Ignora
+                    // quando o Esc é p/ fechar o datalist/dropdown de um campo.
+                    if (e.key === "Escape" && !e.defaultPrevented) cancelEdit();
+                  }}
+                >
+                  {/* Cabeçalho com fechar (X) — afordância clara p/ recolher a edição
+                      onde o usuário clicou (o lápis some ao expandir). */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-brand-700 dark:text-brand-300">Editando item</p>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      aria-label="Fechar edição"
+                      title="Fechar edição"
+                      className="text-slate-400 hover:text-brand-600"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Field label="Nome" className="flex-1">
                       <input
@@ -723,8 +752,33 @@ export function CatalogManager({
         )}
 
         {canEdit ? (
-          <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-            <p className="text-xs font-semibold text-slate-600">Adicionar item</p>
+          !adding ? (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 px-3 py-3 text-sm font-medium text-slate-500 hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-800/30"
+            >
+              <Plus size={16} /> Adicionar item
+            </button>
+          ) : (
+          <div
+            className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-800/40"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !e.defaultPrevented) closeAddForm();
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-600">Adicionar item</p>
+              <button
+                type="button"
+                onClick={closeAddForm}
+                aria-label="Fechar"
+                title="Fechar"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X size={15} />
+              </button>
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Field label="Nome" className="flex-1">
                 <input
@@ -877,12 +931,16 @@ export function CatalogManager({
               </div>
             )}
             {error && <p className="text-xs text-danger">{error}</p>}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={closeAddForm} disabled={saving}>
+                Cancelar
+              </Button>
               <Button onClick={addItem} loading={saving} disabled={!name.trim() || !price.trim()}>
                 Adicionar
               </Button>
             </div>
           </div>
+          )
         ) : (
           <p className="text-xs text-slate-400">
             Seu usuário não tem permissão para cadastrar itens do catálogo.
