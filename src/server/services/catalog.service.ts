@@ -21,6 +21,10 @@ export interface CatalogItemDTO {
   printSector: string | null;
   durationMinutes: number | null;
   customFields: Record<string, unknown> | null;
+  // Cardápio online (Onda L): visibilidade, categoria (tópico) e descrição.
+  menuVisible: boolean;
+  menuCategory: string | null;
+  menuDescription: string | null;
 }
 
 const upsertSchema = z.object({
@@ -43,6 +47,13 @@ const stockConfigSchema = z.object({
   costCents: z.number().int().min(0).nullish(),
 });
 
+// Cardápio online: mostrar/ocultar, categoria (tópico) e descrição do item.
+const menuConfigSchema = z.object({
+  menuVisible: z.boolean().optional(),
+  menuCategory: z.string().trim().max(60).nullish(),
+  menuDescription: z.string().trim().max(280).nullish(),
+});
+
 // P2002 (unique) no barcode → mensagem amigável (o resto propaga).
 function rethrowCatalog(e: unknown): never {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -55,12 +66,14 @@ function toDTO(o: {
   id: string; kind: CatalogItemKind; name: string; priceCents: number; active: boolean;
   trackStock: boolean; sku: string | null; barcode: string | null; variantGroup: string | null; stockQty: number; minStock: number; costCents: number | null;
   printSector: string | null; durationMinutes: number | null; customFields: Prisma.JsonValue | null;
+  menuVisible: boolean; menuCategory: string | null; menuDescription: string | null;
 }): CatalogItemDTO {
   return {
     id: o.id, kind: o.kind, name: o.name, priceCents: o.priceCents, active: o.active,
     trackStock: o.trackStock, sku: o.sku, barcode: o.barcode, variantGroup: o.variantGroup, stockQty: o.stockQty, minStock: o.minStock, costCents: o.costCents,
     printSector: o.printSector, durationMinutes: o.durationMinutes,
     customFields: (o.customFields as Record<string, unknown> | null) ?? null,
+    menuVisible: o.menuVisible, menuCategory: o.menuCategory, menuDescription: o.menuDescription,
   };
 }
 
@@ -70,11 +83,13 @@ export async function createCatalogItem(
     name: string; priceCents: number; kind?: CatalogItemKind;
     trackStock?: boolean; sku?: string | null; barcode?: string | null; variantGroup?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
+    menuVisible?: boolean; menuCategory?: string | null; menuDescription?: string | null;
   },
 ): Promise<CatalogItemDTO> {
   const parsed = upsertSchema.parse(data);
   const cfg = stockConfigSchema.parse(data);
   const dur = durationSchema.parse(data);
+  const menu = menuConfigSchema.parse(data);
   try {
     const item = await prisma.catalogItem.create({
       data: {
@@ -87,6 +102,9 @@ export async function createCatalogItem(
         costCents: cfg.costCents ?? null,
         printSector: data.printSector?.trim().toLowerCase() || null,
         durationMinutes: dur.durationMinutes ?? null,
+        ...(menu.menuVisible !== undefined ? { menuVisible: menu.menuVisible } : {}),
+        menuCategory: menu.menuCategory?.trim() || null,
+        menuDescription: menu.menuDescription?.trim() || null,
       },
     });
     return toDTO(item);
@@ -110,6 +128,7 @@ export async function updateCatalogItem(
     name?: string; priceCents?: number; kind?: CatalogItemKind; active?: boolean;
     trackStock?: boolean; sku?: string | null; barcode?: string | null; variantGroup?: string | null; minStock?: number; costCents?: number | null;
     printSector?: string | null; durationMinutes?: number | null;
+    menuVisible?: boolean; menuCategory?: string | null; menuDescription?: string | null;
   },
 ): Promise<CatalogItemDTO> {
   const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
@@ -143,6 +162,9 @@ export async function updateCatalogItem(
     }
   }
   if (data.printSector !== undefined) patch.printSector = data.printSector?.trim().toLowerCase() || null;
+  if (data.menuVisible !== undefined) patch.menuVisible = data.menuVisible;
+  if (data.menuCategory !== undefined) patch.menuCategory = data.menuCategory?.trim() || null;
+  if (data.menuDescription !== undefined) patch.menuDescription = data.menuDescription?.trim() || null;
   try {
     const item = await prisma.catalogItem.update({ where: { id }, data: patch });
     return toDTO(item);

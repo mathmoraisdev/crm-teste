@@ -23,6 +23,33 @@ describe("catalog.service", () => {
     expect(listA[0].priceCents).toBe(4000);
   });
 
+  it("cardápio: menuVisible default true, e create/update de categoria e descrição", async () => {
+    const a = await makeOwner();
+    // Sem passar campos de cardápio → visível por padrão, categoria/descrição nulas.
+    const base = await createCatalogItem(a, { name: "Coca", priceCents: 600, kind: "PRODUTO" });
+    expect(base.menuVisible).toBe(true);
+    expect(base.menuCategory).toBeNull();
+    expect(base.menuDescription).toBeNull();
+
+    // Create com os campos.
+    const burger = await createCatalogItem(a, {
+      name: "X-Burguer",
+      priceCents: 2500,
+      kind: "PRODUTO",
+      menuVisible: false,
+      menuCategory: "  Lanches  ",
+      menuDescription: "  Pão, carne, queijo  ",
+    });
+    expect(burger.menuVisible).toBe(false);
+    expect(burger.menuCategory).toBe("Lanches"); // trim
+    expect(burger.menuDescription).toBe("Pão, carne, queijo");
+
+    // Update dos campos (inclusive esvaziar categoria → null).
+    const upd = await updateCatalogItem(a, burger.id, { menuVisible: true, menuCategory: "  " });
+    expect(upd.menuVisible).toBe(true);
+    expect(upd.menuCategory).toBeNull();
+  });
+
   it("rejeita nome vazio e preço negativo", async () => {
     const a = await makeOwner();
     await expect(createCatalogItem(a, { name: "  ", priceCents: 1000 })).rejects.toThrow();

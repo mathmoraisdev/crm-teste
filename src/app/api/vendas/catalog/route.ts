@@ -24,6 +24,9 @@ const createSchema = z.object({
   costCents: z.number().int().nullish(),
   printSector: z.string().nullish(),
   durationMinutes: z.number().int().nullish(),
+  menuVisible: z.boolean().optional(),
+  menuCategory: z.string().nullish(),
+  menuDescription: z.string().nullish(),
 });
 
 export async function POST(req: NextRequest) {

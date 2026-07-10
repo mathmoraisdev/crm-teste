@@ -26,6 +26,9 @@ interface Item {
   printSector: string | null;
   durationMinutes: number | null;
   customFields?: Record<string, unknown> | null;
+  menuVisible: boolean;
+  menuCategory: string | null;
+  menuDescription: string | null;
 }
 
 // Modelos que geram itens (ordenados por categoria) — pré-computado, é estático.
@@ -60,9 +63,11 @@ function Field({ label, className, children }: { label: string; className?: stri
 export function CatalogManager({
   canEdit,
   accountBusinessId = null,
+  menuEnabled = false,
 }: {
   canEdit: boolean;
   accountBusinessId?: string | null;
+  menuEnabled?: boolean; // cardápio online publicado → mostra campos de cardápio
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [name, setName] = useState("");
@@ -77,6 +82,9 @@ export function CatalogManager({
   const [costStr, setCostStr] = useState("");
   const [sector, setSector] = useState("");
   const [duration, setDuration] = useState("");
+  const [menuVisible, setMenuVisible] = useState(true);
+  const [menuCategory, setMenuCategory] = useState("");
+  const [menuDescription, setMenuDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +105,9 @@ export function CatalogManager({
   const [editCost, setEditCost] = useState("");
   const [editSector, setEditSector] = useState("");
   const [editDuration, setEditDuration] = useState("");
+  const [editMenuVisible, setEditMenuVisible] = useState(true);
+  const [editMenuCategory, setEditMenuCategory] = useState("");
+  const [editMenuDescription, setEditMenuDescription] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   // Foco no Nome ao abrir edição via "Duplicar" (troca rápida do rótulo da variação).
@@ -133,6 +144,12 @@ export function CatalogManager({
     return m;
   }, [orderedItems]);
 
+  // Categorias do cardápio já usadas → sugestões no <datalist> (o "tópico").
+  const menuCategories = useMemo(
+    () => [...new Set((items ?? []).map((i) => i.menuCategory?.trim()).filter(Boolean) as string[])].sort(),
+    [items],
+  );
+
   function resetAddForm() {
     setName("");
     setPrice("");
@@ -146,6 +163,9 @@ export function CatalogManager({
     setCostStr("");
     setSector("");
     setDuration("");
+    setMenuVisible(true);
+    setMenuCategory("");
+    setMenuDescription("");
   }
 
   async function addItem() {
@@ -158,6 +178,12 @@ export function CatalogManager({
     setSaving(true);
     try {
       const body: Record<string, unknown> = { name: name.trim(), priceCents, kind, printSector: sector.trim() || null };
+      // Cardápio online: só envia se a conta publica o cardápio.
+      if (menuEnabled) {
+        body.menuVisible = menuVisible;
+        body.menuCategory = menuCategory.trim() || null;
+        body.menuDescription = menuDescription.trim() || null;
+      }
       // Duração só para serviço; vazio → null.
       if (kind === "SERVICO") {
         const d = Math.floor(Number(duration));
@@ -211,6 +237,9 @@ export function CatalogManager({
     setEditCost(it.costCents != null ? formatCentsBRL(it.costCents) : "");
     setEditSector(it.printSector ?? "");
     setEditDuration(it.durationMinutes != null ? String(it.durationMinutes) : "");
+    setEditMenuVisible(it.menuVisible);
+    setEditMenuCategory(it.menuCategory ?? "");
+    setEditMenuDescription(it.menuDescription ?? "");
     setEditError(null);
   }
 
@@ -250,6 +279,12 @@ export function CatalogManager({
     setEditSaving(true);
     try {
       const patch: Record<string, unknown> = { name: editName.trim(), priceCents, kind: editKind, printSector: editSector.trim() || null };
+      // Cardápio online: só envia se a conta publica o cardápio.
+      if (menuEnabled) {
+        patch.menuVisible = editMenuVisible;
+        patch.menuCategory = editMenuCategory.trim() || null;
+        patch.menuDescription = editMenuDescription.trim() || null;
+      }
       // Duração só para serviço; vazio → null (produto sempre zera).
       if (editKind === "SERVICO") {
         const d = Math.floor(Number(editDuration));
@@ -339,6 +374,13 @@ export function CatalogManager({
       />
 
       <div className="space-y-4 px-5 py-4">
+        {menuEnabled && (
+          <datalist id="menu-cats">
+            {menuCategories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        )}
         {items === null ? (
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Loader2 size={14} className="animate-spin" /> Carregando…
@@ -449,6 +491,41 @@ export function CatalogManager({
                       />
                     </Field>
                   )}
+                  {menuEnabled && (
+                    <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-slate-600">Cardápio online</p>
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={editMenuVisible}
+                            onChange={(e) => setEditMenuVisible(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                          />
+                          Mostrar no cardápio
+                        </label>
+                      </div>
+                      <Field label="Categoria (tópico do cardápio)">
+                        <input
+                          list="menu-cats"
+                          value={editMenuCategory}
+                          onChange={(e) => setEditMenuCategory(e.target.value)}
+                          placeholder="ex.: Lanches, Bebidas — opcional"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                      </Field>
+                      <Field label="Descrição no cardápio">
+                        <textarea
+                          value={editMenuDescription}
+                          onChange={(e) => setEditMenuDescription(e.target.value)}
+                          rows={2}
+                          maxLength={280}
+                          placeholder="ex.: Pão brioche, hambúrguer 180g, queijo — opcional"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                      </Field>
+                    </div>
+                  )}
                   {editKind === "PRODUTO" && (
                     <div className="space-y-2 rounded-lg border border-line-default bg-inset px-3 py-2.5">
                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -544,6 +621,16 @@ export function CatalogManager({
                       {it.printSector && (
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                           {it.printSector}
+                        </span>
+                      )}
+                      {menuEnabled && it.menuCategory && (
+                        <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                          {it.menuCategory}
+                        </span>
+                      )}
+                      {menuEnabled && !it.menuVisible && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                          Oculto no cardápio
                         </span>
                       )}
                       {it.trackStock && (
@@ -656,6 +743,41 @@ export function CatalogManager({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 />
               </Field>
+            )}
+            {menuEnabled && (
+              <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold text-slate-600">Cardápio online</p>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={menuVisible}
+                      onChange={(e) => setMenuVisible(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500/20"
+                    />
+                    Mostrar no cardápio
+                  </label>
+                </div>
+                <Field label="Categoria (tópico do cardápio)">
+                  <input
+                    list="menu-cats"
+                    value={menuCategory}
+                    onChange={(e) => setMenuCategory(e.target.value)}
+                    placeholder="ex.: Lanches, Bebidas — opcional"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </Field>
+                <Field label="Descrição no cardápio">
+                  <textarea
+                    value={menuDescription}
+                    onChange={(e) => setMenuDescription(e.target.value)}
+                    rows={2}
+                    maxLength={280}
+                    placeholder="ex.: Pão brioche, hambúrguer 180g, queijo — opcional"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  />
+                </Field>
+              </div>
             )}
             {kind === "PRODUTO" && (
               <div className="space-y-2 rounded-lg border border-line-default bg-card px-3 py-2.5">
