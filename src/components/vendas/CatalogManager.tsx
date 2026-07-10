@@ -9,6 +9,7 @@ import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
 import { BUSINESS_TEMPLATES, CATEGORY_LABEL, catalogSeedItems, getTemplate, type BusinessCategory } from "@/lib/business-templates";
 import CatalogItemPhotos from "@/components/vendas/CatalogItemPhotos";
 import CatalogItemSpecs from "@/components/vendas/CatalogItemSpecs";
+import ModifierGroupsEditor from "@/components/vendas/ModifierGroupsEditor";
 
 interface Item {
   id: string;
@@ -591,6 +592,7 @@ export function CatalogManager({
                     <div className="mt-2 space-y-3 border-t border-line-default pt-2">
                       <CatalogItemPhotos itemId={it.id} canEdit={canEdit} />
                       <CatalogItemSpecs itemId={it.id} initialValues={it.customFields ?? null} canEdit={canEdit} />
+                      <ModifierGroupsEditor catalogItemId={it.id} canEdit={canEdit} />
                     </div>
                   )}
                   {editError && <p className="text-xs text-danger">{editError}</p>}
