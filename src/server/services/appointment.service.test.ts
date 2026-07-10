@@ -69,6 +69,31 @@ describe("appointment.service", () => {
     expect(diff).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
+  it("createSeries que sobrepõe agendamento existente: CONFLICT e NADA é criado (rollback)", async () => {
+    const acc = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000803");
+    const pro = await makeProfessional(acc);
+    const item = await createCatalogItem(acc, { name: "Sessão 60", priceCents: 5000 });
+    await prisma.catalogItem.update({ where: { id: item.id }, data: { durationMinutes: 60 } });
+    const base = { leadId, catalogItemId: item.id, professionalId: pro, createdById: acc, force: true };
+
+    // Ocupa a 2ª data da futura série (semana +1), sobrepondo por horário diferente
+    await createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-08T13:30:00.000Z") });
+    const before = await prisma.appointment.count({ where: { professionalId: pro } });
+
+    await expect(
+      createSeries(
+        acc,
+        { ...base, scheduledAt: new Date("2026-09-01T13:00:00.000Z") },
+        { everyDays: 7, count: 3 }, // 01/09, 08/09 (colide), 15/09
+      ),
+    ).rejects.toThrow(/CONFLICT/);
+
+    // Rollback: a série inteira aborta, nenhuma sessão nova entra
+    const after = await prisma.appointment.count({ where: { professionalId: pro } });
+    expect(after).toBe(before);
+  });
+
   it("number é sequencial por conta, começa no 1 e a série é contígua (Onda M)", async () => {
     const acc = await makeOwner();
     const other = await makeOwner();

@@ -427,26 +427,31 @@ export async function createSeries(
 
   if (base.professionalId) {
     await assertProfessionalOwned(userId, base.professionalId);
-    const profId = base.professionalId;
-    for (const at of sessions) {
-      const end = appointmentEnd(at, durationMinutes);
-      if (!base.allowOverlap) {
-        const conflicts = await conflictsFor(userId, profId, at, end);
-        if (conflicts.length > 0) {
-          throw new Error(
-            `CONFLICT: Profissional já tem agendamento em ${formatSlot(at.toISOString(), TZ)}.`,
-          );
-        }
-      }
-      if (!base.force && (await isOutsideWorkingHours(userId, profId, at, end))) {
-        throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
-      }
-    }
   }
 
-  // Numeração sequencial (Onda M) sob advisory lock: a série reserva `count`
-  // números contíguos e cria tudo na mesma transação (ou entra inteira, ou nada).
+  // Numeração sequencial (Onda M) sob advisory lock: a série reserva `count` números
+  // contíguos e cria tudo na mesma transação (ou entra inteira, ou nada). A checagem
+  // de conflito por sessão roda AQUI DENTRO, sob a trava por profissional — atômica
+  // com o createMany (sem isso, dois pedidos concorrentes passariam ambos na checagem).
   return prisma.$transaction(async (tx) => {
+    if (base.professionalId) {
+      const profId = base.professionalId;
+      await lockProfessionalForBooking(tx, profId);
+      for (const at of sessions) {
+        const end = appointmentEnd(at, durationMinutes);
+        if (!base.allowOverlap) {
+          const conflicts = await conflictsFor(userId, profId, at, end, undefined, tx);
+          if (conflicts.length > 0) {
+            throw new Error(
+              `CONFLICT: Profissional já tem agendamento em ${formatSlot(at.toISOString(), TZ)}.`,
+            );
+          }
+        }
+        if (!base.force && (await isOutsideWorkingHours(userId, profId, at, end, tx))) {
+          throw new Error("OUTSIDE_HOURS: Fora do horário de funcionamento do profissional.");
+        }
+      }
+    }
     const startNumber = await reserveAppointmentNumbers(tx, userId);
     const rows: Prisma.AppointmentCreateManyInput[] = sessions.map((at, i) => ({
       leadId: scope.leadId,
