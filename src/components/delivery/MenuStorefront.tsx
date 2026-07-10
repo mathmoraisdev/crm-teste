@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ShoppingBag } from "lucide-react";
 import type { PublicMenuDTO } from "@/server/services/menu.service";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
@@ -36,14 +36,17 @@ export function MenuStorefront({
   businessAddress: string | null;
 }) {
   const items = menu.categories.flatMap((c) => c.items);
+  // Itens com adicionais → linha do carrinho pode ser editada (trocar/remover adicional).
+  const modItemIds = new Set(items.filter((i) => i.modifierGroups.length > 0).map((i) => i.id));
   // Carrinho keyed por combinação (item + adicionais). Item sem adicional usa a
   // própria id como chave (funde por quantidade, como antes).
   const [cart, setCart] = useState<Record<string, CartEntry>>({});
   const [view, setView] = useState<View>("menu");
   const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
   const [lastOrderUrl, setLastOrderUrl] = useState<string | null>(null);
-  // Item aberto no seletor de adicionais (onda-N).
-  const [picker, setPicker] = useState<MenuItemDTO | null>(null);
+  // Seletor de adicionais aberto (onda-N). editKey != null → edição de uma linha
+  // existente (re-chaveia ao salvar); initial = seleção pré-marcada.
+  const [picker, setPicker] = useState<{ item: MenuItemDTO; editKey: string | null; initial: string[] } | null>(null);
 
   // Modo/zona mantidos entre cart e checkout (default = primeira modalidade disponível).
   const defaultMode: FulfillMode = settings.deliveryEnabled ? "DELIVERY" : "RETIRADA";
@@ -75,12 +78,17 @@ export function MenuStorefront({
       };
     });
   }
-  // Confirma a seleção do picker → adiciona/funde a linha da combinação escolhida.
-  function addWithModifiers(it: MenuItemDTO, optionIds: string[]) {
+  // Traduz optionIds → lista de adicionais escolhidos (nome + delta) p/ exibir/somar.
+  function buildChosen(it: MenuItemDTO, optionIds: string[]): CartEntry["chosen"] {
     const chosen: CartEntry["chosen"] = [];
     for (const g of it.modifierGroups) for (const o of g.options) {
       if (optionIds.includes(o.id)) chosen.push({ optionName: o.name, priceDeltaCents: o.priceDeltaCents });
     }
+    return chosen;
+  }
+  // Confirma a seleção do picker → adiciona/funde a linha da combinação escolhida.
+  function addWithModifiers(it: MenuItemDTO, optionIds: string[]) {
+    const chosen = buildChosen(it, optionIds);
     const key = cartEntryKey(it.id, optionIds);
     setCart((c) => {
       const cur = c[key];
@@ -91,11 +99,51 @@ export function MenuStorefront({
           : { key, catalogItemId: it.id, name: it.name, basePriceCents: it.priceCents, optionIds, chosen, quantity: 1 },
       };
     });
+  }
+  // Edita os adicionais de uma linha já no carrinho: re-chaveia p/ a nova combinação,
+  // preservando a quantidade e FUNDINDO se essa combinação já existir em outra linha.
+  function editLine(it: MenuItemDTO, oldKey: string, optionIds: string[]) {
+    const newKey = cartEntryKey(it.id, optionIds);
+    setCart((c) => {
+      const cur = c[oldKey];
+      if (!cur || newKey === oldKey) return c; // linha sumiu ou nada mudou
+      const next = { ...c };
+      delete next[oldKey];
+      const existing = next[newKey];
+      next[newKey] = existing
+        ? { ...existing, quantity: existing.quantity + cur.quantity }
+        : { ...cur, key: newKey, optionIds, chosen: buildChosen(it, optionIds) };
+      return next;
+    });
+  }
+  // Confirmação do picker: em edição salva na linha; senão adiciona nova.
+  function confirmPicker(optionIds: string[]) {
+    if (!picker) return;
+    if (picker.editKey) editLine(picker.item, picker.editKey, optionIds);
+    else addWithModifiers(picker.item, optionIds);
     setPicker(null);
   }
-  // "+" do card: com adicionais abre o seletor; sem adicionais adiciona direto.
+  // Abre o seletor apontando p/ uma linha existente (editar seus adicionais).
+  function onEditLine(entry: CartEntry) {
+    const it = items.find((i) => i.id === entry.catalogItemId);
+    if (it) setPicker({ item: it, editKey: entry.key, initial: entry.optionIds });
+  }
+  // Remove a linha inteira do carrinho (independe da quantidade).
+  function removeLine(key: string) {
+    setCart((c) => {
+      const next = { ...c };
+      delete next[key];
+      return next;
+    });
+  }
+  // Item exige escolha? (algum grupo com mínimo ≥ 1). Só nesse caso o "+" é bloqueante.
+  function requiresChoice(it: MenuItemDTO) {
+    return it.modifierGroups.some((g) => g.minSelect > 0);
+  }
+  // "+" do card: obriga o seletor só quando há adicional obrigatório; caso contrário
+  // adiciona direto (sem pedágio). Adicionais opcionais ficam acessíveis tocando no card.
   function onAdd(it: MenuItemDTO) {
-    if (it.modifierGroups.length > 0) setPicker(it);
+    if (requiresChoice(it)) setPicker({ item: it, editKey: null, initial: [] });
     else addSimple(it);
   }
   function clearCart() {
@@ -210,18 +258,42 @@ export function MenuStorefront({
                     !it.available ? "opacity-60" : ""
                   }`}
                 >
-                  <div className="flex min-w-0 flex-1 flex-col">
+                  {(() => {
+                    // Card com adicionais é clicável → abre o seletor (upsell opcional).
+                    // Sem adicionais o texto é inerte (o "+" resolve tudo).
+                    const hasMods = it.modifierGroups.length > 0;
+                    const clickable = hasMods && it.available;
+                    return (
+                  <div
+                    className={`flex min-w-0 flex-1 flex-col ${clickable ? "cursor-pointer" : ""}`}
+                    {...(clickable
+                      ? {
+                          role: "button" as const,
+                          tabIndex: 0,
+                          onClick: () => setPicker({ item: it, editKey: null, initial: [] }),
+                          onKeyDown: (e: ReactKeyboardEvent) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setPicker({ item: it, editKey: null, initial: [] });
+                            }
+                          },
+                        }
+                      : {})}
+                  >
                     <p className="font-semibold leading-snug text-ink">{it.name}</p>
                     {it.description && (
                       <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{it.description}</p>
                     )}
                     <p className="mt-auto pt-2 text-sm font-bold text-ink">
-                      {it.modifierGroups.length > 0 && (
-                        <span className="font-normal text-slate-500">a partir de </span>
-                      )}
+                      {hasMods && <span className="font-normal text-slate-500">a partir de </span>}
                       {formatCentsBRL(it.priceCents)}
                     </p>
+                    {clickable && (
+                      <span className="mt-1 text-xs font-medium text-brand-600">Escolher adicionais →</span>
+                    )}
                   </div>
+                    );
+                  })()}
 
                   <div className="relative shrink-0">
                     {it.photoUrl ? (
@@ -306,9 +378,12 @@ export function MenuStorefront({
           zones={zones}
           mode={mode}
           zoneId={zoneId}
+          modItemIds={modItemIds}
           onClose={() => setView("menu")}
           onCheckout={() => setView("checkout")}
           onChangeQty={changeQty}
+          onEditLine={onEditLine}
+          onRemove={removeLine}
           onClear={clearCart}
         />
       )}
@@ -327,10 +402,13 @@ export function MenuStorefront({
 
       {picker && (
         <ModifierPicker
-          itemName={picker.name}
-          basePriceCents={picker.priceCents}
-          groups={picker.modifierGroups}
-          onConfirm={(optionIds) => addWithModifiers(picker, optionIds)}
+          key={picker.editKey ?? `new:${picker.item.id}`}
+          itemName={picker.item.name}
+          basePriceCents={picker.item.priceCents}
+          groups={picker.item.modifierGroups}
+          initialOptionIds={picker.initial}
+          confirmLabel={picker.editKey ? "Salvar" : "Adicionar"}
+          onConfirm={confirmPicker}
           onClose={() => setPicker(null)}
         />
       )}

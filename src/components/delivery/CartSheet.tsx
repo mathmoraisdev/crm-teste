@@ -15,9 +15,12 @@ export function CartSheet({
   zones,
   mode,
   zoneId,
+  modItemIds,
   onClose,
   onCheckout,
   onChangeQty,
+  onEditLine,
+  onRemove,
   onClear,
 }: {
   cart: Record<string, CartEntry>;
@@ -25,9 +28,13 @@ export function CartSheet({
   zones: DeliveryZoneDTO[];
   mode: FulfillMode;
   zoneId: string;
+  /** Ids de itens com adicionais → a linha exibe "Editar" (trocar/remover adicional). */
+  modItemIds: Set<string>;
   onClose: () => void;
   onCheckout: () => void;
   onChangeQty: (key: string, delta: number) => void;
+  onEditLine: (entry: CartEntry) => void;
+  onRemove: (key: string) => void;
   onClear: () => void;
 }) {
   const lines = Object.values(cart);
@@ -65,6 +72,24 @@ export function CartSheet({
                       </p>
                     )}
                     <p className="text-xs text-slate-500">{formatCentsBRL(entryUnitPriceCents(e))}</p>
+                    <div className="mt-1 flex items-center gap-3">
+                      {modItemIds.has(e.catalogItemId) && (
+                        <button
+                          type="button"
+                          onClick={() => onEditLine(e)}
+                          className="text-[11px] font-medium text-brand-600 hover:underline"
+                        >
+                          Editar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRemove(e.key)}
+                        className="text-[11px] font-medium text-slate-400 hover:text-danger"
+                      >
+                        Remover
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

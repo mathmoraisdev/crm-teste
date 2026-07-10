@@ -19,6 +19,8 @@ export function ModifierPicker({
   onConfirm,
   onClose,
   busy = false,
+  initialOptionIds,
+  confirmLabel = "Adicionar",
 }: {
   itemName: string;
   basePriceCents: number;
@@ -26,9 +28,22 @@ export function ModifierPicker({
   onConfirm: (optionIds: string[]) => void;
   onClose: () => void;
   busy?: boolean;
+  /** Seleção pré-marcada (modo edição de uma linha do carrinho). Só entra o que ainda está ativo. */
+  initialOptionIds?: string[];
+  /** Rótulo do botão de confirmar — "Salvar" ao editar, "Adicionar" ao incluir. */
+  confirmLabel?: string;
 }) {
-  // seleção por grupo: índice do grupo → optionIds marcados
-  const [selected, setSelected] = useState<Record<number, string[]>>({});
+  // seleção por grupo: índice do grupo → optionIds marcados. Semeada pela seleção
+  // inicial (edição), mapeando cada optionId para o índice do seu grupo.
+  const [selected, setSelected] = useState<Record<number, string[]>>(() => {
+    if (!initialOptionIds?.length) return {};
+    const init: Record<number, string[]> = {};
+    groups.forEach((g, gi) => {
+      const ids = g.options.filter((o) => o.active !== false && initialOptionIds.includes(o.id)).map((o) => o.id);
+      if (ids.length) init[gi] = ids;
+    });
+    return init;
+  });
 
   // só opções ativas entram na tela e na conta
   const visibleGroups = useMemo(
@@ -124,7 +139,7 @@ export function ModifierPicker({
         <div className="mt-4 flex items-center justify-between border-t border-line-default pt-3">
           <span className="text-sm font-semibold text-ink">{formatCentsBRL(basePriceCents + deltaCents)}</span>
           <Button size="sm" onClick={() => onConfirm(allIds)} disabled={!valid || busy} loading={busy}>
-            Adicionar
+            {confirmLabel}
           </Button>
         </div>
       </div>
