@@ -421,7 +421,7 @@ export function VerticalOnboardingWizard({
 
             <div className="flex flex-wrap gap-2 text-xs">
               <Link
-                href="/caixa"
+                href="/catalogo"
                 className="rounded-lg border border-line-default px-3 py-1.5 font-semibold text-ink hover:border-brand-400 hover:bg-inset"
               >
                 Ver catálogo
