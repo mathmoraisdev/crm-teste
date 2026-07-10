@@ -3,9 +3,8 @@
 import { useState } from "react";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
-import type { MenuItemDTO } from "@/server/services/menu.service";
 import { formatCentsBRL } from "@/lib/money";
-import { computeCartTotals, type FulfillMode } from "@/lib/delivery/cart";
+import { computeCartTotals, entryUnitPriceCents, type FulfillMode, type CartEntry } from "@/lib/delivery/cart";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-inset dark:text-ink";
@@ -23,7 +22,6 @@ export interface CheckoutResult {
  */
 export function CheckoutForm({
   slug,
-  items,
   cart,
   settings,
   zones,
@@ -31,8 +29,7 @@ export function CheckoutForm({
   onSuccess,
 }: {
   slug: string;
-  items: MenuItemDTO[];
-  cart: Record<string, number>;
+  cart: Record<string, CartEntry>;
   settings: DeliverySettingsDTO;
   zones: DeliveryZoneDTO[];
   onClose: () => void;
@@ -62,9 +59,8 @@ export function CheckoutForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lines = items
-    .filter((i) => cart[i.id] > 0)
-    .map((i) => ({ id: i.id, priceCents: i.priceCents, qty: cart[i.id] }));
+  const entries = Object.values(cart);
+  const lines = entries.map((e) => ({ id: e.key, priceCents: entryUnitPriceCents(e), qty: e.quantity }));
   const selectedZone = zones.find((z) => z.id === zoneId) ?? null;
   const totals = computeCartTotals(lines, {
     mode,
@@ -93,7 +89,11 @@ export function CheckoutForm({
         mode,
         customerName: name.trim(),
         customerPhone: phone.trim(),
-        items: lines.map((l) => ({ catalogItemId: l.id, quantity: l.qty })),
+        items: entries.map((e) => ({
+          catalogItemId: e.catalogItemId,
+          quantity: e.quantity,
+          ...(e.optionIds.length ? { optionIds: e.optionIds } : {}),
+        })),
         payment,
         note: note.trim() || undefined,
       };

@@ -1,17 +1,15 @@
 "use client";
 
-import type { MenuItemDTO } from "@/server/services/menu.service";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
 import { formatCentsBRL } from "@/lib/money";
-import { computeCartTotals, type FulfillMode } from "@/lib/delivery/cart";
+import { computeCartTotals, entryUnitPriceCents, type FulfillMode, type CartEntry } from "@/lib/delivery/cart";
 
 /**
  * Sheet do carrinho: lista linhas com stepper de quantidade, subtotal, taxa (se
  * delivery) e total. Botão "Finalizar" abre o checkout.
  */
 export function CartSheet({
-  items,
   cart,
   settings,
   zones,
@@ -22,21 +20,20 @@ export function CartSheet({
   onChangeQty,
   onClear,
 }: {
-  items: MenuItemDTO[];
-  cart: Record<string, number>;
+  cart: Record<string, CartEntry>;
   settings: DeliverySettingsDTO;
   zones: DeliveryZoneDTO[];
   mode: FulfillMode;
   zoneId: string;
   onClose: () => void;
   onCheckout: () => void;
-  onChangeQty: (id: string, delta: number) => void;
+  onChangeQty: (key: string, delta: number) => void;
   onClear: () => void;
 }) {
-  const lines = items.filter((i) => cart[i.id] > 0);
+  const lines = Object.values(cart);
   const selectedZone = zones.find((z) => z.id === zoneId) ?? null;
   const totals = computeCartTotals(
-    lines.map((i) => ({ id: i.id, priceCents: i.priceCents, qty: cart[i.id] })),
+    lines.map((e) => ({ id: e.key, priceCents: entryUnitPriceCents(e), qty: e.quantity })),
     { mode, feeCents: mode === "DELIVERY" ? (selectedZone?.feeCents ?? 0) : 0 },
   );
 
@@ -58,24 +55,29 @@ export function CartSheet({
         ) : (
           <>
             <div className="space-y-2">
-              {lines.map((it) => (
-                <div key={it.id} className="flex items-center gap-3 rounded-lg border border-line bg-inset px-3 py-2">
+              {lines.map((e) => (
+                <div key={e.key} className="flex items-center gap-3 rounded-lg border border-line bg-inset px-3 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{it.name}</p>
-                    <p className="text-xs text-slate-500">{formatCentsBRL(it.priceCents)}</p>
+                    <p className="truncate text-sm font-medium text-ink">{e.name}</p>
+                    {e.chosen.length > 0 && (
+                      <p className="truncate text-[11px] text-slate-400">
+                        {e.chosen.map((c) => `+ ${c.optionName}`).join(", ")}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-500">{formatCentsBRL(entryUnitPriceCents(e))}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => onChangeQty(it.id, -1)}
+                      onClick={() => onChangeQty(e.key, -1)}
                       className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-ink dark:border-slate-600"
                     >
                       −
                     </button>
-                    <span className="w-5 text-center text-sm font-semibold text-ink">{cart[it.id]}</span>
+                    <span className="w-5 text-center text-sm font-semibold text-ink">{e.quantity}</span>
                     <button
                       type="button"
-                      onClick={() => onChangeQty(it.id, 1)}
+                      onClick={() => onChangeQty(e.key, 1)}
                       className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-500 text-white"
                     >
                       +

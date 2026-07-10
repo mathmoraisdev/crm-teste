@@ -6,7 +6,9 @@ import type { PublicMenuDTO } from "@/server/services/menu.service";
 import type { DeliverySettingsDTO } from "@/server/services/delivery-settings.service";
 import type { DeliveryZoneDTO } from "@/server/services/delivery-zone.service";
 import { formatCentsBRL } from "@/lib/money";
-import { computeCartTotals, type FulfillMode } from "@/lib/delivery/cart";
+import { computeCartTotals, entryUnitPriceCents, cartEntryKey, type FulfillMode, type CartEntry } from "@/lib/delivery/cart";
+import { ModifierPicker } from "@/components/menu/ModifierPicker";
+import type { MenuItemDTO } from "@/server/services/menu.service";
 import { CartSheet } from "./CartSheet";
 import { CheckoutForm, type CheckoutResult } from "./CheckoutForm";
 
@@ -31,24 +33,67 @@ export function MenuStorefront({
   open: boolean;
 }) {
   const items = menu.categories.flatMap((c) => c.items);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  // Carrinho keyed por combinação (item + adicionais). Item sem adicional usa a
+  // própria id como chave (funde por quantidade, como antes).
+  const [cart, setCart] = useState<Record<string, CartEntry>>({});
   const [view, setView] = useState<View>("menu");
   const [pixResult, setPixResult] = useState<CheckoutResult | null>(null);
   const [lastOrderUrl, setLastOrderUrl] = useState<string | null>(null);
+  // Item aberto no seletor de adicionais (onda-N).
+  const [picker, setPicker] = useState<MenuItemDTO | null>(null);
 
   // Modo/zona mantidos entre cart e checkout (default = primeira modalidade disponível).
   const defaultMode: FulfillMode = settings.deliveryEnabled ? "DELIVERY" : "RETIRADA";
   const [mode, setMode] = useState<FulfillMode>(defaultMode);
   const [zoneId, setZoneId] = useState("");
 
-  function changeQty(id: string, delta: number) {
+  // Ajusta a quantidade de uma linha existente (por chave).
+  function changeQty(key: string, delta: number) {
     setCart((c) => {
-      const n = (c[id] ?? 0) + delta;
+      const cur = c[key];
+      if (!cur) return c;
+      const n = cur.quantity + delta;
       const next = { ...c };
-      if (n <= 0) delete next[id];
-      else next[id] = n;
+      if (n <= 0) delete next[key];
+      else next[key] = { ...cur, quantity: n };
       return next;
     });
+  }
+  // Adiciona um item SEM adicionais (ou incrementa a linha já existente).
+  function addSimple(it: MenuItemDTO) {
+    const key = cartEntryKey(it.id, []);
+    setCart((c) => {
+      const cur = c[key];
+      return {
+        ...c,
+        [key]: cur
+          ? { ...cur, quantity: cur.quantity + 1 }
+          : { key, catalogItemId: it.id, name: it.name, basePriceCents: it.priceCents, optionIds: [], chosen: [], quantity: 1 },
+      };
+    });
+  }
+  // Confirma a seleção do picker → adiciona/funde a linha da combinação escolhida.
+  function addWithModifiers(it: MenuItemDTO, optionIds: string[]) {
+    const chosen: CartEntry["chosen"] = [];
+    for (const g of it.modifierGroups) for (const o of g.options) {
+      if (optionIds.includes(o.id)) chosen.push({ optionName: o.name, priceDeltaCents: o.priceDeltaCents });
+    }
+    const key = cartEntryKey(it.id, optionIds);
+    setCart((c) => {
+      const cur = c[key];
+      return {
+        ...c,
+        [key]: cur
+          ? { ...cur, quantity: cur.quantity + 1 }
+          : { key, catalogItemId: it.id, name: it.name, basePriceCents: it.priceCents, optionIds, chosen, quantity: 1 },
+      };
+    });
+    setPicker(null);
+  }
+  // "+" do card: com adicionais abre o seletor; sem adicionais adiciona direto.
+  function onAdd(it: MenuItemDTO) {
+    if (it.modifierGroups.length > 0) setPicker(it);
+    else addSimple(it);
   }
   function clearCart() {
     setCart({});
@@ -58,8 +103,9 @@ export function MenuStorefront({
     document.getElementById(`cat-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const cartCount = Object.values(cart).reduce((s, n) => s + n, 0);
-  const lines = items.filter((i) => cart[i.id] > 0).map((i) => ({ id: i.id, priceCents: i.priceCents, qty: cart[i.id] }));
+  const entries = Object.values(cart);
+  const cartCount = entries.reduce((s, e) => s + e.quantity, 0);
+  const lines = entries.map((e) => ({ id: e.key, priceCents: entryUnitPriceCents(e), qty: e.quantity }));
   const selectedZone = zones.find((z) => z.id === zoneId) ?? null;
   const totals = computeCartTotals(lines, {
     mode,
@@ -166,7 +212,12 @@ export function MenuStorefront({
                     {it.description && (
                       <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{it.description}</p>
                     )}
-                    <p className="mt-auto pt-2 text-sm font-bold text-ink">{formatCentsBRL(it.priceCents)}</p>
+                    <p className="mt-auto pt-2 text-sm font-bold text-ink">
+                      {it.modifierGroups.length > 0 && (
+                        <span className="font-normal text-slate-500">a partir de </span>
+                      )}
+                      {formatCentsBRL(it.priceCents)}
+                    </p>
                   </div>
 
                   <div className="relative shrink-0">
@@ -183,7 +234,7 @@ export function MenuStorefront({
                       <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 shadow-sm dark:bg-rose-500/20 dark:text-rose-300">
                         Esgotado
                       </span>
-                    ) : cart[it.id] ? (
+                    ) : it.modifierGroups.length === 0 && cart[it.id] ? (
                       <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-raised px-1 py-1 shadow-md">
                         <button
                           type="button"
@@ -193,7 +244,7 @@ export function MenuStorefront({
                         >
                           −
                         </button>
-                        <span className="min-w-5 text-center text-sm font-bold text-ink">{cart[it.id]}</span>
+                        <span className="min-w-5 text-center text-sm font-bold text-ink">{cart[it.id].quantity}</span>
                         <button
                           type="button"
                           onClick={() => changeQty(it.id, 1)}
@@ -207,7 +258,7 @@ export function MenuStorefront({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => changeQty(it.id, 1)}
+                        onClick={() => onAdd(it)}
                         disabled={!open}
                         className="absolute -bottom-2 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-lg font-bold text-white shadow-md disabled:opacity-40"
                         aria-label={`Adicionar ${it.name}`}
@@ -247,7 +298,6 @@ export function MenuStorefront({
 
       {view === "cart" && (
         <CartSheet
-          items={items}
           cart={cart}
           settings={settings}
           zones={zones}
@@ -263,12 +313,21 @@ export function MenuStorefront({
       {view === "checkout" && (
         <CheckoutForm
           slug={slug}
-          items={items}
           cart={cart}
           settings={settings}
           zones={zones}
           onClose={() => setView("cart")}
           onSuccess={handleSuccess}
+        />
+      )}
+
+      {picker && (
+        <ModifierPicker
+          itemName={picker.name}
+          basePriceCents={picker.priceCents}
+          groups={picker.modifierGroups}
+          onConfirm={(optionIds) => addWithModifiers(picker, optionIds)}
+          onClose={() => setPicker(null)}
         />
       )}
     </div>
