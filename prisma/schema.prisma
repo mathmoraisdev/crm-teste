@@ -1382,6 +1382,9 @@ model DeliverySettings {
   minOrderCents        Int      @default(0)
   defaultPrepMinutes   Int      @default(30)
   hoursJson            Json?
+  // Ordem manual dos tópicos do cardápio: array de nomes de menuCategory na ordem
+  // desejada. Categoria fora da lista vai depois (alfabética); "Outros" sempre por último.
+  categoryOrderJson    Json?
   updatedAt            DateTime @updatedAt
 }
 

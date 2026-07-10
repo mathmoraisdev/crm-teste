@@ -43,6 +43,7 @@ const patchSchema = z.object({
   minOrderCents: z.number().int().min(0).optional(),
   defaultPrepMinutes: z.number().int().min(0).max(600).optional(),
   hours: hoursSchema.nullable().optional(),
+  categoryOrder: z.array(z.string()).max(200).optional(),
 });
 
 export async function PUT(req: NextRequest) {

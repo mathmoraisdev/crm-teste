@@ -78,6 +78,46 @@ describe("menu.service", () => {
     expect(menu.categories.flatMap((c) => c.items).find((i) => i.id === item.id)).toBeDefined();
   });
 
+  it("respeita a ordem manual (categoryOrder); categoria fora da lista vem depois; 'Outros' por último", async () => {
+    const acc = await makeOwner();
+    const mk = async (name: string, cat: string | null) => {
+      const it = await createCatalogItem(acc, { name, priceCents: 100, kind: "PRODUTO" });
+      await setMenuFields(it.id, { menuCategory: cat });
+    };
+    await mk("Coca", "Bebidas");
+    await mk("X-Burguer", "Lanches");
+    await mk("Pudim", "Sobremesas");
+    await mk("Brinde", "Zap"); // não está na ordem manual
+    await mk("Avulso", null); // vai p/ "Outros"
+
+    // Ordem manual: comida primeiro, bebida por último (o pedido original do dono).
+    await prisma.deliverySettings.create({
+      data: { accountId: acc, categoryOrderJson: ["Lanches", "Sobremesas", "Bebidas"] },
+    });
+
+    const menu = await getPublicMenu(acc);
+    expect(menu.categories.map((c) => c.name)).toEqual([
+      "Lanches",
+      "Sobremesas",
+      "Bebidas",
+      "Zap", // fora da ordem → depois das ordenadas (alfabético entre si)
+      "Outros", // sem categoria → sempre por último
+    ]);
+  });
+
+  it("sem categoryOrder, mantém ordem alfabética (com 'Outros' por último)", async () => {
+    const acc = await makeOwner();
+    const mk = async (name: string, cat: string) => {
+      const it = await createCatalogItem(acc, { name, priceCents: 100, kind: "PRODUTO" });
+      await setMenuFields(it.id, { menuCategory: cat });
+    };
+    await mk("Coca", "Bebidas");
+    await mk("X-Burguer", "Lanches");
+
+    const menu = await getPublicMenu(acc);
+    expect(menu.categories.map((c) => c.name)).toEqual(["Bebidas", "Lanches"]);
+  });
+
   it("escopo por conta: itens de outra conta não vazam", async () => {
     const a = await makeOwner();
     const b = await makeOwner();

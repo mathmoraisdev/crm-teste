@@ -28,11 +28,25 @@ const UNCATEGORIZED = "Outros";
  * A foto de capa = `CatalogItemPhoto` de menor `order`, assinada sob demanda.
  */
 export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
-  const rows = await prisma.catalogItem.findMany({
-    where: { accountId, active: true, menuVisible: true },
-    orderBy: [{ menuCategory: "asc" }, { name: "asc" }],
-    include: { photos: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], take: 1 } },
-  });
+  const [rows, settingsRow] = await Promise.all([
+    prisma.catalogItem.findMany({
+      where: { accountId, active: true, menuVisible: true },
+      orderBy: [{ menuCategory: "asc" }, { name: "asc" }],
+      include: { photos: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], take: 1 } },
+    }),
+    prisma.deliverySettings.findUnique({
+      where: { accountId },
+      select: { categoryOrderJson: true },
+    }),
+  ]);
+
+  // Ordem manual das categorias (nomes de menuCategory). Índice menor = mais no topo.
+  const rawOrder = settingsRow?.categoryOrderJson;
+  const orderIndex = new Map(
+    (Array.isArray(rawOrder) ? rawOrder.filter((x): x is string => typeof x === "string") : []).map(
+      (name, i) => [name, i] as const,
+    ),
+  );
 
   // Assina as capas em paralelo (1 round-trip Supabase por item com foto).
   const withPhotos = await Promise.all(
@@ -61,10 +75,14 @@ export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
   }
 
   const categories = [...byCat.entries()].map(([name, items]) => ({ name, items }));
-  // "Outros" sempre por último; demais em ordem alfabética.
+  // "Outros" sempre por último. Demais: pela ordem manual (categoryOrder); categoria
+  // fora da lista vem depois das ordenadas, em ordem alfabética entre si.
   categories.sort((a, b) => {
     if (a.name === UNCATEGORIZED) return 1;
     if (b.name === UNCATEGORIZED) return -1;
+    const ia = orderIndex.get(a.name) ?? Infinity;
+    const ib = orderIndex.get(b.name) ?? Infinity;
+    if (ia !== ib) return ia - ib;
     return a.name.localeCompare(b.name);
   });
   return { categories };

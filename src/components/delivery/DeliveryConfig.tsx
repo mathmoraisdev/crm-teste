@@ -55,6 +55,18 @@ function serializeHours(rows: Record<string, { open: string; close: string; clos
 }
 
 /**
+ * Ordem inicial das categorias na tela: mantém a ordem salva (só as que ainda
+ * existem no cardápio) e acrescenta as novas ao fim, em ordem alfabética.
+ */
+function mergeCategoryOrder(saved: string[], present: string[]): string[] {
+  const presentSet = new Set(present);
+  const kept = saved.filter((c) => presentSet.has(c));
+  const keptSet = new Set(kept);
+  const rest = present.filter((c) => !keptSet.has(c)).sort((a, b) => a.localeCompare(b));
+  return [...kept, ...rest];
+}
+
+/**
  * Configuração do cardápio online: publica o link público, liga entrega/retirada,
  * formas de pagamento, pedido mínimo, tempo de preparo, zonas de entrega (bairros/taxas)
  * e horário de funcionamento. Salva em /api/delivery/*.
@@ -64,12 +76,18 @@ export function DeliveryConfig({
   initialZones,
   canEdit = true,
   entitled = true,
+  menuCategories = [],
+  initialCategoryOrder = [],
 }: {
   initial: DeliverySettingsInitial;
   initialZones: DeliveryZoneRow[];
   canEdit?: boolean;
   /** Conta tem o add-on de Delivery ativo? Sem ele, não dá pra publicar o cardápio. */
   entitled?: boolean;
+  /** Categorias (menuCategory) em uso no cardápio hoje. */
+  menuCategories?: string[];
+  /** Ordem manual salva das categorias. */
+  initialCategoryOrder?: string[];
 }) {
   const [menuEnabled, setMenuEnabled] = useState(initial.menuEnabled);
   const [slug, setSlug] = useState(initial.publicSlug ?? "");
@@ -81,6 +99,9 @@ export function DeliveryConfig({
   const [minOrder, setMinOrder] = useState(formatCentsBRL(initial.minOrderCents));
   const [prepMin, setPrepMin] = useState(String(initial.defaultPrepMinutes));
   const [hoursRows, setHoursRows] = useState(() => loadHours(initial.hours));
+  const [catOrder, setCatOrder] = useState<string[]>(() =>
+    mergeCategoryOrder(initialCategoryOrder, menuCategories),
+  );
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -94,6 +115,18 @@ export function DeliveryConfig({
   const [newMin, setNewMin] = useState("");
   const [zoneBusy, setZoneBusy] = useState<string | null>(null);
   const [zoneError, setZoneError] = useState<string | null>(null);
+
+  /** Move a categoria da posição `i` uma casa pra cima (-1) ou pra baixo (+1). */
+  function moveCategory(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= catOrder.length) return;
+    setCatOrder((order) => {
+      const next = [...order];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+    setSaved(false);
+  }
 
   async function copyLink() {
     if (!publicUrl) return;
@@ -126,6 +159,7 @@ export function DeliveryConfig({
         minOrderCents: minCents,
         defaultPrepMinutes: Number(prepMin.trim()) || 0,
         hours: serializeHours(hoursRows),
+        categoryOrder: catOrder,
       };
       if (slug.trim()) body.publicSlug = slug.trim();
       const res = await fetch("/api/delivery/settings", {
@@ -289,6 +323,52 @@ export function DeliveryConfig({
             </div>
           )}
         </div>
+
+        {/* Ordem das categorias (tópicos) no cardápio */}
+        {catOrder.length >= 2 && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">
+              Ordem das categorias no cardápio
+            </label>
+            <div className="space-y-2">
+              {catOrder.map((cat, i) => (
+                <div
+                  key={cat}
+                  className="flex items-center gap-2 rounded-lg border border-line bg-inset px-3 py-2"
+                >
+                  <span className="w-6 text-xs tabular-nums text-slate-400">{i + 1}.</span>
+                  <span className="flex-1 truncate text-sm font-medium text-ink">{cat}</span>
+                  {canEdit && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={i === 0}
+                        onClick={() => moveCategory(i, -1)}
+                        aria-label={`Mover ${cat} para cima`}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={i === catOrder.length - 1}
+                        onClick={() => moveCategory(i, 1)}
+                        aria-label={`Mover ${cat} para baixo`}
+                      >
+                        ↓
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <span className="mt-1 block text-xs text-slate-500">
+              A ordem aqui é a ordem dos tópicos no cardápio. &quot;Outros&quot; (sem categoria)
+              aparece sempre por último. Salve para aplicar.
+            </span>
+          </div>
+        )}
 
         {/* Toggles de modalidade/pagamento */}
         <div className="grid gap-3 sm:grid-cols-2">

@@ -12,6 +12,8 @@ export interface DeliverySettingsDTO {
   minOrderCents: number;
   defaultPrepMinutes: number;
   hours: DeliveryHours | null;
+  /** Ordem manual dos tópicos do cardápio (nomes de menuCategory). Vazio = alfabético. */
+  categoryOrder: string[];
 }
 
 const DEFAULTS: DeliverySettingsDTO = {
@@ -22,7 +24,13 @@ const DEFAULTS: DeliverySettingsDTO = {
   minOrderCents: 0,
   defaultPrepMinutes: 30,
   hours: null,
+  categoryOrder: [],
 };
+
+/** Lê um array de strings de um campo JSON solto (defensivo: null/valor torto → []). */
+function toStringArray(value: Prisma.JsonValue | null): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+}
 
 function toDTO(row: {
   deliveryEnabled: boolean;
@@ -32,6 +40,7 @@ function toDTO(row: {
   minOrderCents: number;
   defaultPrepMinutes: number;
   hoursJson: Prisma.JsonValue | null;
+  categoryOrderJson: Prisma.JsonValue | null;
 }): DeliverySettingsDTO {
   return {
     deliveryEnabled: row.deliveryEnabled,
@@ -41,6 +50,7 @@ function toDTO(row: {
     minOrderCents: row.minOrderCents,
     defaultPrepMinutes: row.defaultPrepMinutes,
     hours: (row.hoursJson as DeliveryHours | null) ?? null,
+    categoryOrder: toStringArray(row.categoryOrderJson),
   };
 }
 
@@ -51,7 +61,10 @@ export async function getDeliverySettings(accountId: string): Promise<DeliverySe
 }
 
 export type DeliverySettingsPatch = Partial<
-  Omit<DeliverySettingsDTO, "hours"> & { hours?: DeliveryHours | null }
+  Omit<DeliverySettingsDTO, "hours" | "categoryOrder"> & {
+    hours?: DeliveryHours | null;
+    categoryOrder?: string[];
+  }
 >;
 
 /** Upsert das configurações de delivery. Clampa inteiros negativos. */
@@ -74,6 +87,9 @@ export async function updateDeliverySettings(
       : {}),
     ...(patch.hours !== undefined
       ? { hoursJson: patch.hours === null ? Prisma.JsonNull : (patch.hours as Prisma.InputJsonValue) }
+      : {}),
+    ...(patch.categoryOrder !== undefined
+      ? { categoryOrderJson: patch.categoryOrder as unknown as Prisma.InputJsonValue }
       : {}),
   };
   const row = await prisma.deliverySettings.upsert({

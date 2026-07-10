@@ -25,7 +25,15 @@ describe("delivery-settings.service", () => {
       minOrderCents: 0,
       defaultPrepMinutes: 30,
       hours: null,
+      categoryOrder: [],
     });
+  });
+
+  it("updateDeliverySettings grava e lê categoryOrder (ordem dos tópicos)", async () => {
+    const acc = await makeOwner();
+    await updateDeliverySettings(acc, { categoryOrder: ["Lanches", "Sobremesas", "Bebidas"] });
+    const s = await getDeliverySettings(acc);
+    expect(s.categoryOrder).toEqual(["Lanches", "Sobremesas", "Bebidas"]);
   });
 
   it("updateDeliverySettings faz upsert e clampa negativos", async () => {

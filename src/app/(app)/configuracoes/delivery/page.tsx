@@ -18,15 +18,25 @@ export default async function DeliveryConfigPage() {
   if (!ctx) redirect("/login");
   const ownerId = ctx.tenantUserId;
 
-  const [settings, zones, u, entitled] = await Promise.all([
+  const [settings, zones, u, entitled, catRows] = await Promise.all([
     getDeliverySettings(ownerId),
     listZones(ownerId, { includeInactive: true }),
     prisma.user.findUnique({ where: { id: ownerId }, select: { publicSlug: true, menuEnabled: true } }),
     canUseDelivery(ownerId),
+    // Categorias em uso no cardápio (mesmos filtros do cardápio público) p/ reordenar.
+    prisma.catalogItem.findMany({
+      where: { accountId: ownerId, active: true, menuVisible: true },
+      select: { menuCategory: true },
+    }),
   ]);
 
   const slug = u?.publicSlug ?? null;
   const publicUrl = slug ? `${env.APP_URL}/cardapio/${slug}` : null;
+
+  // Nomes distintos de categoria (trim), em ordem alfabética; sem o balde "Outros".
+  const menuCategories = [
+    ...new Set(catRows.map((r) => r.menuCategory?.trim()).filter((c): c is string => !!c)),
+  ].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -45,6 +55,8 @@ export default async function DeliveryConfigPage() {
       <DeliveryConfig
         canEdit={ctx.perms.canSettings}
         entitled={entitled}
+        menuCategories={menuCategories}
+        initialCategoryOrder={settings.categoryOrder}
         initial={{
           menuEnabled: u?.menuEnabled ?? false,
           publicSlug: slug,
