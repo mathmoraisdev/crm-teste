@@ -8,12 +8,14 @@ import { logger } from "@/lib/logger";
 import { pickCommissionRule, commissionForLine } from "@/lib/commission";
 import { createLead } from "@/server/services/lead.service";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
+import { resolveModifierSelection } from "./modifier.service";
+import type { ModifierSnapshotEntry } from "./modifier.service";
 import { getBranding } from "@/server/services/branding.service";
 import type { ReceiptOrderInput } from "@/lib/receipt/model";
 import { formatReceiptDateTime } from "@/lib/receipt/model";
 import type { KitchenOrderInput } from "@/lib/receipt/kitchen";
 
-export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields: Record<string, unknown> | null; }
+export interface OrderItemDTO { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields: Record<string, unknown> | null; modifiers: ModifierSnapshotEntry[] | null; }
 export interface OrderDTO {
   id: string; status: OrderStatus; leadId: string | null; customerName: string | null;
   payment: OrderPayment | null; note: string | null; createdAt: string; closedAt: string | null;
@@ -46,6 +48,22 @@ function asRecord(v: Prisma.JsonValue | null | undefined): Record<string, unknow
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
+/** Valida/normaliza o Json de modifiersSnapshot vindo do banco → array tipado (ou
+ * null). Defensivo: dados velhos/malformados viram null em vez de quebrar a UI. */
+function asModifierArray(v: Prisma.JsonValue | null | undefined): ModifierSnapshotEntry[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: ModifierSnapshotEntry[] = [];
+  for (const e of v) {
+    if (e && typeof e === "object" && !Array.isArray(e)) {
+      const r = e as Record<string, unknown>;
+      if (typeof r.groupName === "string" && typeof r.optionName === "string" && typeof r.priceDeltaCents === "number") {
+        out.push({ groupName: r.groupName, optionName: r.optionName, priceDeltaCents: r.priceDeltaCents });
+      }
+    }
+  }
+  return out.length ? out : null;
+}
+
 function toDTO(o: {
   id: string; status: OrderStatus; leadId: string | null; customerName: string | null;
   payment: OrderPayment | null; note: string | null; createdAt: Date; closedAt: Date | null;
@@ -54,9 +72,9 @@ function toDTO(o: {
   amountTenderedCents?: number | null; changeCents?: number | null; tableLabel?: string | null;
   deliveryFeeCents?: number | null;
   lead?: { name: string } | null;
-  items: { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields?: Prisma.JsonValue | null }[];
+  items: { id: string; nameSnapshot: string; unitPriceCents: number; quantity: number; catalogItemId: string | null; customFields?: Prisma.JsonValue | null; modifiersSnapshot?: Prisma.JsonValue | null }[];
 }): OrderDTO {
-  const items = o.items.map((i) => ({ id: i.id, nameSnapshot: i.nameSnapshot, unitPriceCents: i.unitPriceCents, quantity: i.quantity, catalogItemId: i.catalogItemId, customFields: asRecord(i.customFields) }));
+  const items = o.items.map((i) => ({ id: i.id, nameSnapshot: i.nameSnapshot, unitPriceCents: i.unitPriceCents, quantity: i.quantity, catalogItemId: i.catalogItemId, customFields: asRecord(i.customFields), modifiers: asModifierArray(i.modifiersSnapshot) }));
   const discountCents = o.discountCents ?? null;
   const surchargeCents = o.surchargeCents ?? null;
   const tipCents = o.tipCents ?? null;
@@ -124,7 +142,8 @@ export async function openOrder(
 export async function addItem(
   accountId: string,
   orderId: string,
-  data: { catalogItemId?: string; name?: string; unitPriceCents?: number; quantity?: number; customFields?: Record<string, unknown> },
+  data: { catalogItemId?: string; name?: string; unitPriceCents?: number; quantity?: number;
+          customFields?: Record<string, unknown>; modifierOptionIds?: string[] },
 ): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId);
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
@@ -144,6 +163,15 @@ export async function addItem(
     nameSnapshot = data.name.trim(); unitPriceCents = data.unitPriceCents!;
   }
 
+  // Adicionais: só p/ item de catálogo. Resolve o delta pelo banco e soma no preço.
+  // Mesmo sem escolha, resolvemos com [] p/ validar grupos obrigatórios (lança se faltar).
+  let modifiersSnapshot: ModifierSnapshotEntry[] | null = null;
+  if (catalogItemId) {
+    const r = await resolveModifierSelection(accountId, catalogItemId, data.modifierOptionIds ?? []);
+    unitPriceCents += r.deltaCents;
+    modifiersSnapshot = r.snapshot;
+  }
+
   const customFields = data.customFields
     ? await mergeCustomFields(accountId, null, data.customFields, "ORDER_ITEM")
     : undefined;
@@ -152,6 +180,7 @@ export async function addItem(
     data: {
       orderId, catalogItemId, nameSnapshot, unitPriceCents, quantity: qty,
       ...(customFields ? { customFields: customFields as Prisma.InputJsonValue } : {}),
+      ...(modifiersSnapshot ? { modifiersSnapshot: modifiersSnapshot as unknown as Prisma.InputJsonValue } : {}),
     },
   });
   return toDTO(await loadOwned(accountId, orderId));

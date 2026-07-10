@@ -12,6 +12,7 @@ vi.mock("@/server/crypto", () => ({
 import { createCatalogItem } from "./catalog.service";
 import { createDef } from "./custom-field.service";
 import { openOrder, addItem, removeItem, closeOrder, listOpenOrders, orderTotalCents, setItemQuantity, setOrderAdjustments, setOrderItemCustomFields, getReceiptData, voidOrder, reopenOrder } from "./order.service";
+import { saveItemModifiers, listItemModifiers } from "./modifier.service";
 import { recordEntry, listStock, listMovements } from "./stock.service";
 import { openSession } from "./cash-session.service";
 import { createCommissionRule } from "./commission.service";
@@ -494,6 +495,51 @@ describe("getReceiptData (dados do recibo, escopado)", () => {
     const other = await makeOwner();
     const o = await openOrder(acc, { openedById: acc, customerName: "X" });
     await expect(getReceiptData(other, o.id)).rejects.toThrow();
+  });
+});
+
+describe("addItem — adicionais precificados (onda-N)", () => {
+  it("soma o delta dos adicionais no unitPriceCents e grava o snapshot", async () => {
+    const acc = await makeOwner();
+    const burger = await createCatalogItem(acc, { name: "Burger", priceCents: 2000, kind: "PRODUTO" });
+    await saveItemModifiers(acc, burger.id, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [
+        { name: "Média", priceDeltaCents: 0 }, { name: "Grande", priceDeltaCents: 800 } ] },
+      { name: "Adicionais", minSelect: 0, maxSelect: 3, options: [
+        { name: "Bacon", priceDeltaCents: 500 }, { name: "Cheddar", priceDeltaCents: 400 } ] },
+    ]);
+    const groups = await listItemModifiers(acc, burger.id);
+    const grande = groups[0].options.find((o) => o.name === "Grande")!;
+    const bacon = groups[1].options.find((o) => o.name === "Bacon")!;
+
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const upd = await addItem(acc, o.id, { catalogItemId: burger.id, quantity: 1, modifierOptionIds: [grande.id, bacon.id] });
+    expect(upd.items[0].unitPriceCents).toBe(3300); // 2000 + 800 + 500
+    expect(upd.items[0].modifiers).toEqual([
+      { groupName: "Tamanho", optionName: "Grande", priceDeltaCents: 800 },
+      { groupName: "Adicionais", optionName: "Bacon", priceDeltaCents: 500 },
+    ]);
+    // o total derivado já vem somado (base + deltas), sem linha extra
+    expect(upd.totalCents).toBe(3300);
+  });
+
+  it("sem modifierOptionIds → comportamento atual (sem snapshot)", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Suco", priceCents: 1000, kind: "PRODUTO" });
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    const upd = await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
+    expect(upd.items[0].unitPriceCents).toBe(1000);
+    expect(upd.items[0].modifiers).toBeNull();
+  });
+
+  it("recusa item com grupo obrigatório e sem escolha (vale p/ PDV/IA/cardápio)", async () => {
+    const acc = await makeOwner();
+    const item = await createCatalogItem(acc, { name: "Pizza", priceCents: 3000, kind: "PRODUTO" });
+    await saveItemModifiers(acc, item.id, [
+      { name: "Tamanho", minSelect: 1, maxSelect: 1, options: [{ name: "G", priceDeltaCents: 0 }] },
+    ]);
+    const o = await openOrder(acc, { openedById: acc, customerName: "X" });
+    await expect(addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 })).rejects.toThrow(/Tamanho/);
   });
 });
 
