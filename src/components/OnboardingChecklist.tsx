@@ -13,6 +13,9 @@ import {
   Boxes,
   Users2,
   ArrowRight,
+  ShoppingBag,
+  Bike,
+  Globe,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/Card";
@@ -97,6 +100,30 @@ const STEP_META: Record<
     href: "/estoque",
     cta: "Configurar estoque",
     help: "O estoque baixa sozinho no fechamento da comanda e avisa quando um produto está acabando. Opt-in por produto — só liga no que você quer controlar.",
+  },
+  menu_catalog: {
+    icon: ShoppingBag,
+    title: "Monte seu cardápio online",
+    description: "Marque os itens como visíveis no cardápio e organize por categoria.",
+    href: "/catalogo",
+    cta: "Montar cardápio",
+    help: "Itens com “visível no cardápio” ligado aparecem na página pública /cardapio/<slug>. Defina a categoria (ex.: Lanches, Bebidas) para agrupar na vitrine.",
+  },
+  delivery_config: {
+    icon: Bike,
+    title: "Configure entrega e taxas",
+    description: "Defina bairros, taxas de entrega, pedido mínimo e modalidades.",
+    href: "/configuracoes/delivery",
+    cta: "Configurar entrega",
+    help: "Crie zonas de bairro com taxa e pedido mínimo próprios. Aqui também liga/desliga entrega, retirada e pagamento online (Pix) ou na entrega.",
+  },
+  menu_publish: {
+    icon: Globe,
+    title: "Publique seu cardápio",
+    description: "Ligue o cardápio online e copie o link público para divulgar.",
+    href: "/configuracoes/delivery",
+    cta: "Publicar cardápio",
+    help: "Ao publicar, o link /cardapio/<slug> fica ativo — clientes pedem sem login, com carrinho e checkout. Desligar a qualquer momento esconde a página (404).",
   },
   agenda_setup: {
     icon: Users2,

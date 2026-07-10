@@ -8,7 +8,8 @@ import type { BusinessCategory } from "@/lib/business-templates";
 
 export type OnboardingStepKey =
   | "ramo" | "number" | "ai" | "catalogo" | "estoque" | "agenda_setup"
-  | "leads" | "campaign" | "meeting";
+  | "leads" | "campaign" | "meeting"
+  | "menu_catalog" | "delivery_config" | "menu_publish";
 
 /** Variante de copy do passo de catálogo, derivada das capacidades do ramo. */
 export type CatalogVariant = "produtos" | "servicos" | "ambos";
@@ -36,6 +37,8 @@ export function planOnboardingSteps(ctx: OnboardingPlanCtx): PlannedStep[] {
   const { category, qualify, campaigns, schedule } = ctx;
   const hasEstoque = moduleVisibleFor(category, "estoque");
   const hasAgenda = schedule && moduleVisibleFor(category, "agenda");
+  // Cardápio online / delivery: só ramos de alimentação (mesma regra da sidebar).
+  const hasMenu = moduleVisibleFor(category, "producao");
 
   const catalogVariant: CatalogVariant =
     hasEstoque && hasAgenda ? "ambos" : hasEstoque ? "produtos" : "servicos";
@@ -46,6 +49,9 @@ export function planOnboardingSteps(ctx: OnboardingPlanCtx): PlannedStep[] {
     { key: "ai",           show: qualify },
     { key: "catalogo",     show: true, variant: catalogVariant },
     { key: "estoque",      show: hasEstoque },
+    { key: "menu_catalog", show: hasMenu },   // marque itens como visíveis no cardápio
+    { key: "delivery_config", show: hasMenu }, // zonas + taxas + modalidades
+    { key: "menu_publish", show: hasMenu },    // ligar menuEnabled + link público
     { key: "agenda_setup", show: hasAgenda },
     { key: "leads",        show: true },
     { key: "campaign",     show: campaigns },
@@ -79,11 +85,11 @@ export interface OnboardingState {
  * por `accountId` = esse mesmo `userId` (o tenant).
  */
 export async function getOnboardingState(userId: string): Promise<OnboardingState> {
-  const [user, numbers, leads, campaigns, meetings, catalogItems, stockItems, professionals] =
+  const [user, numbers, leads, campaigns, meetings, catalogItems, stockItems, professionals, menuItems, deliveryZones] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        select: { plan: true, aiProvider: true, businessTemplateId: true },
+        select: { plan: true, aiProvider: true, businessTemplateId: true, menuEnabled: true },
       }),
       prisma.whatsAppNumber.count({ where: { userId } }),
       prisma.lead.count({ where: { userId } }),
@@ -92,6 +98,10 @@ export async function getOnboardingState(userId: string): Promise<OnboardingStat
       prisma.catalogItem.count({ where: { accountId: userId } }),
       prisma.catalogItem.count({ where: { accountId: userId, trackStock: true } }),
       prisma.professional.count({ where: { accountId: userId } }),
+      // Cardápio online: itens marcados como visíveis no cardápio público.
+      prisma.catalogItem.count({ where: { accountId: userId, menuVisible: true } }),
+      // Delivery: zonas de bairro/taxa criadas.
+      prisma.deliveryZone.count({ where: { accountId: userId } }),
     ]);
 
   const plan = user?.plan ?? null;
@@ -117,6 +127,9 @@ export async function getOnboardingState(userId: string): Promise<OnboardingStat
     leads:        leads > 0,
     campaign:     campaigns > 0,
     meeting:      meetings > 0,
+    menu_catalog:     menuItems > 0,
+    delivery_config:  deliveryZones > 0,
+    menu_publish:     !!user?.menuEnabled,
   };
 
   const steps: OnboardingStep[] = planned.map((s) => ({
