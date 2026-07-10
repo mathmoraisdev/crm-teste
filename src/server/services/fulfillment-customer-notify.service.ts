@@ -26,13 +26,14 @@ export async function notifyCustomerOrderStatus(
       where: { id: orderId, accountId, source: "ONLINE" },
       select: {
         number: true,
+        onlineNumber: true,
         orderType: true,
         lead: { select: { id: true, phone: true, userId: true, whatsAppNumberId: true } },
       },
     });
     if (!order?.lead || !order.lead.phone) return; // sem lead/telefone → só acompanha pela página
 
-    const text = await buildMessage(accountId, status, order.orderType, order.number);
+    const text = await buildMessage(accountId, status, order.orderType, order.onlineNumber ?? order.number);
     if (!text) return; // status sem mensagem (ex.: PENDENTE)
 
     // sendWhatsAppMessage persiste a Message (source=SYSTEM) e envia pelo Baileys.

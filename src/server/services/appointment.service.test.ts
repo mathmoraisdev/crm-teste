@@ -69,6 +69,27 @@ describe("appointment.service", () => {
     expect(diff).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
+  it("number é sequencial por conta, começa no 1 e a série é contígua (Onda M)", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const leadId = await makeLead(acc, "+5511900000021");
+    const leadOther = await makeLead(other, "+5511900000022");
+
+    const a1 = await createAppointment(acc, { leadId, scheduledAt: new Date("2026-08-01T14:00:00.000Z"), serviceName: "S1", createdById: acc });
+    const a2 = await createAppointment(acc, { leadId, scheduledAt: new Date("2026-08-02T14:00:00.000Z"), serviceName: "S2", createdById: acc });
+    expect(a1.number).toBe(1);
+    expect(a2.number).toBe(2);
+
+    // Outra conta reinicia no 1 (sequência POR conta).
+    const aOther = await createAppointment(other, { leadId: leadOther, scheduledAt: new Date("2026-08-01T14:00:00.000Z"), serviceName: "X", createdById: other });
+    expect(aOther.number).toBe(1);
+
+    // Série continua a sequência da conta, contígua.
+    await createSeries(acc, { leadId, scheduledAt: new Date("2026-09-01T14:00:00.000Z"), serviceName: "Pacote", createdById: acc }, { everyDays: 7, count: 3 });
+    const nums = (await listAppointments(acc, { leadId })).map((a) => a.number).sort((x, y) => (x ?? 0) - (y ?? 0));
+    expect(nums).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it("rejeita agendar em lead de outro dono", async () => {
     const acc = await makeOwner();
     const other = await makeOwner();

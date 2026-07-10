@@ -12,6 +12,7 @@ export type { KitchenTicket };
 export interface OnlineOrderSummary {
   id: string;
   number: number | null;
+  onlineNumber: number | null;
   fulfillmentStatus: FulfillmentStatus | null;
   orderType: OrderType | null;
   source: OrderSource | null;
@@ -34,6 +35,7 @@ const NEXT: Record<Exclude<FulfillmentStatus, "RECUSADO" | "ENTREGUE">, Fulfillm
 function toSummary(o: {
   id: string;
   number: number | null;
+  onlineNumber: number | null;
   fulfillmentStatus: FulfillmentStatus | null;
   orderType: OrderType | null;
   source: OrderSource | null;
@@ -59,6 +61,7 @@ function toSummary(o: {
   return {
     id: o.id,
     number: o.number,
+    onlineNumber: o.onlineNumber,
     fulfillmentStatus: o.fulfillmentStatus,
     orderType: o.orderType,
     source: o.source,

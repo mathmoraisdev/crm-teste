@@ -98,19 +98,27 @@ export async function placeOnlineOrder(accountId: string, input: PlaceOnlineOrde
     });
   }
 
-  // Metadados de delivery + fulfillment (campos que openOrder não cobre).
-  await prisma.order.update({
-    where: { id: dto.id },
-    data: {
-      orderType: input.mode === "DELIVERY" ? "DELIVERY" : "RETIRADA",
-      source: "ONLINE",
-      fulfillmentStatus: "PENDENTE",
-      customerPhone: input.customerPhone.trim(),
-      deliveryFeeCents: input.mode === "DELIVERY" ? deliveryFeeCents : null,
-      deliveryZoneId,
-      deliveryAddress: input.mode === "DELIVERY" ? (input.address as object) : undefined,
-      note: input.note?.trim() || null,
-    },
+  // Metadados de delivery + fulfillment (campos que openOrder não cobre) + nº
+  // sequencial do pedido online POR conta, atribuído na CRIAÇÃO. O advisory lock
+  // por conta serializa o max+1 (dois pedidos simultâneos não colidem no nº).
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order-online:${accountId}`}))`;
+    const agg = await tx.order.aggregate({ where: { accountId }, _max: { onlineNumber: true } });
+    const onlineNumber = (agg._max.onlineNumber ?? 0) + 1;
+    await tx.order.update({
+      where: { id: dto.id },
+      data: {
+        onlineNumber,
+        orderType: input.mode === "DELIVERY" ? "DELIVERY" : "RETIRADA",
+        source: "ONLINE",
+        fulfillmentStatus: "PENDENTE",
+        customerPhone: input.customerPhone.trim(),
+        deliveryFeeCents: input.mode === "DELIVERY" ? deliveryFeeCents : null,
+        deliveryZoneId,
+        deliveryAddress: input.mode === "DELIVERY" ? (input.address as object) : undefined,
+        note: input.note?.trim() || null,
+      },
+    });
   });
 
   let pix: { copiaECola: string; qrBase64?: string } | undefined;

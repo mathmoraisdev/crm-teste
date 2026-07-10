@@ -75,7 +75,11 @@ export function AppointmentDetailModal({
   const terminal = TERMINAL.has(appt.status);
 
   return (
-    <Modal open={!!appt} onClose={onClose} title="Resumo do agendamento">
+    <Modal
+      open={!!appt}
+      onClose={onClose}
+      title={appt.number != null ? `Agendamento nº ${appt.number}` : "Resumo do agendamento"}
+    >
       <div className="space-y-4">
         {error && <p className="rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>}
 

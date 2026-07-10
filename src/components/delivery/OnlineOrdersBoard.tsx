@@ -14,6 +14,7 @@ import type { FulfillmentStatus, OrderType } from "@prisma/client";
 interface OnlineOrder {
   id: string;
   number: number | null;
+  onlineNumber: number | null;
   fulfillmentStatus: FulfillmentStatus | null;
   orderType: OrderType | null;
   source: string | null;
@@ -283,7 +284,12 @@ function OrderCard({
   const addr = addressText(order.deliveryAddress);
   const isDelivery = order.orderType === "DELIVERY";
   const paid = !!order.onlinePaidAt;
-  const doc = order.number != null ? `#${order.number}` : order.id.slice(0, 8);
+  const doc =
+    order.onlineNumber != null
+      ? `Pedido nº ${order.onlineNumber}`
+      : order.number != null
+        ? `#${order.number}`
+        : order.id.slice(0, 8);
 
   return (
     <Card className="flex flex-col gap-2 p-3">

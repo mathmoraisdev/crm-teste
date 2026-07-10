@@ -86,6 +86,35 @@ describe("placeOnlineOrder", () => {
     expect(o?.items[0]?.quantity).toBe(2);
   });
 
+  it("onlineNumber é sequencial por conta e começa no 1 (Onda M)", async () => {
+    const acc = await makeOwner();
+    const other = await makeOwner();
+    const itemId = await seedMenuItem(acc, "Coxinha", 800);
+    const itemOther = await seedMenuItem(other, "Pastel", 700);
+    const { placeOnlineOrder } = await import("./online-order.service");
+
+    const r1 = await placeOnlineOrder(acc, {
+      mode: "RETIRADA", customerName: "A", customerPhone: "11900000001",
+      items: [{ catalogItemId: itemId, quantity: 1 }], payment: "on_delivery",
+    });
+    const r2 = await placeOnlineOrder(acc, {
+      mode: "RETIRADA", customerName: "B", customerPhone: "11900000002",
+      items: [{ catalogItemId: itemId, quantity: 1 }], payment: "on_delivery",
+    });
+    // Outra conta reinicia no 1 (sequência é POR conta).
+    const rOther = await placeOnlineOrder(other, {
+      mode: "RETIRADA", customerName: "C", customerPhone: "11900000003",
+      items: [{ catalogItemId: itemOther, quantity: 1 }], payment: "on_delivery",
+    });
+
+    const o1 = await prisma.order.findUnique({ where: { id: r1.orderId }, select: { onlineNumber: true } });
+    const o2 = await prisma.order.findUnique({ where: { id: r2.orderId }, select: { onlineNumber: true } });
+    const oOther = await prisma.order.findUnique({ where: { id: rOther.orderId }, select: { onlineNumber: true } });
+    expect(o1?.onlineNumber).toBe(1);
+    expect(o2?.onlineNumber).toBe(2);
+    expect(oOther?.onlineNumber).toBe(1);
+  });
+
   it("preço do client é ignorado — snapshot sempre do servidor", async () => {
     const acc = await makeOwner();
     const itemId = await seedMenuItem(acc, "Pizza", 3000);

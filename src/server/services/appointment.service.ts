@@ -276,8 +276,36 @@ export interface CreateAppointmentInput {
   force?: boolean; // override do aviso de fora-do-expediente
 }
 
-/** Cria um agendamento avulso, snapshotando nome+duração do serviço. */
-export async function createAppointment(userId: string, input: CreateAppointmentInput) {
+/**
+ * Reserva `count` números sequenciais de agendamento para a conta (tenant), sob
+ * advisory lock POR conta (serializa o max+1 — dois agendamentos simultâneos não
+ * colidem no nº). A conta efetiva é `accountId` (walk-in) OU `lead.userId` (com
+ * lead), então o max cobre os dois. Retorna o PRIMEIRO nº da faixa. Recebe um
+ * client de transação (o lock vive até o commit dela).
+ */
+async function reserveAppointmentNumbers(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<number> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`appt:${userId}`}))`;
+  const [byAccount, byLead] = await Promise.all([
+    tx.appointment.aggregate({ where: { accountId: userId }, _max: { number: true } }),
+    tx.appointment.aggregate({ where: { lead: { userId } }, _max: { number: true } }),
+  ]);
+  return Math.max(byAccount._max.number ?? 0, byLead._max.number ?? 0) + 1;
+}
+
+/**
+ * Cria um agendamento avulso, snapshotando nome+duração do serviço e atribuindo o
+ * nº sequencial da conta (Onda M). `tx` opcional: quando chamado DENTRO de uma
+ * transação (ex.: confirmBooking, que já segura a trava do slot), reusa o mesmo
+ * client em vez de abrir uma transação aninhada (que esgotaria o pool).
+ */
+export async function createAppointment(
+  userId: string,
+  input: CreateAppointmentInput,
+  tx?: Prisma.TransactionClient,
+) {
   const scope = await resolveScope(userId, input);
   const { catalogItemId, serviceName } = await resolveServiceName(
     userId,
@@ -292,22 +320,25 @@ export async function createAppointment(userId: string, input: CreateAppointment
       force: input.force,
     });
   }
-  return prisma.appointment.create({
-    data: {
-      leadId: scope.leadId,
-      accountId: scope.accountId,
-      customerName: scope.customerName,
-      customerPhone: scope.customerPhone,
-      scheduledAt: input.scheduledAt,
-      catalogItemId,
-      serviceName,
-      durationMinutes,
-      professionalId: input.professionalId ?? null,
-      note: input.note?.trim() || null,
-      createdById: input.createdById,
-      ...(input.source ? { source: input.source } : {}),
-    },
-  });
+  const run = async (db: Prisma.TransactionClient) =>
+    db.appointment.create({
+      data: {
+        leadId: scope.leadId,
+        accountId: scope.accountId,
+        customerName: scope.customerName,
+        customerPhone: scope.customerPhone,
+        scheduledAt: input.scheduledAt,
+        catalogItemId,
+        serviceName,
+        durationMinutes,
+        professionalId: input.professionalId ?? null,
+        note: input.note?.trim() || null,
+        createdById: input.createdById,
+        number: await reserveAppointmentNumbers(db, userId),
+        ...(input.source ? { source: input.source } : {}),
+      },
+    });
+  return tx ? run(tx) : prisma.$transaction(run);
 }
 
 const MAX_SERIES = 52; // teto de sessões numa série (cobre 1 por semana por 1 ano)
@@ -359,23 +390,28 @@ export async function createSeries(
     }
   }
 
-  const rows: Prisma.AppointmentCreateManyInput[] = sessions.map((at) => ({
-    leadId: scope.leadId,
-    accountId: scope.accountId,
-    customerName: scope.customerName,
-    customerPhone: scope.customerPhone,
-    scheduledAt: at,
-    catalogItemId,
-    serviceName,
-    durationMinutes,
-    professionalId: base.professionalId ?? null,
-    note: base.note?.trim() || null,
-    seriesId,
-    createdById: base.createdById,
-  }));
-
-  await prisma.appointment.createMany({ data: rows });
-  return { seriesId, count };
+  // Numeração sequencial (Onda M) sob advisory lock: a série reserva `count`
+  // números contíguos e cria tudo na mesma transação (ou entra inteira, ou nada).
+  return prisma.$transaction(async (tx) => {
+    const startNumber = await reserveAppointmentNumbers(tx, userId);
+    const rows: Prisma.AppointmentCreateManyInput[] = sessions.map((at, i) => ({
+      leadId: scope.leadId,
+      accountId: scope.accountId,
+      customerName: scope.customerName,
+      customerPhone: scope.customerPhone,
+      scheduledAt: at,
+      catalogItemId,
+      serviceName,
+      durationMinutes,
+      professionalId: base.professionalId ?? null,
+      note: base.note?.trim() || null,
+      seriesId,
+      createdById: base.createdById,
+      number: startNumber + i,
+    }));
+    await tx.appointment.createMany({ data: rows });
+    return { seriesId, count };
+  });
 }
 
 export interface ListAppointmentsParams {

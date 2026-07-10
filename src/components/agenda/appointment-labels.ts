@@ -23,6 +23,7 @@ export const APPT_STATUS_TONE: Record<AppointmentStatus, Tone> = {
 /** Shape serializado (via fetch) de um item de `listAppointments`. */
 export interface AppointmentDTO {
   id: string;
+  number: number | null; // nº sequencial por conta (Onda M); null = agendamento antigo
   leadId: string | null; // null = walk-in (sem cadastro)
   accountId: string | null; // preenchido no walk-in (scoping por conta)
   catalogItemId: string | null;

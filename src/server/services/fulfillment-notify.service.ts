@@ -23,12 +23,17 @@ export async function notifyMerchantNewOnlineOrder(accountId: string, orderId: s
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, accountId },
-      select: { number: true, orderType: true, fulfillmentStatus: true, customerPhone: true, onlinePaidAt: true, deliveryFeeCents: true, items: { select: { unitPriceCents: true, quantity: true } } },
+      select: { number: true, onlineNumber: true, orderType: true, fulfillmentStatus: true, customerPhone: true, onlinePaidAt: true, deliveryFeeCents: true, items: { select: { unitPriceCents: true, quantity: true } } },
     });
     if (!order) return;
 
     const total = orderTotalCents({ items: order.items, deliveryFeeCents: order.deliveryFeeCents });
-    const doc = order.number != null ? `#${order.number}` : orderId.slice(0, 8);
+    const doc =
+      order.onlineNumber != null
+        ? `nº ${order.onlineNumber}`
+        : order.number != null
+          ? `#${order.number}`
+          : orderId.slice(0, 8);
     const tipo = order.orderType === "DELIVERY" ? "Entrega" : order.orderType === "RETIRADA" ? "Retirada" : "Pedido";
     const pago = order.onlinePaidAt ? " (Pago online)" : " (Pagar na entrega)";
     const text = `🛎️ Novo pedido online ${doc} — ${tipo}${pago}\nTotal: ${formatCentsBRL(total)}\nCliente: ${order.customerPhone ?? "—"}`;

@@ -241,7 +241,11 @@ function confirmationCard(input: {
   startISO: string;
   durationMinutes: number;
   appointmentId: string;
+  number: number | null;
 }): string {
+  // nº sequencial real da conta (Onda M); fallback ao código cosmético só p/
+  // agendamentos antigos sem número.
+  const doc = input.number != null ? String(input.number) : confirmationCode(input.appointmentId);
   return (
     `✅ *AGENDAMENTO CONFIRMADO*\n\n` +
     `💠 *${input.serviceName}*\n` +
@@ -249,7 +253,7 @@ function confirmationCard(input: {
     `📌 ${input.professionalName}\n` +
     `📅 ${formatSlotDay(input.startISO, TZ)} às ${formatSlotTime(input.startISO, TZ)}\n` +
     `⏱ ${input.durationMinutes} min\n\n` +
-    `🔖 Agendamento nº ${confirmationCode(input.appointmentId)}`
+    `🔖 Agendamento nº ${doc}`
   );
 }
 
@@ -314,16 +318,20 @@ export async function confirmBooking(
       phone: input.customerPhone,
     });
 
-    const appt = await createAppointment(accountId, {
-      ...(lead
-        ? { leadId: lead.id }
-        : { customerName: input.customerName, customerPhone: input.customerPhone }),
-      scheduledAt: start,
-      catalogItemId: service.id,
-      professionalId: input.professionalId,
-      createdById: accountId, // autoatendimento: a própria conta é a autora
-      source: "ONLINE", // veio do link público → selo/filtro na Agenda
-    });
+    const appt = await createAppointment(
+      accountId,
+      {
+        ...(lead
+          ? { leadId: lead.id }
+          : { customerName: input.customerName, customerPhone: input.customerPhone }),
+        scheduledAt: start,
+        catalogItemId: service.id,
+        professionalId: input.professionalId,
+        createdById: accountId, // autoatendimento: a própria conta é a autora
+        source: "ONLINE", // veio do link público → selo/filtro na Agenda
+      },
+      tx, // reusa a transação da trava do slot (sem transação aninhada)
+    );
     return { appt, lead };
   }, {
     // Teto default do Prisma é 5s. Em serverless "frio" (Vercel→Supabase) o
@@ -350,6 +358,7 @@ export async function confirmBooking(
           startISO: input.startISO,
           durationMinutes: service.durationMinutes,
           appointmentId: created.appt.id,
+          number: created.appt.number,
         }),
         { source: "SYSTEM" },
       );

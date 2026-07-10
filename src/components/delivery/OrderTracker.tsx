@@ -10,6 +10,7 @@ import type { FulfillmentStatus, OrderType } from "@prisma/client";
 interface Tracking {
   id: string;
   number: number | null;
+  onlineNumber: number | null;
   fulfillmentStatus: FulfillmentStatus | null;
   orderType: OrderType | null;
   customerName: string | null;
@@ -91,7 +92,12 @@ export function OrderTracker({
 
   const current = stepIndex(tracking.fulfillmentStatus);
   const isRejected = tracking.fulfillmentStatus === "RECUSADO";
-  const doc = tracking.number != null ? `#${tracking.number}` : orderId.slice(0, 8);
+  const doc =
+    tracking.onlineNumber != null
+      ? `nº ${tracking.onlineNumber}`
+      : tracking.number != null
+        ? `#${tracking.number}`
+        : orderId.slice(0, 8);
   const needsPix = tracking.pixCopiaECola && !tracking.paidOnline;
 
   return (

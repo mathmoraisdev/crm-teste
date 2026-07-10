@@ -523,12 +523,17 @@ model Order {
   onlineChargeId       String?
   onlinePixCopiaECola  String?
   onlinePaidAt         DateTime?
+  // nº sequencial do PEDIDO ONLINE por conta (Onda M), atribuído na CRIAÇÃO — o
+  // cliente/lojista veem "Pedido nº 1,2,3…" desde o PENDENTE. Distinto de `number`
+  // (cupom do PDV, sai no fechamento). null = pedido não-online.
+  onlineNumber         Int?
   items          OrderItem[]
   tenders        OrderTender[]
   stockMovements StockMovement[]
   appointments   Appointment[]
 
   @@unique([accountId, number]) // sequencial por conta; NULLs coexistem (Postgres trata como distintos)
+  @@unique([accountId, onlineNumber]) // sequencial do pedido online por conta (Onda M)
   @@index([accountId, status])
   @@index([accountId, closedAt])
   @@index([accountId, fiscalStatus])
@@ -1010,6 +1015,10 @@ model Appointment {
   catalogItemId        String?
   serviceName          String? // snapshot do serviço (sobrevive à exclusão do item)
   durationMinutes      Int? // snapshot da duração (min) no momento do agendamento; null = instante
+  // nº sequencial do AGENDAMENTO por conta (Onda M), atribuído na CRIAÇÃO —
+  // "Agendamento nº 1,2,3…". Conta = accountId (walk-in) ou lead.userId (com lead);
+  // serializado por advisory lock no serviço. null = agendamento antigo.
+  number               Int?
   scheduledAt          DateTime
   status               AppointmentStatus @default(AGENDADO)
   source               AppointmentSource @default(MANUAL) // origem: equipe (MANUAL) x link público (ONLINE)
@@ -1032,6 +1041,7 @@ model Appointment {
   @@index([needsReview])
   @@index([professionalId, scheduledAt])
   @@index([accountId, scheduledAt])
+  @@unique([accountId, number]) // sequencial por conta p/ walk-ins; lead-based serializado por advisory lock (Onda M)
 }
 
 // Profissional/recurso que atende (por conta). Opcionalmente ligado a um membro da

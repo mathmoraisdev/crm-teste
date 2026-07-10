@@ -8,6 +8,7 @@ import { orderTotalCents } from "./order.service";
 export interface PublicOrderTracking {
   id: string;
   number: number | null;
+  onlineNumber: number | null;
   fulfillmentStatus: FulfillmentStatus | null;
   orderType: OrderType | null;
   customerName: string | null;
@@ -34,6 +35,7 @@ export async function getPublicOrderTracking(
     select: {
       id: true,
       number: true,
+      onlineNumber: true,
       fulfillmentStatus: true,
       orderType: true,
       customerName: true,
@@ -66,6 +68,7 @@ export async function getPublicOrderTracking(
   return {
     id: o.id,
     number: o.number,
+    onlineNumber: o.onlineNumber,
     fulfillmentStatus: o.fulfillmentStatus,
     orderType: o.orderType,
     customerName: o.customerName ?? o.lead?.name ?? null,
