@@ -23,6 +23,13 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   ESCALA:       { priceCents: 49700, maxNumbers: 4, maxSeats: 10, maxContacts: 25000, qualify: true,  schedule: true,  campaigns: true,  sales: true,  aiMonthlyQuota: 24000, allowStrongModel: false },
 };
 
+/**
+ * Add-on de Delivery/Cardápio online — cobrado à parte, EM CIMA de qualquer plano
+ * (não vem incluso no Profissional+). Acende só p/ quem vende com entrega; gate em
+ * `canUseDelivery`. Ver [[pricing-plans-cost]].
+ */
+export const DELIVERY_ADDON_PRICE_CENTS = 8900;
+
 const LABELS: Record<Plan, string> = {
   INICIAL: "Inicial",
   PROFISSIONAL: "Profissional",

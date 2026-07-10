@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/server/db/client";
 import { getDeliverySettings } from "@/server/services/delivery-settings.service";
 import { listZones } from "@/server/services/delivery-zone.service";
+import { canUseDelivery } from "@/server/services/entitlements";
 import { DeliveryConfig } from "@/components/delivery/DeliveryConfig";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,11 @@ export default async function DeliveryConfigPage() {
   if (!ctx) redirect("/login");
   const ownerId = ctx.tenantUserId;
 
-  const [settings, zones, u] = await Promise.all([
+  const [settings, zones, u, entitled] = await Promise.all([
     getDeliverySettings(ownerId),
     listZones(ownerId, { includeInactive: true }),
     prisma.user.findUnique({ where: { id: ownerId }, select: { publicSlug: true, menuEnabled: true } }),
+    canUseDelivery(ownerId),
   ]);
 
   const slug = u?.publicSlug ?? null;
@@ -42,6 +44,7 @@ export default async function DeliveryConfigPage() {
 
       <DeliveryConfig
         canEdit={ctx.perms.canSettings}
+        entitled={entitled}
         initial={{
           menuEnabled: u?.menuEnabled ?? false,
           publicSlug: slug,

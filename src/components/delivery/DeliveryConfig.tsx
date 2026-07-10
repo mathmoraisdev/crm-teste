@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL, parseBRLToCents } from "@/lib/money";
+import { DELIVERY_ADDON_PRICE_CENTS } from "@/lib/plans";
 import type { DeliveryHours } from "@/server/services/delivery-settings.service";
 
 const inputClass =
@@ -62,10 +63,13 @@ export function DeliveryConfig({
   initial,
   initialZones,
   canEdit = true,
+  entitled = true,
 }: {
   initial: DeliverySettingsInitial;
   initialZones: DeliveryZoneRow[];
   canEdit?: boolean;
+  /** Conta tem o add-on de Delivery ativo? Sem ele, não dá pra publicar o cardápio. */
+  entitled?: boolean;
 }) {
   const [menuEnabled, setMenuEnabled] = useState(initial.menuEnabled);
   const [slug, setSlug] = useState(initial.publicSlug ?? "");
@@ -218,12 +222,25 @@ export function DeliveryConfig({
         subtitle="Publique seu cardápio em um link público (sem login) com carrinho, entrega/retirada, taxa por bairro e Pix online."
       />
       <div className="space-y-5 px-4 py-3">
+        {/* Add-on pago: sem ele, o cardápio não pode ser publicado. */}
+        {!entitled && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+              Add-on de Delivery — {formatCentsBRL(DELIVERY_ADDON_PRICE_CENTS)}/mês
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400/80">
+              Publique o cardápio, receba pedidos de entrega/retirada e cobre Pix online. Fale com o
+              suporte para ativar — você já pode deixar tudo configurado aqui enquanto isso.
+            </p>
+          </div>
+        )}
+
         {/* Publicar cardápio */}
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
             checked={menuEnabled}
-            disabled={!canEdit}
+            disabled={!canEdit || !entitled}
             onChange={(e) => {
               setMenuEnabled(e.target.checked);
               setSaved(false);
@@ -233,7 +250,9 @@ export function DeliveryConfig({
           <span>
             <span className="block text-sm font-medium text-ink">Publicar cardápio online</span>
             <span className="block text-xs text-slate-500">
-              Enquanto desligado, o link responde como inexistente (404).
+              {entitled
+                ? "Enquanto desligado, o link responde como inexistente (404)."
+                : "Requer o add-on de Delivery para publicar."}
             </span>
           </span>
         </label>

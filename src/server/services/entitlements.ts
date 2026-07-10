@@ -47,21 +47,29 @@ export async function canUseFeature(userId: string, feature: PlanFeature): Promi
 }
 
 /**
- * Pode cobrar online (Pix do cardápio)? Plano com `sales` OU add-on de delivery.
- * Grandfather (plan null) e admin liberam. Espelha a régua de [[pricing-plans-cost]].
+ * Pode usar o módulo de Delivery/Cardápio online? É um **add-on pago à parte**
+ * (`deliveryAddon`), cobrado EM CIMA de qualquer plano — NÃO vem incluso no
+ * Profissional+. Grandfather (plan null) e admin liberam. Ver [[pricing-plans-cost]].
  *
- * Diferente de `canUseFeature("sales")`: o add-on de delivery destrava o Pix
- * **escopado ao cardápio** mesmo no plano Inicial (o wedge da pizzaria).
+ * Gate de: publicar o cardápio (`menuEnabled`) e cobrar Pix no cardápio.
  */
-export async function canSellOnline(userId: string): Promise<boolean> {
+export async function canUseDelivery(userId: string): Promise<boolean> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
     select: { plan: true, email: true, deliveryAddon: true },
   });
   if (!u) return false;
   if (u.plan == null || isAdminEmail(u.email)) return true;
-  if (u.deliveryAddon) return true;
-  return PLAN_LIMITS[u.plan].sales === true;
+  return u.deliveryAddon === true;
+}
+
+/**
+ * Pode cobrar online (Pix do cardápio)? Idêntico a `canUseDelivery`: o Pix do
+ * cardápio faz parte do add-on de delivery — e NÃO do `sales` do plano, que cobre
+ * o funil de vendas do CRM. Mantido como nome próprio pelo call-site do checkout.
+ */
+export async function canSellOnline(userId: string): Promise<boolean> {
+  return canUseDelivery(userId);
 }
 
 /** Chave de mês "YYYY-MM" em UTC — usada pra resetar a cota na virada. */

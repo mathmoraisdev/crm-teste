@@ -247,25 +247,27 @@ describe("resolveAiModelForUser (clamp por plano)", () => {
   });
 });
 
-describe("canSellOnline", () => {
+describe("canUseDelivery / canSellOnline (add-on de delivery)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("libera quando o plano já tem sales (Profissional+)", async () => {
-    const { prisma } = await import("@/server/db/client");
-    (prisma.user.findUnique as any).mockResolvedValue({
-      plan: "PROFISSIONAL", email: "a@b.com", deliveryAddon: false,
-    });
-    const { canSellOnline } = await import("./entitlements");
-    expect(await canSellOnline("u1")).toBe(true);
-  });
-
-  it("libera no Inicial quando tem o add-on de delivery", async () => {
+  it("libera com o add-on ativo (mesmo no Inicial)", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({
       plan: "INICIAL", email: "a@b.com", deliveryAddon: true,
     });
-    const { canSellOnline } = await import("./entitlements");
+    const { canUseDelivery, canSellOnline } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(true);
     expect(await canSellOnline("u1")).toBe(true);
+  });
+
+  it("bloqueia sem o add-on — inclusive Profissional+ (add-on NÃO vem incluso no plano)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.user.findUnique as any).mockResolvedValue({
+      plan: "PROFISSIONAL", email: "a@b.com", deliveryAddon: false,
+    });
+    const { canUseDelivery, canSellOnline } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(false);
+    expect(await canSellOnline("u1")).toBe(false);
   });
 
   it("bloqueia no Inicial sem add-on", async () => {
@@ -273,32 +275,33 @@ describe("canSellOnline", () => {
     (prisma.user.findUnique as any).mockResolvedValue({
       plan: "INICIAL", email: "a@b.com", deliveryAddon: false,
     });
-    const { canSellOnline } = await import("./entitlements");
-    expect(await canSellOnline("u1")).toBe(false);
+    const { canUseDelivery } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(false);
   });
 
-  it("libera grandfather (plan null)", async () => {
+  it("libera grandfather (plan null) sem add-on", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({
       plan: null, email: "a@b.com", deliveryAddon: false,
     });
-    const { canSellOnline } = await import("./entitlements");
-    expect(await canSellOnline("u1")).toBe(true);
+    const { canUseDelivery } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(true);
   });
 
-  it("libera admin mesmo no Inicial", async () => {
+  it("libera admin mesmo no Inicial sem add-on", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue({
       plan: "INICIAL", email: "admin@exemplo.com", deliveryAddon: false,
     });
-    const { canSellOnline } = await import("./entitlements");
-    expect(await canSellOnline("u1")).toBe(true);
+    const { canUseDelivery } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(true);
   });
 
   it("bloqueia quando a conta não existe", async () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.user.findUnique as any).mockResolvedValue(null);
-    const { canSellOnline } = await import("./entitlements");
+    const { canUseDelivery, canSellOnline } = await import("./entitlements");
+    expect(await canUseDelivery("u1")).toBe(false);
     expect(await canSellOnline("u1")).toBe(false);
   });
 });

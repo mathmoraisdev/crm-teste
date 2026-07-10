@@ -5,6 +5,7 @@ import { prisma } from "@/server/db/client";
 import { getTenantContext } from "@/lib/tenant";
 import { ensureSlug } from "@/server/services/booking-settings.service";
 import { getDeliverySettings, updateDeliverySettings } from "@/server/services/delivery-settings.service";
+import { canUseDelivery } from "@/server/services/entitlements";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,16 @@ export async function PUT(req: NextRequest) {
   }
 
   const ownerId = ctx.tenantUserId;
+
+  // Publicar o cardápio exige o add-on de Delivery (pago à parte). Só bloqueia
+  // ao LIGAR — desligar/editar o resto segue livre. Ver [[pricing-plans-cost]].
+  if (parsed.data.menuEnabled === true && !(await canUseDelivery(ownerId))) {
+    return NextResponse.json(
+      { error: "Publicar o cardápio exige o add-on de Delivery. Fale com o suporte para ativar." },
+      { status: 403 },
+    );
+  }
+
   try {
     // Publicar o cardápio sem slug ainda: gera um antes de salvar, senão o link não existe.
     if (parsed.data.menuEnabled === true && parsed.data.publicSlug === undefined) {
