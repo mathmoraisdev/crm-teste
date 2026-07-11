@@ -71,4 +71,46 @@ describe("ean-lookup.service", () => {
     expect(r.found).toBe(false);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("DotCompany: OFF não tem (miss) → DotCompany acha por produto.descricao", async () => {
+    const g = gtin();
+    mockFetchOnce((url) => {
+      if (url.includes("openfoodfacts")) return { status: 200, body: { status: 0 } }; // OFF miss
+      if (url.includes("dotcompany")) return {
+        status: 200,
+        body: { sucesso: true, produto: { descricao: "CIGARRO MARLBORO BOX 20UN", marca: "Marlboro", ncm: "24022000" } },
+      };
+      return { status: 200, body: {} };
+    });
+    const r = await lookupEan(g);
+    expect(r.found).toBe(true);
+    expect(r.name).toBe("CIGARRO MARLBORO BOX 20UN");
+    expect(r.source).toBe("dotcompany");
+  });
+
+  it("DotCompany: sucesso:false é 'não achei' (miss), não erro", async () => {
+    const g = gtin();
+    mockFetchOnce((url) => {
+      if (url.includes("dotcompany")) return { status: 200, body: { sucesso: false } };
+      return { status: 200, body: { status: 0 } }; // OFF também miss
+    });
+    const r = await lookupEan(g);
+    expect(r.found).toBe(false);
+    // gravou cache negativo (alguém confirmou "não existe")
+    const row = await prisma.eanCache.findUnique({ where: { gtin: g } });
+    expect(row?.found).toBe(false);
+  });
+
+  it("DotCompany: resposta com campo 'erro' (limite/400) vira error, NÃO polui cache", async () => {
+    const g = gtin();
+    mockFetchOnce((url) => {
+      // OFF erro de rede + DotCompany devolve erro de limite → ninguém confirmou miss
+      if (url.includes("dotcompany")) return { status: 200, body: { sucesso: false, erro: "Limite diário excedido" } };
+      return { status: 500, body: {} }; // OFF error
+    });
+    const r = await lookupEan(g);
+    expect(r.found).toBe(false);
+    const row = await prisma.eanCache.findUnique({ where: { gtin: g } });
+    expect(row).toBeNull(); // nada foi confirmado como "não existe" → não cacheia negativo
+  });
 });

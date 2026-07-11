@@ -79,7 +79,35 @@ async function fromOpenFoodFacts(gtin: string): Promise<ProviderResult> {
   };
 }
 
-const PROVIDERS = [fromCosmos, fromOpenFoodFacts];
+/** DotCompany (erp.dotcompany.com.br): grátis, sem chave, ~25/dia por IP.
+ *  Cobre alimento E não-alimento; honesta no miss (sucesso:false). */
+async function fromDotCompany(gtin: string): Promise<ProviderResult> {
+  if (env.DOTCOMPANY_DISABLED) return "error";
+  const r = await fetchJson(`${env.DOTCOMPANY_BASE_URL}/api/catalogo/public/buscar?q=${gtin}`, {
+    "User-Agent": "crm-ean-lookup/1.0",
+    Accept: "application/json",
+  });
+  if (r.kind === "notfound") return "miss";
+  if (r.kind === "error") return "error";
+  // Campo `erro` = limite/requisição inválida → NÃO é "não existe" (protege o cache).
+  if (r.data?.erro) return "error";
+  if (!r.data?.sucesso || !r.data?.produto) return "miss";
+  const name = typeof r.data.produto?.descricao === "string" ? r.data.produto.descricao.trim() : "";
+  if (!name) return "miss";
+  return {
+    found: true,
+    name,
+    brand: r.data.produto?.marca ? String(r.data.produto.marca).trim() : null,
+    ncm: r.data.produto?.ncm ? String(r.data.produto.ncm) : null,
+    source: "dotcompany",
+  };
+}
+
+// Ordem = do mais barato/abundante ao mais escasso. OFF (alimento, ilimitado) →
+// DotCompany (não-alimento grátis, ~25/dia por IP) → Cosmos (cota escassa da
+// plataforma, melhor cobertura) por ÚLTIMO. Cobertura é a união; a ordem só
+// decide qual fonte responde e qual cota é gasta.
+const PROVIDERS = [fromOpenFoodFacts, fromDotCompany, fromCosmos];
 
 /** Consulta um código de barras → nome/marca. Cache global first, fail-open. */
 export async function lookupEan(rawBarcode: string): Promise<EanInfo> {
