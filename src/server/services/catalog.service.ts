@@ -4,6 +4,9 @@ import { prisma } from "@/server/db/client";
 import type { CatalogItemKind } from "@prisma/client";
 import { getTemplate, catalogSeedItems } from "@/lib/business-templates";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
+import { recordAudit } from "@/server/audit/record";
+import { computeDiff } from "@/server/audit/diff";
+import { formatCentsBRL } from "@/lib/money";
 
 export interface CatalogItemDTO {
   id: string;
@@ -136,9 +139,11 @@ export async function updateCatalogItem(
     printSector?: string | null; durationMinutes?: number | null;
     menuVisible?: boolean; menuCategory?: string | null; menuDescription?: string | null;
   },
+  actorId: string,
 ): Promise<CatalogItemDTO> {
-  const owned = await prisma.catalogItem.findFirst({ where: { id, accountId }, select: { id: true } });
-  if (!owned) throw new Error("Item não encontrado.");
+  return prisma.$transaction(async (tx) => {
+  const before = await tx.catalogItem.findFirst({ where: { id, accountId }, select: { id: true, name: true, priceCents: true } });
+  if (!before) throw new Error("Item não encontrado.");
   const patch: Record<string, unknown> = {};
   if (data.name !== undefined) {
     const name = data.name.trim();
@@ -172,11 +177,23 @@ export async function updateCatalogItem(
   if (data.menuCategory !== undefined) patch.menuCategory = data.menuCategory?.trim() || null;
   if (data.menuDescription !== undefined) patch.menuDescription = data.menuDescription?.trim() || null;
   try {
-    const item = await prisma.catalogItem.update({ where: { id }, data: patch });
+    const item = await tx.catalogItem.update({ where: { id }, data: patch });
+    // Audita SÓ mudança de preço (Tier 1). O resto do patch salva normal, sem log.
+    const auditPatch: { priceCents?: number } = {};
+    if (data.priceCents !== undefined) auditPatch.priceCents = data.priceCents;
+    const diff = computeDiff({ priceCents: before.priceCents }, auditPatch, ["priceCents"]);
+    if (diff.priceCents) {
+      await recordAudit(tx, {
+        accountId, actorId, action: "CATALOG_PRICE_UPDATE", entityType: "CatalogItem", entityId: id,
+        summary: `Alterou o preço de "${before.name}": ${formatCentsBRL(Number(diff.priceCents.from))} → ${formatCentsBRL(Number(diff.priceCents.to))}`,
+        diff,
+      });
+    }
     return toDTO(item);
   } catch (e) {
     rethrowCatalog(e);
   }
+  });
 }
 
 /** Resolve o item da conta por código de barras (bipar no caixa). null = não achou.

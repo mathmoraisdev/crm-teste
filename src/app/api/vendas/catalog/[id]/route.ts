@@ -32,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   try {
-    const item = await updateCatalogItem(ctx.tenantUserId, id, parsed.data);
+    const item = await updateCatalogItem(ctx.tenantUserId, id, parsed.data, ctx.sessionUserId);
     return NextResponse.json({ item });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro" }, { status: 400 });

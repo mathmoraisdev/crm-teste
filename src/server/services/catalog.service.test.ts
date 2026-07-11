@@ -45,7 +45,7 @@ describe("catalog.service", () => {
     expect(burger.menuDescription).toBe("Pão, carne, queijo");
 
     // Update dos campos (inclusive esvaziar categoria → null).
-    const upd = await updateCatalogItem(a, burger.id, { menuVisible: true, menuCategory: "  " });
+    const upd = await updateCatalogItem(a, burger.id, { menuVisible: true, menuCategory: "  " }, a);
     expect(upd.menuVisible).toBe(true);
     expect(upd.menuCategory).toBeNull();
   });
@@ -60,8 +60,8 @@ describe("catalog.service", () => {
     const a = await makeOwner();
     const b = await makeOwner();
     const item = await createCatalogItem(a, { name: "Barba", priceCents: 3000 });
-    await expect(updateCatalogItem(b, item.id, { priceCents: 1 })).rejects.toThrow();
-    const upd = await updateCatalogItem(a, item.id, { priceCents: 3500, active: false });
+    await expect(updateCatalogItem(b, item.id, { priceCents: 1 }, b)).rejects.toThrow();
+    const upd = await updateCatalogItem(a, item.id, { priceCents: 3500, active: false }, a);
     expect(upd.priceCents).toBe(3500);
     expect(upd.active).toBe(false);
   });
@@ -119,7 +119,7 @@ describe("catalog.service", () => {
     expect(item.minStock).toBe(3);
     expect(item.costCents).toBe(1200);
 
-    const upd = await updateCatalogItem(a, item.id, { minStock: 5, trackStock: false, sku: null });
+    const upd = await updateCatalogItem(a, item.id, { minStock: 5, trackStock: false, sku: null }, a);
     expect(upd.minStock).toBe(5);
     expect(upd.trackStock).toBe(false);
     expect(upd.sku).toBeNull();
@@ -131,9 +131,9 @@ describe("catalog.service", () => {
     expect(item.durationMinutes).toBe(45);
     const semDur = await createCatalogItem(a, { name: "Barba", priceCents: 3000, kind: "SERVICO" });
     expect(semDur.durationMinutes).toBeNull();
-    const upd = await updateCatalogItem(a, item.id, { durationMinutes: 30 });
+    const upd = await updateCatalogItem(a, item.id, { durationMinutes: 30 }, a);
     expect(upd.durationMinutes).toBe(30);
-    const cleared = await updateCatalogItem(a, item.id, { durationMinutes: null });
+    const cleared = await updateCatalogItem(a, item.id, { durationMinutes: null }, a);
     expect(cleared.durationMinutes).toBeNull();
   });
 
@@ -171,7 +171,7 @@ describe("catalog.service", () => {
     const acc = await makeOwner();
     const p = await createCatalogItem(acc, { name: "Camiseta P", priceCents: 3000, kind: "PRODUTO", variantGroup: "Camiseta" });
     expect(p.variantGroup).toBe("Camiseta");
-    const cleared = await updateCatalogItem(acc, p.id, { variantGroup: null });
+    const cleared = await updateCatalogItem(acc, p.id, { variantGroup: null }, acc);
     expect(cleared.variantGroup).toBeNull();
   });
 
@@ -228,5 +228,26 @@ describe("catalog.service", () => {
     const b = await makeOwner();
     const src = await createCatalogItem(a, { name: "X", priceCents: 100, kind: "PRODUTO" });
     await expect(duplicateCatalogItem(b, src.id)).rejects.toThrow();
+  });
+});
+
+describe("catalog audit (CATALOG_PRICE_UPDATE)", () => {
+  it("grava AuditLog quando o preço muda (com summary R$)", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 2000 });
+    await updateCatalogItem(a, item.id, { priceCents: 2400 }, a);
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "CATALOG_PRICE_UPDATE", entityId: item.id } });
+    expect(log).toBeTruthy();
+    expect((log?.diff as any).priceCents).toEqual({ from: 2000, to: 2400 });
+    expect(log?.summary).toContain("R$ 20,00");
+    expect(log?.summary).toContain("R$ 24,00");
+  });
+
+  it("salvar sem mudar o preço (só nome) NÃO gera log", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 2000 });
+    await updateCatalogItem(a, item.id, { name: "Corte masculino" }, a);
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "CATALOG_PRICE_UPDATE", entityId: item.id } });
+    expect(log).toBeNull();
   });
 });
