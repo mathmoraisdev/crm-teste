@@ -35,12 +35,16 @@ async function fetchJson(url: string, headers: Record<string, string>): Promise<
   }
 }
 
-// Cada provider: EanInfo (achou) | "miss" (respondeu, não existe) | "error" (sem sinal).
-type ProviderResult = EanInfo | "miss" | "error";
+// Cada provider:
+//   EanInfo  — achou o produto
+//   "miss"   — respondeu e confirmou que NÃO existe (autoritativo p/ cache negativo)
+//   "error"  — tentou e falhou em runtime (rede/timeout/limite): "não sei", NÃO "não existe"
+//   "skip"   — provider inaplicável (sem token / desligado): nem tentou, não conta p/ nada
+type ProviderResult = EanInfo | "miss" | "error" | "skip";
 
 /** Cosmos (Bluesoft): melhor cobertura BR, inclui não-alimento. Requer token. */
 async function fromCosmos(gtin: string): Promise<ProviderResult> {
-  if (!env.COSMOS_API_TOKEN) return "error"; // sem token → provider pulado (não é "miss")
+  if (!env.COSMOS_API_TOKEN) return "skip"; // sem token → inaplicável (não é erro nem "miss")
   const r = await fetchJson(`${env.COSMOS_BASE_URL}/gtins/${gtin}.json`, {
     "X-Cosmos-Token": env.COSMOS_API_TOKEN,
     "User-Agent": "Cosmos-API-Request",
@@ -82,7 +86,7 @@ async function fromOpenFoodFacts(gtin: string): Promise<ProviderResult> {
 /** DotCompany (erp.dotcompany.com.br): grátis, sem chave, ~25/dia por IP.
  *  Cobre alimento E não-alimento; honesta no miss (sucesso:false). */
 async function fromDotCompany(gtin: string): Promise<ProviderResult> {
-  if (env.DOTCOMPANY_DISABLED) return "error";
+  if (env.DOTCOMPANY_DISABLED) return "skip"; // desligado → inaplicável (não conta como erro)
   const r = await fetchJson(`${env.DOTCOMPANY_BASE_URL}/api/catalogo/public/buscar?q=${gtin}`, {
     "User-Agent": "crm-ean-lookup/1.0",
     Accept: "application/json",
@@ -133,20 +137,25 @@ export async function lookupEan(rawBarcode: string): Promise<EanInfo> {
     if (ageDays < env.EAN_NEGATIVE_TTL_DAYS) return NOT_FOUND; // negativo ainda fresco
   }
 
-  // 2) Providers em ordem; primeiro que ACHAR vence. Registra se algum deu "miss".
+  // 2) Providers em ordem; primeiro que ACHAR vence. Registra se algum confirmou
+  //    "não existe" (miss) e se algum FALHOU em runtime (error) — "skip" é neutro.
   let hit: EanInfo | null = null;
   let sawMiss = false;
+  let sawError = false;
   for (const p of PROVIDERS) {
     const res = await p(gtin);
     if (res === "miss") { sawMiss = true; continue; }
-    if (res === "error") continue;
+    if (res === "error") { sawError = true; continue; }
+    if (res === "skip") continue;
     hit = res;
     break;
   }
 
   // 3) Cache: grava positivo sempre; negativo só se ALGUÉM confirmou "não existe"
-  //    (evita envenenar o cache quando foi só outage/timeout em todos).
-  if (hit || sawMiss) {
+  //    E ninguém falhou em runtime. Se um provider capaz (ex.: DotCompany p/
+  //    não-alimento) estava fora/sem-cota, o "miss" do OFF (que só tem alimento)
+  //    não é confiável → não envenena o cache por 30 dias; tenta de novo depois.
+  if (hit || (sawMiss && !sawError)) {
     const payload = {
       found: !!hit,
       name: hit?.name ?? null,

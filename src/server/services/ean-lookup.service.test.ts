@@ -116,4 +116,20 @@ describe("ean-lookup.service", () => {
     const row = await prisma.eanCache.findUnique({ where: { gtin: g } });
     expect(row).toBeNull(); // nada foi confirmado como "não existe" → não cacheia negativo
   });
+
+  it("não-alimento: OFF diz miss mas DotCompany está SEM COTA (error) → NÃO grava negativo (não trava 30d)", async () => {
+    const g = gtin();
+    mockFetchOnce((url) => {
+      // OFF só tem alimento → "miss" p/ não-alimento (não é autoritativo)
+      if (url.includes("openfoodfacts")) return { status: 200, body: { status: 0 } };
+      // DotCompany (que TERIA o item) sem cota → error de runtime
+      if (url.includes("dotcompany")) return { status: 200, body: { sucesso: false, erro: "Limite diário excedido" } };
+      return { status: 500, body: {} }; // Cosmos (se tiver token) → error; sem token → skip
+    });
+    const r = await lookupEan(g);
+    expect(r.found).toBe(false);
+    // houve erro de runtime num provider capaz → o "miss" do OFF não confirma ausência
+    const row = await prisma.eanCache.findUnique({ where: { gtin: g } });
+    expect(row).toBeNull(); // retentável na próxima; NÃO envenenou por 30 dias
+  });
 });
