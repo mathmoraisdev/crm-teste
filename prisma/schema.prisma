@@ -472,6 +472,23 @@ model CatalogItem {
   @@index([accountId, menuCategory]) // Delivery: agrupar cardápio por categoria
 }
 
+/// Cache GLOBAL (não por conta) de consultas de código de barras. O dado é
+/// universal — o EAN da Coca é o mesmo p/ todas as contas — então UMA linha por
+/// GTIN serve todo mundo: a 2ª conta que bipar o mesmo produto não chama a API.
+/// `found = false` é cache NEGATIVO (evita rebater a base p/ um código que não
+/// existe); respeitado por TTL (o produto pode entrar na base depois).
+model EanCache {
+  gtin      String   @id // código de barras normalizado (só dígitos)
+  found     Boolean
+  name      String? // descrição retornada pela fonte
+  brand     String? // marca
+  ncm       String? // classificação fiscal (guardada p/ futuro; não usada no MVP)
+  source    String? // qual provedor respondeu ("cosmos" | "openfoodfacts")
+  fetchedAt DateTime @default(now())
+
+  @@index([fetchedAt]) // p/ eventual poda por idade no worker
+}
+
 // Comanda: uma venda/atendimento registrado. Liga a um Lead do CRM OU é avulsa
 // (customerName). O total é DERIVADO dos itens (não desnormalizado).
 model Order {
