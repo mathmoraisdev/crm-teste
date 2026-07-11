@@ -2,6 +2,8 @@ import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import type { ExpenseCategory, ExpenseStatus, RecurringExpense } from "@prisma/client";
 import { dueDateForDayOfMonth } from "./date-range";
+import { recordAudit } from "@/server/audit/record";
+import { formatCentsBRL } from "@/lib/money";
 
 export interface ExpenseDTO {
   id: string;
@@ -146,9 +148,19 @@ export async function updateExpense(
   return toDTO(e);
 }
 
-export async function deleteExpense(accountId: string, id: string): Promise<void> {
-  await loadOwned(accountId, id);
-  await prisma.expense.delete({ where: { id } });
+export async function deleteExpense(accountId: string, id: string, actorId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.expense.findFirst({
+      where: { id, accountId },
+      select: { id: true, description: true, amountCents: true },
+    });
+    if (!before) throw new Error("Despesa não encontrada.");
+    await tx.expense.delete({ where: { id } });
+    await recordAudit(tx, {
+      accountId, actorId, action: "EXPENSE_DELETE", entityType: "Expense", entityId: id,
+      summary: `Excluiu a despesa "${before.description}" (${formatCentsBRL(before.amountCents)})`,
+    });
+  });
 }
 
 export interface RecurringDTO {

@@ -35,7 +35,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!ctx.perms.canFinance) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await params;
   try {
-    await deleteExpense(ctx.tenantUserId, id);
+    await deleteExpense(ctx.tenantUserId, id, ctx.sessionUserId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro ao excluir" }, { status: 400 });

@@ -54,7 +54,7 @@ describe("expense.service", () => {
     const e = await createExpense(a, { description: "X", amountCents: 100, dueDate: "2026-07-01", createdById: a });
     await expect(payExpense(b, e.id)).rejects.toThrow();
     await expect(updateExpense(b, e.id, { amountCents: 1 })).rejects.toThrow();
-    await expect(deleteExpense(b, e.id)).rejects.toThrow();
+    await expect(deleteExpense(b, e.id, b)).rejects.toThrow();
   });
 });
 
@@ -147,5 +147,14 @@ describe("expense.service — extrato de Pagas", () => {
       to: new Date("2026-06-30T23:59:59-03:00"),
     });
     expect(empty.total).toBe(0);
+  });
+
+  it("deleteExpense grava AuditLog EXPENSE_DELETE", async () => {
+    const a = await makeOwner();
+    const e = await createExpense(a, { description: "Aluguel", amountCents: 150000, dueDate: "2026-07-05", createdById: a });
+    await deleteExpense(a, e.id, a); // novo 3º arg: actorId
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "EXPENSE_DELETE" } });
+    expect(log?.entityId).toBe(e.id);
+    expect(log?.summary).toContain("Aluguel");
   });
 });
