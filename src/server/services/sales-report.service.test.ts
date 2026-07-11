@@ -49,7 +49,7 @@ describe("sales-report.service", () => {
     const item = await createCatalogItem(acc, { name: "Item", priceCents: 10000 });
     const o = await openOrder(acc, { openedById: acc, customerName: "A" });
     await addItem(acc, o.id, { catalogItemId: item.id, quantity: 1 });
-    await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500 }); // total 9850
+    await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500 }, acc); // total 9850
     await closeOrder(acc, o.id, { tenders: [{ method: "PIX", amountCents: 9850 }], closedById: acc });
 
     const from = new Date(Date.now() - 3600_000);

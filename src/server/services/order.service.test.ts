@@ -130,7 +130,7 @@ describe("setOrderAdjustments — desconto/acréscimo/gorjeta", () => {
   it("grava ajustes e recalcula o total derivado", async () => {
     const acc = await makeOwner();
     const o = await abertaCom10000(acc);
-    const upd = await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500, tableLabel: "Mesa 3" });
+    const upd = await setOrderAdjustments(acc, o.id, { discountCents: 1500, surchargeCents: 850, tipCents: 500, tableLabel: "Mesa 3" }, acc);
     expect(upd.discountCents).toBe(1500);
     expect(upd.surchargeCents).toBe(850);
     expect(upd.tipCents).toBe(500);
@@ -141,20 +141,20 @@ describe("setOrderAdjustments — desconto/acréscimo/gorjeta", () => {
   it("rejeita desconto maior que o subtotal", async () => {
     const acc = await makeOwner();
     const o = await abertaCom10000(acc);
-    await expect(setOrderAdjustments(acc, o.id, { discountCents: 12000 })).rejects.toThrow(/subtotal/i);
+    await expect(setOrderAdjustments(acc, o.id, { discountCents: 12000 }, acc)).rejects.toThrow(/subtotal/i);
   });
 
   it("rejeita valores negativos", async () => {
     const acc = await makeOwner();
     const o = await abertaCom10000(acc);
-    await expect(setOrderAdjustments(acc, o.id, { surchargeCents: -100 })).rejects.toThrow();
+    await expect(setOrderAdjustments(acc, o.id, { surchargeCents: -100 }, acc)).rejects.toThrow();
   });
 
   it("null limpa o ajuste", async () => {
     const acc = await makeOwner();
     const o = await abertaCom10000(acc);
-    await setOrderAdjustments(acc, o.id, { discountCents: 1000 });
-    const upd = await setOrderAdjustments(acc, o.id, { discountCents: null });
+    await setOrderAdjustments(acc, o.id, { discountCents: 1000 }, acc);
+    const upd = await setOrderAdjustments(acc, o.id, { discountCents: null }, acc);
     expect(upd.discountCents).toBeNull();
     expect(upd.totalCents).toBe(10000);
   });
@@ -163,7 +163,7 @@ describe("setOrderAdjustments — desconto/acréscimo/gorjeta", () => {
     const acc = await makeOwner();
     const o = await abertaCom10000(acc);
     await closeOrder(acc, o.id, { payment: "DINHEIRO", closedById: acc });
-    await expect(setOrderAdjustments(acc, o.id, { tipCents: 200 })).rejects.toThrow(/fechada/i);
+    await expect(setOrderAdjustments(acc, o.id, { tipCents: 200 }, acc)).rejects.toThrow(/fechada/i);
   });
 });
 
@@ -318,7 +318,7 @@ describe("closeOrder — multi-pagamento e troco", () => {
   it("troco aplica os ajustes no total (desconto reduz o total, aumenta o troco)", async () => {
     const acc = await makeOwner();
     const o = await abertaCom(acc, 10000);
-    await setOrderAdjustments(acc, o.id, { discountCents: 1500 }); // total 8500
+    await setOrderAdjustments(acc, o.id, { discountCents: 1500 }, acc); // total 8500
     const full = await closeOrder(acc, o.id, {
       tenders: [{ method: "DINHEIRO", amountCents: 10000 }],
       amountTenderedCents: 10000,

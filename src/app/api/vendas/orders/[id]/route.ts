@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = adjustmentsSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   try {
-    const order = await setOrderAdjustments(ctx.tenantUserId, id, parsed.data);
+    const order = await setOrderAdjustments(ctx.tenantUserId, id, parsed.data, ctx.sessionUserId);
     return NextResponse.json({ order });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro" }, { status: 400 });

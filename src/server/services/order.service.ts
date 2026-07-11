@@ -12,6 +12,8 @@ import { resolveModifierSelection } from "./modifier.service";
 import type { ModifierSnapshotEntry } from "./modifier.service";
 import { getBranding } from "@/server/services/branding.service";
 import { recordAudit } from "@/server/audit/record";
+import { computeDiff } from "@/server/audit/diff";
+import { formatCentsBRL } from "@/lib/money";
 import type { ReceiptOrderInput } from "@/lib/receipt/model";
 import { formatReceiptDateTime } from "@/lib/receipt/model";
 import type { KitchenOrderInput } from "@/lib/receipt/kitchen";
@@ -216,6 +218,7 @@ export async function setOrderAdjustments(
     tipCents?: number | null;
     tableLabel?: string | null;
   },
+  actorId: string,
 ): Promise<OrderDTO> {
   const order = await loadOwned(accountId, orderId);
   if (order.status !== "ABERTA") throw new Error("Comanda já fechada.");
@@ -241,7 +244,26 @@ export async function setOrderAdjustments(
   if (tipCents !== undefined) data.tipCents = tipCents;
   if (patch.tableLabel !== undefined) data.tableLabel = patch.tableLabel?.trim() || null;
 
-  await prisma.order.update({ where: { id: orderId }, data });
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({ where: { id: orderId }, data });
+    // Audita SÓ desconto/acréscimo (o dinheiro que "dá briga"); gorjeta/mesa não.
+    const auditPatch: { discountCents?: number | null; surchargeCents?: number | null } = {};
+    if (discountCents !== undefined) auditPatch.discountCents = discountCents;
+    if (surchargeCents !== undefined) auditPatch.surchargeCents = surchargeCents;
+    const diff = computeDiff(
+      { discountCents: order.discountCents, surchargeCents: order.surchargeCents },
+      auditPatch,
+      ["discountCents", "surchargeCents"],
+    );
+    if (Object.keys(diff).length) {
+      await recordAudit(tx, {
+        accountId, actorId, action: "ORDER_DISCOUNT", entityType: "Order", entityId: orderId,
+        summary: `Ajustou a comanda #${order.number ?? orderId}` +
+          (diff.discountCents ? ` — desconto ${formatCentsBRL(Number(diff.discountCents.from) || 0)} → ${formatCentsBRL(Number(diff.discountCents.to) || 0)}` : ""),
+        diff,
+      });
+    }
+  });
   return toDTO(await loadOwned(accountId, orderId));
 }
 
