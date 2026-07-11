@@ -11,6 +11,7 @@ import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { resolveModifierSelection } from "./modifier.service";
 import type { ModifierSnapshotEntry } from "./modifier.service";
 import { getBranding } from "@/server/services/branding.service";
+import { recordAudit } from "@/server/audit/record";
 import type { ReceiptOrderInput } from "@/lib/receipt/model";
 import { formatReceiptDateTime } from "@/lib/receipt/model";
 import type { KitchenOrderInput } from "@/lib/receipt/kitchen";
@@ -452,6 +453,14 @@ export async function voidOrder(accountId: string, orderId: string, reason: stri
     // NÃO limpa o snapshot de comissão: o relatório filtra status=FECHADA, então a
     // comanda CANCELADA some sozinha; o snapshot fica no item p/ auditoria (inofensivo).
     await reverseOrderStockExit(tx, accountId, orderId, byId);
+    await recordAudit(tx, {
+      accountId,
+      actorId: byId,
+      action: "ORDER_VOID",
+      entityType: "Order",
+      entityId: orderId,
+      summary: `Estornou a comanda #${order.number ?? orderId} — motivo: ${trimmed}`,
+    });
   });
 
   // Fiscal (Onda H): reconcilia a nota com o estorno. FORA da tx (o estorno já
