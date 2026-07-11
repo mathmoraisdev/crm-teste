@@ -23,6 +23,7 @@ import {
   TrendingDown,
   ChefHat,
   ShoppingBag,
+  ScrollText,
 } from "lucide-react";
 import type { BusinessCategory } from "@/lib/business-templates";
 
@@ -136,6 +137,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
       title: "Conta",
       items: [
         { href: "/equipe", label: "Equipe", icon: UsersRound, show: isAccountAdmin },
+        { href: "/auditoria", label: "Auditoria", icon: ScrollText, show: isAccountAdmin },
         { href: "/consultores", label: "Consultores", icon: Headset, badge: "consultores", show: isAdmin },
         { href: "/financeiro", label: "Administração", icon: Wallet, badge: "financeiro", show: isAdmin },
         { href: "/configuracoes", label: "Configurações", icon: Settings },

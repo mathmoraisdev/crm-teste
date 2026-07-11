@@ -24,6 +24,11 @@ describe("buildNav", () => {
     expect(buildNav({ ...base, isAccountAdmin: true }).flatMap((g) => g.items)
       .some((i) => i.href === "/equipe")).toBe(true);
   });
+  it("Auditoria só para admin da conta", () => {
+    expect(buildNav(base).flatMap((g) => g.items).some((i) => i.href === "/auditoria")).toBe(false);
+    expect(buildNav({ ...base, isAccountAdmin: true }).flatMap((g) => g.items)
+      .some((i) => i.href === "/auditoria")).toBe(true);
+  });
   it("Produção (cozinha) na Operação só para ramos de alimentação", () => {
     const opAlim = buildNav({ ...base, category: "alimentacao" }).find((g) => g.title === "Operação")!;
     expect(opAlim.items.some((i) => i.href === "/producao")).toBe(true);
