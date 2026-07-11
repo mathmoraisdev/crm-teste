@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       force: d.force,
       note: d.note,
       orderId: d.orderId,
-    });
+    }, ctx.sessionUserId);
     return NextResponse.json({ appointment });
   } catch (e) {
     return errorResponse(e);
@@ -79,7 +79,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    const appointment = await cancelAppointment(ctx.tenantUserId, id);
+    const appointment = await cancelAppointment(ctx.tenantUserId, id, ctx.sessionUserId);
     return NextResponse.json({ appointment });
   } catch (e) {
     return NextResponse.json(

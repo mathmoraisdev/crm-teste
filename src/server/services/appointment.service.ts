@@ -11,8 +11,14 @@ import {
   localWeekdayAndMinutes,
   type DayWindow,
 } from "@/lib/agenda/availability";
+import { recordAudit } from "@/server/audit/record";
 
 const TZ = env.SCHEDULING_TIMEZONE;
+
+/** Nome do cliente do agendamento p/ os resumos de auditoria (lead OU walk-in). */
+function apptClientName(appt: { lead: { name: string } | null; customerName: string | null }): string {
+  return appt.lead?.name ?? appt.customerName ?? "cliente";
+}
 
 /**
  * Client de banco: a instância global OU um client de transação. Os helpers de
@@ -71,14 +77,26 @@ export function decideApptTransition(reply: ApptReply): ApptTransition | null {
  * Reusa a validação de posse via loadOwned.
  */
 export async function applyApptTransition(userId: string, id: string, t: ApptTransition) {
-  await loadOwned(userId, id);
-  return prisma.appointment.update({
-    where: { id },
-    data: {
-      ...(t.status ? { status: t.status } : {}),
-      needsReview: t.needsReview,
-      reviewReason: t.reviewReason,
-    },
+  const before = await loadOwned(userId, id);
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.appointment.update({
+      where: { id },
+      data: {
+        ...(t.status ? { status: t.status } : {}),
+        needsReview: t.needsReview,
+        reviewReason: t.reviewReason,
+      },
+    });
+    // Só o CANCELAMENTO pelo cliente (executado pela IA) vira auditoria — confirmação
+    // é rotina. Autor não-humano: "IA · Cliente (via WhatsApp)" (quem pediu + quem executou).
+    if (t.status === "CANCELADO" && before.status !== "CANCELADO") {
+      await recordAudit(tx, {
+        accountId: userId, actorId: "ia", actorName: "IA · Cliente (via WhatsApp)",
+        action: "APPOINTMENT_CANCEL", entityType: "Appointment", entityId: id,
+        summary: `Cancelou o horário de "${apptClientName(before)}" (${formatSlot(before.scheduledAt.toISOString(), TZ)}) — pedido do cliente`,
+      });
+    }
+    return updated;
   });
 }
 
@@ -520,6 +538,10 @@ async function loadOwned(userId: string, id: string) {
       professionalId: true,
       durationMinutes: true,
       catalogItemId: true,
+      status: true,
+      customerName: true,
+      number: true,
+      lead: { select: { name: true } },
     },
   });
   if (!appt) throw new Error("Agendamento não encontrado.");
@@ -550,8 +572,41 @@ async function assertOrderOwned(userId: string, orderId: string): Promise<void> 
   if (!order) throw new Error("Comanda não encontrada.");
 }
 
+/** Grava os eventos de auditoria de uma edição (remarcar / trocar profissional /
+ * cancelar via status). Só grava o que mudou de fato. Roda DENTRO da tx do update. */
+async function recordApptEdits(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  actorId: string,
+  id: string,
+  before: Awaited<ReturnType<typeof loadOwned>>,
+  input: UpdateAppointmentInput,
+): Promise<void> {
+  const who = apptClientName(before);
+  if (input.scheduledAt !== undefined && input.scheduledAt.getTime() !== before.scheduledAt.getTime()) {
+    await recordAudit(tx, {
+      accountId: userId, actorId, action: "APPOINTMENT_RESCHEDULE", entityType: "Appointment", entityId: id,
+      summary: `Remarcou o horário de "${who}": ${formatSlot(before.scheduledAt.toISOString(), TZ)} → ${formatSlot(input.scheduledAt.toISOString(), TZ)}`,
+      diff: { scheduledAt: { from: before.scheduledAt.toISOString(), to: input.scheduledAt.toISOString() } },
+    });
+  }
+  if (input.professionalId !== undefined && (input.professionalId || null) !== (before.professionalId || null)) {
+    await recordAudit(tx, {
+      accountId: userId, actorId, action: "APPOINTMENT_REASSIGN", entityType: "Appointment", entityId: id,
+      summary: `Trocou o profissional do horário de "${who}"`,
+      diff: { professionalId: { from: before.professionalId, to: input.professionalId || null } },
+    });
+  }
+  if (input.status === "CANCELADO" && before.status !== "CANCELADO") {
+    await recordAudit(tx, {
+      accountId: userId, actorId, action: "APPOINTMENT_CANCEL", entityType: "Appointment", entityId: id,
+      summary: `Cancelou o horário de "${who}" (${formatSlot(before.scheduledAt.toISOString(), TZ)})`,
+    });
+  }
+}
+
 /** Edita um agendamento (reagendar/trocar serviço/profissional/status). Scoping por conta. */
-export async function updateAppointment(userId: string, id: string, input: UpdateAppointmentInput) {
+export async function updateAppointment(userId: string, id: string, input: UpdateAppointmentInput, actorId: string) {
   const current = await loadOwned(userId, id);
   const data: Prisma.AppointmentUpdateInput = {};
   if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt;
@@ -606,9 +661,14 @@ export async function updateAppointment(userId: string, id: string, input: Updat
     }
   }
 
-  // Sem profissional no resultado: sem risco de sobreposição → update direto.
+  // Sem profissional no resultado: sem risco de sobreposição → update direto (em tx
+  // p/ gravar a auditoria da edição junto, atômico).
   if (!effectiveProfessionalId) {
-    return prisma.appointment.update({ where: { id }, data });
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.appointment.update({ where: { id }, data });
+      await recordApptEdits(tx, userId, actorId, id, current, input);
+      return updated;
+    });
   }
 
   // Com profissional: trava por profissional + recheca de slot + update ATÔMICOS na
@@ -627,16 +687,27 @@ export async function updateAppointment(userId: string, id: string, input: Updat
       { allowOverlap: input.allowOverlap, force: input.force, exceptId: id },
       tx,
     );
-    return tx.appointment.update({ where: { id }, data });
+    const updated = await tx.appointment.update({ where: { id }, data });
+    await recordApptEdits(tx, userId, actorId, id, current, input);
+    return updated;
   });
 }
 
 /** Cancela um agendamento (mantém o registro; muda status p/ CANCELADO). */
-export async function cancelAppointment(userId: string, id: string) {
-  await loadOwned(userId, id);
-  return prisma.appointment.update({
-    where: { id },
-    data: { status: "CANCELADO", needsReview: false, reviewReason: null },
+export async function cancelAppointment(userId: string, id: string, actorId: string) {
+  const before = await loadOwned(userId, id);
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.appointment.update({
+      where: { id },
+      data: { status: "CANCELADO", needsReview: false, reviewReason: null },
+    });
+    if (before.status !== "CANCELADO") {
+      await recordAudit(tx, {
+        accountId: userId, actorId, action: "APPOINTMENT_CANCEL", entityType: "Appointment", entityId: id,
+        summary: `Cancelou o horário de "${apptClientName(before)}" (${formatSlot(before.scheduledAt.toISOString(), TZ)})`,
+      });
+    }
+    return updated;
   });
 }
 

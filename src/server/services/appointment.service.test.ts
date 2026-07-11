@@ -149,7 +149,7 @@ describe("appointment.service", () => {
     const acc = await makeOwner();
     const leadId = await makeLead(acc, "+5511900000005");
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
-    expect((await cancelAppointment(acc, a.id)).status).toBe("CANCELADO");
+    expect((await cancelAppointment(acc, a.id, acc)).status).toBe("CANCELADO");
 
     const b = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     expect((await markRealized(acc, b.id)).status).toBe("REALIZADO");
@@ -161,7 +161,7 @@ describe("appointment.service", () => {
     const item = await createCatalogItem(acc, { name: "Corte", priceCents: 4000 });
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), catalogItemId: item.id, createdById: acc });
 
-    const upd = await updateAppointment(acc, a.id, { serviceName: "Corte masculino" });
+    const upd = await updateAppointment(acc, a.id, { serviceName: "Corte masculino" }, acc);
     expect(upd.serviceName).toBe("Corte masculino");
     expect(upd.catalogItemId).toBe(item.id); // vínculo preservado
   });
@@ -170,7 +170,7 @@ describe("appointment.service", () => {
     const acc = await makeOwner();
     const leadId = await makeLead(acc, "+5511900000007");
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
-    const upd = await updateAppointment(acc, a.id, { status: "REALIZADO", note: "cobrado" });
+    const upd = await updateAppointment(acc, a.id, { status: "REALIZADO", note: "cobrado" }, acc);
     expect(upd.status).toBe("REALIZADO");
     expect(upd.note).toBe("cobrado"); // não foi descartado
   });
@@ -183,7 +183,7 @@ describe("appointment.service", () => {
     const otherOrder = await openOrder(other, { openedById: other, leadId: otherLeadId });
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     await expect(markRealized(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
-    await expect(updateAppointment(acc, a.id, { orderId: otherOrder.id })).rejects.toThrow();
+    await expect(updateAppointment(acc, a.id, { orderId: otherOrder.id }, acc)).rejects.toThrow();
   });
 
   // A ação manual da equipe no card (Confirmar/Cancelar/Realizado/Faltou) = revisão
@@ -203,7 +203,7 @@ describe("appointment.service", () => {
     const leadId = await makeLead(acc, "+5511900000011");
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     await applyApptTransition(acc, a.id, { status: null, needsReview: true, reviewReason: "x" });
-    const updated = await cancelAppointment(acc, a.id);
+    const updated = await cancelAppointment(acc, a.id, acc);
     expect(updated.status).toBe("CANCELADO");
     expect(updated.needsReview).toBe(false);
     expect(updated.reviewReason).toBeNull();
@@ -214,7 +214,7 @@ describe("appointment.service", () => {
     const leadId = await makeLead(acc, "+5511900000012");
     const a = await createAppointment(acc, { leadId, scheduledAt: new Date(), createdById: acc });
     await applyApptTransition(acc, a.id, { status: null, needsReview: true, reviewReason: "x" });
-    const updated = await updateAppointment(acc, a.id, { status: "FALTOU" });
+    const updated = await updateAppointment(acc, a.id, { status: "FALTOU" }, acc);
     expect(updated.status).toBe("FALTOU");
     expect(updated.needsReview).toBe(false);
     expect(updated.reviewReason).toBeNull();
@@ -323,7 +323,7 @@ describe("appointment.service", () => {
     const b = await createAppointment(acc, { ...base, scheduledAt: new Date("2026-09-20T16:00:00.000Z") });
 
     await expect(
-      updateAppointment(acc, b.id, { scheduledAt: new Date("2026-09-20T13:30:00.000Z"), force: true }),
+      updateAppointment(acc, b.id, { scheduledAt: new Date("2026-09-20T13:30:00.000Z"), force: true }, acc),
     ).rejects.toThrow(/CONFLICT/);
   });
 
