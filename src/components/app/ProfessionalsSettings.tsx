@@ -184,18 +184,37 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Cor</label>
-                <select
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className={inputClass}
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Cor{" "}
+                  <span className="font-normal text-slate-400">
+                    — {COLORS.find((c) => c.key === color)?.label ?? ""}
+                  </span>
+                </label>
+                <div
+                  role="radiogroup"
+                  aria-label="Cor do profissional"
+                  className="flex flex-wrap gap-2 py-1"
                 >
-                  {COLORS.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+                  {COLORS.map((c) => {
+                    const selected = color === c.key;
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        aria-label={c.label}
+                        title={c.label}
+                        onClick={() => setColor(c.key)}
+                        className={`h-7 w-7 rounded-full transition-transform ${c.dot} ${
+                          selected
+                            ? "scale-110 ring-2 ring-ink"
+                            : "ring-1 ring-inset ring-black/10 hover:scale-105"
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             </div>
             {members.length > 0 && (
