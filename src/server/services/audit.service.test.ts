@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
 import { recordAudit } from "@/server/audit/record";
-import { listAudit } from "./audit.service";
+import { listAudit, pruneAuditLogs } from "./audit.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({
@@ -38,5 +38,33 @@ describe("listAudit", () => {
     const page2 = await listAudit(owner, { take: 2, cursor: page1.nextCursor! });
     expect(page2.items).toHaveLength(1);
     expect(page2.nextCursor).toBeNull();
+  });
+});
+
+describe("pruneAuditLogs", () => {
+  it("apaga só as linhas mais velhas que a retenção", async () => {
+    const owner = await makeOwner();
+    const old = await prisma.auditLog.create({
+      data: {
+        accountId: owner, actorId: owner, actorName: "Dono", action: "LEAD_DELETE",
+        entityType: "Lead", entityId: "velho", summary: "antigo",
+        createdAt: new Date("2020-01-01T00:00:00Z"),
+      },
+    });
+    const recent = await prisma.auditLog.create({
+      data: {
+        accountId: owner, actorId: owner, actorName: "Dono", action: "LEAD_DELETE",
+        entityType: "Lead", entityId: "novo", summary: "recente",
+        createdAt: new Date("2026-07-11T00:00:00Z"),
+      },
+    });
+    const removed = await pruneAuditLogs(180, new Date("2026-07-11T12:00:00Z"));
+    expect(removed).toBeGreaterThanOrEqual(1);
+    expect(await prisma.auditLog.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await prisma.auditLog.findUnique({ where: { id: recent.id } })).not.toBeNull();
+  });
+
+  it("retentionDays <= 0 é no-op", async () => {
+    expect(await pruneAuditLogs(0)).toBe(0);
   });
 });

@@ -28,3 +28,15 @@ export async function listAudit(accountId: string, f: AuditFilters) {
   const hasMore = items.length > take;
   return { items: hasMore ? items.slice(0, take) : items, nextCursor: hasMore ? items[take - 1].id : null };
 }
+
+/**
+ * Poda por retenção: apaga linhas de auditoria mais velhas que `retentionDays`.
+ * `retentionDays <= 0` = no-op (nunca poda). Roda no worker (uma vez/dia). Devolve
+ * quantas foram apagadas. Passa `now` p/ ser determinístico/testável.
+ */
+export async function pruneAuditLogs(retentionDays: number, now: Date = new Date()): Promise<number> {
+  if (!retentionDays || retentionDays <= 0) return 0;
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  return count;
+}

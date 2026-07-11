@@ -107,6 +107,10 @@ const schema = z.object({
   MEDIA_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0),
   MEDIA_AUDIO_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(0), // 0 = usa MEDIA_RETENTION_DAYS
   MEDIA_RETENTION_EVERY_MS: z.coerce.number().int().positive().default(21_600_000), // 6h: granularidade é dia
+  // Retenção do log de auditoria (Tier 1). Poda no worker as linhas AuditLog mais
+  // velhas que N dias. Default 180 (6 meses) — LIGADO por padrão (o log não deve
+  // crescer p/ sempre); 0 desliga (nunca poda). Custo é só storage, zero Upstash.
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().nonnegative().default(180),
   // Automação de ciclo de vida (pós-venda, NPS, reengajamento de frio). Roda no
   // worker. LIFECYCLE_AUTOMATION é o KILL-SWITCH global: false = nada dispara
   // (sobe inerte, igual MEDIA_RETENTION_DAYS). Cada toque liga pelo seu atraso

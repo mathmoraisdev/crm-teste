@@ -7,6 +7,7 @@ import { runChip } from "./chipRunner";
 import { dispatchDueReminders } from "@/server/services/meeting-reminders";
 import { dispatchDueAppointmentReminders } from "@/server/services/appointment-reminders";
 import { purgeExpiredMedia } from "@/server/services/media-retention";
+import { pruneAuditLogs } from "@/server/services/audit.service";
 import { dispatchLifecycleAutomations } from "@/server/services/lifecycle-automation";
 import { dispatchPendingFiscalEmissions } from "@/server/services/fiscal-emission";
 import { reconcileAiResume } from "@/server/services/conversation.service";
@@ -147,6 +148,7 @@ async function main() {
   let lastReminder = 0;
   let lastAiResume = 0;
   let lastRetention = 0;
+  let lastAuditPrune = 0;
   let lastLifecycle = 0;
   let lastFiscal = 0;
   while (true) {
@@ -215,6 +217,22 @@ async function main() {
         logger.error({ err }, "[worker] purgeExpiredMedia falhou");
       }
       lastRetention = Date.now();
+    }
+
+    // Poda do log de auditoria (Tier 1): apaga linhas mais velhas que a retenção.
+    // LIGADO por padrão (AUDIT_RETENTION_DAYS=180); 0 desliga. Throttle de 24h — a
+    // granularidade é dia. Zero Upstash; custo só de storage.
+    if (
+      env.AUDIT_RETENTION_DAYS > 0 &&
+      Date.now() - lastAuditPrune >= 24 * 60 * 60 * 1000
+    ) {
+      try {
+        const n = await pruneAuditLogs(env.AUDIT_RETENTION_DAYS, new Date());
+        if (n > 0) logger.info({ pruned: n }, "[worker] auditoria antiga podada");
+      } catch (err) {
+        logger.error({ err }, "[worker] pruneAuditLogs falhou");
+      }
+      lastAuditPrune = Date.now();
     }
 
     // Automação de ciclo de vida (pós-venda / NPS / reengajamento de frio). O
