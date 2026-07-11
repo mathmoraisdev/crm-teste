@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/server/db/client", () => ({
-  prisma: {
+vi.mock("@/server/db/client", () => {
+  const prisma: any = {
     lead: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
     user: { findMany: vi.fn(), findUnique: vi.fn() },
     message: { groupBy: vi.fn() },
-  },
-}));
+    auditLog: { create: vi.fn() },
+  };
+  // recordAudit roda dentro de prisma.$transaction — o mock delega ao próprio prisma.
+  prisma.$transaction = vi.fn(async (fn: any) => fn(prisma));
+  return { prisma };
+});
 
 describe("assignConversation", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -15,7 +19,7 @@ describe("assignConversation", () => {
     const { prisma } = await import("@/server/db/client");
     (prisma.lead.findFirst as any).mockResolvedValue(null);
     const { assignConversation } = await import("./inbox.service");
-    await expect(assignConversation("dono-1", "lead-de-outro", "dono-1")).rejects.toThrow(
+    await expect(assignConversation("dono-1", "lead-de-outro", "dono-1", "dono-1")).rejects.toThrow(
       /não encontrada/i,
     );
     expect(prisma.lead.update).not.toHaveBeenCalled();
@@ -26,7 +30,7 @@ describe("assignConversation", () => {
     (prisma.lead.findFirst as any).mockResolvedValue({ id: "lead-1", queuedAt: null });
     (prisma.user.findMany as any).mockResolvedValue([]); // sem membros → só o dono é operador
     const { assignConversation } = await import("./inbox.service");
-    await expect(assignConversation("dono-1", "lead-1", "op-de-outro")).rejects.toThrow(
+    await expect(assignConversation("dono-1", "lead-1", "op-de-outro", "dono-1")).rejects.toThrow(
       /não pertence/i,
     );
     expect(prisma.lead.update).not.toHaveBeenCalled();
@@ -38,7 +42,7 @@ describe("assignConversation", () => {
     (prisma.user.findMany as any).mockResolvedValue([{ id: "op-1" }]);
     (prisma.lead.update as any).mockResolvedValue({ id: "lead-1" });
     const { assignConversation } = await import("./inbox.service");
-    await assignConversation("dono-1", "lead-1", "op-1");
+    await assignConversation("dono-1", "lead-1", "op-1", "actor-1");
     const arg = (prisma.lead.update as any).mock.calls[0][0];
     expect(arg.data).toMatchObject({
       assignedToId: "op-1",

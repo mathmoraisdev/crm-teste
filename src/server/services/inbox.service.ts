@@ -3,6 +3,7 @@ import type { AttendanceStatus, LeadStatus } from "@prisma/client";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
 import { slaState, type SlaState } from "@/lib/inbox/sla";
+import { recordAudit } from "@/server/audit/record";
 
 export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
@@ -70,7 +71,7 @@ async function accountOperatorIds(tenantUserId: string): Promise<Set<string>> {
 async function assertLead(tenantUserId: string, leadId: string) {
   const lead = await prisma.lead.findFirst({
     where: { id: leadId, userId: tenantUserId },
-    select: { id: true, queuedAt: true },
+    select: { id: true, queuedAt: true, assignedToId: true, name: true },
   });
   if (!lead) throw new Error("Conversa não encontrada.");
   return lead;
@@ -186,21 +187,34 @@ export async function assignConversation(
   tenantUserId: string,
   leadId: string,
   operatorId: string,
+  actorId: string,
 ) {
   const lead = await assertLead(tenantUserId, leadId);
   const operators = await accountOperatorIds(tenantUserId);
   if (!operators.has(operatorId)) {
     throw new Error("Operador não pertence a esta conta.");
   }
-  const updated = await prisma.lead.update({
-    where: { id: lead.id },
-    data: {
-      assignedToId: operatorId,
-      attendanceStatus: "ATENDENDO",
-      aiPaused: true,
-      aiPausedAt: new Date(),
-      ...(lead.queuedAt ? {} : { queuedAt: new Date() }),
-    },
+  const previousAssignee = lead.assignedToId ?? null;
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.lead.update({
+      where: { id: lead.id },
+      data: {
+        assignedToId: operatorId,
+        attendanceStatus: "ATENDENDO",
+        aiPaused: true,
+        aiPausedAt: new Date(),
+        ...(lead.queuedAt ? {} : { queuedAt: new Date() }),
+      },
+    });
+    // Só audita se o DESTINO mudou de fato (reassumir p/ o mesmo não é reatribuição).
+    if (previousAssignee !== operatorId) {
+      await recordAudit(tx, {
+        accountId: tenantUserId, actorId, action: "LEAD_REASSIGN", entityType: "Lead", entityId: lead.id,
+        summary: `Reatribuiu o cliente "${lead.name ?? lead.id}"`,
+        diff: { assignedToId: { from: previousAssignee, to: operatorId } },
+      });
+    }
+    return u;
   });
   await invalidateLeadCaches(tenantUserId); // contadores de inbox mudaram
   return updated;

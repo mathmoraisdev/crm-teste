@@ -30,6 +30,7 @@ export async function POST(
       ctx.tenantUserId,
       id,
       parsed.data.operatorId ?? ctx.sessionUserId,
+      ctx.sessionUserId,
     );
     return NextResponse.json({ lead });
   } catch (e) {
