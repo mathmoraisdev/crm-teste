@@ -90,6 +90,8 @@ export function CatalogManager({
   const [error, setError] = useState<string | null>(null);
   // Form de "Adicionar item": nasce fechado (era sempre aberto e comia a tela).
   const [adding, setAdding] = useState(false);
+  const [eanBusy, setEanBusy] = useState(false);
+  const [eanSuggested, setEanSuggested] = useState(false); // mostra a dica "nome sugerido"
 
   // Semear a partir do ramo (estado-vazio).
   const [seedTemplateId, setSeedTemplateId] = useState("");
@@ -169,12 +171,34 @@ export function CatalogManager({
     setMenuVisible(true);
     setMenuCategory("");
     setMenuDescription("");
+    setEanSuggested(false);
   }
 
   function closeAddForm() {
     resetAddForm();
     setError(null);
     setAdding(false);
+  }
+
+  // Bipar no cadastro: resolve o EAN → nome da base externa e PRÉ-PREENCHE o nome.
+  // Só sugere se: é PRODUTO, tem código, e o nome ainda está vazio (nunca sobrescreve
+  // o que o usuário digitou). Fail-open: qualquer erro → não faz nada (cadastro segue).
+  async function suggestNameFromBarcode() {
+    const code = barcode.trim();
+    if (kind !== "PRODUTO" || !code || name.trim()) return;
+    setEanBusy(true);
+    try {
+      const res = await fetch(`/api/vendas/catalog/ean-info?barcode=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.found && data?.name && !name.trim()) {
+        setName(data.name);
+        setEanSuggested(true);
+      }
+    } catch {
+      /* fail-open: cadastro manual normal */
+    } finally {
+      setEanBusy(false);
+    }
   }
 
   async function addItem() {
@@ -787,6 +811,10 @@ export function CatalogManager({
                   placeholder="ex.: Corte"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 />
+                {eanBusy && <p className="text-[11px] text-slate-400">Buscando nome pelo código…</p>}
+                {eanSuggested && !eanBusy && (
+                  <p className="text-[11px] text-brand-600">Nome sugerido pelo código de barras — confira e ajuste se quiser.</p>
+                )}
               </Field>
               <Field label="Tipo" className="sm:w-32">
                 <select
@@ -867,8 +895,11 @@ export function CatalogManager({
                   <Field label="Código de barras (EAN)" className="flex-1">
                     <input
                       value={barcode}
-                      onChange={(e) => setBarcode(e.target.value)}
-                      placeholder="opcional"
+                      onChange={(e) => { setBarcode(e.target.value); setEanSuggested(false); }}
+                      onBlur={() => void suggestNameFromBarcode()}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void suggestNameFromBarcode(); } }}
+                      disabled={eanBusy}
+                      placeholder="Código de barras — bipe aqui p/ sugerir o nome"
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                   </Field>
