@@ -94,11 +94,19 @@ async function fromDotCompany(gtin: string): Promise<ProviderResult> {
   if (!r.data?.sucesso || !r.data?.produto) return "miss";
   const name = typeof r.data.produto?.descricao === "string" ? r.data.produto.descricao.trim() : "";
   if (!name) return "miss";
+  // A DotCompany devolve ncm como objeto {codigo, codigo_formatado, descricao};
+  // guardamos só o código cru de 8 dígitos (mesmo formato que a Cosmos e o que o
+  // fiscal espera). Defensivo: aceita escalar também, nunca vira "[object Object]".
+  const ncmRaw = r.data.produto?.ncm;
+  const ncm =
+    ncmRaw && typeof ncmRaw === "object"
+      ? (ncmRaw.codigo ? String(ncmRaw.codigo) : null)
+      : ncmRaw ? String(ncmRaw) : null;
   return {
     found: true,
     name,
     brand: r.data.produto?.marca ? String(r.data.produto.marca).trim() : null,
-    ncm: r.data.produto?.ncm ? String(r.data.produto.ncm) : null,
+    ncm,
     source: "dotcompany",
   };
 }

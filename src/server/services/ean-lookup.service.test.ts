@@ -78,7 +78,9 @@ describe("ean-lookup.service", () => {
       if (url.includes("openfoodfacts")) return { status: 200, body: { status: 0 } }; // OFF miss
       if (url.includes("dotcompany")) return {
         status: 200,
-        body: { sucesso: true, produto: { descricao: "CIGARRO MARLBORO BOX 20UN", marca: "Marlboro", ncm: "24022000" } },
+        // ncm vem como OBJETO na API real ({codigo, codigo_formatado, descricao}),
+        // não escalar — o provider extrai só o código cru.
+        body: { sucesso: true, produto: { descricao: "CIGARRO MARLBORO BOX 20UN", marca: "Marlboro", ncm: { codigo: "24022000", codigo_formatado: "2402.20.00", descricao: null } } },
       };
       return { status: 200, body: {} };
     });
@@ -86,6 +88,7 @@ describe("ean-lookup.service", () => {
     expect(r.found).toBe(true);
     expect(r.name).toBe("CIGARRO MARLBORO BOX 20UN");
     expect(r.source).toBe("dotcompany");
+    expect(r.ncm).toBe("24022000"); // código cru, nunca "[object Object]"
   });
 
   it("DotCompany: sucesso:false é 'não achei' (miss), não erro", async () => {
