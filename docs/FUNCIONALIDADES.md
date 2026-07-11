@@ -76,6 +76,10 @@ Controle simples e opt-in, sem atrapalhar quem só vende serviço.
 - **Entradas e ajustes** manuais (compra, inventário, perda).
 - **Alerta de estoque mínimo.**
 - **Código de barras/EAN:** bipar resolve o item no caixa.
+- **Auto-sugerir nome no cadastro:** ao bipar/digitar um código de barras ao cadastrar um produto,
+  o sistema consulta uma base externa (Open Food Facts grátis; Cosmos com token) e **pré-preenche o
+  nome** (editável) — o **preço é sempre do lojista**. Cache global + fail-open: sem base/erro, o
+  cadastro segue manual, igual antes.
 - **Custo → margem e valorização** do estoque.
 - **A IA respeita o estoque:** marca "indisponível" no atendimento quando esgota.
 - *Nota técnica:* `CatalogItem.trackStock/stockQty/barcode`, `StockMovement`, ondas A e G.

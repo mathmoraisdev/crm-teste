@@ -115,6 +115,8 @@ export function CatalogManager({
   const [editMenuDescription, setEditMenuDescription] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editEanBusy, setEditEanBusy] = useState(false);
+  const [editEanSuggested, setEditEanSuggested] = useState(false);
   // Foco no Nome ao abrir edição via "Duplicar" (troca rápida do rótulo da variação).
   const editNameRef = useRef<HTMLInputElement>(null);
 
@@ -201,6 +203,26 @@ export function CatalogManager({
     }
   }
 
+  // Mesmo helper no form de EDIÇÃO (editBarcode → editName). Mesma guarda: só
+  // PRODUTO, com código, e nome ainda vazio (não sobrescreve o que já existe).
+  async function suggestEditNameFromBarcode() {
+    const code = editBarcode.trim();
+    if (editKind !== "PRODUTO" || !code || editName.trim()) return;
+    setEditEanBusy(true);
+    try {
+      const res = await fetch(`/api/vendas/catalog/ean-info?barcode=${encodeURIComponent(code)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.found && data?.name && !editName.trim()) {
+        setEditName(data.name);
+        setEditEanSuggested(true);
+      }
+    } catch {
+      /* fail-open */
+    } finally {
+      setEditEanBusy(false);
+    }
+  }
+
   async function addItem() {
     setError(null);
     const priceCents = parseBRLToCents(price);
@@ -274,11 +296,13 @@ export function CatalogManager({
     setEditMenuCategory(it.menuCategory ?? "");
     setEditMenuDescription(it.menuDescription ?? "");
     setEditError(null);
+    setEditEanSuggested(false);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditError(null);
+    setEditEanSuggested(false);
   }
 
   // Duplica o item e já abre a cópia em edição, com o cursor no Nome. Copia
@@ -532,6 +556,10 @@ export function CatalogManager({
                         placeholder="ex.: Corte"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                       />
+                      {editEanBusy && <p className="text-[11px] text-slate-400">Buscando nome pelo código…</p>}
+                      {editEanSuggested && !editEanBusy && (
+                        <p className="text-[11px] text-brand-600">Nome sugerido pelo código de barras — confira e ajuste se quiser.</p>
+                      )}
                     </Field>
                     <Field label="Tipo" className="sm:w-32">
                       <select
@@ -612,8 +640,11 @@ export function CatalogManager({
                         <Field label="Código de barras (EAN)" className="flex-1">
                           <input
                             value={editBarcode}
-                            onChange={(e) => setEditBarcode(e.target.value)}
-                            placeholder="opcional"
+                            onChange={(e) => { setEditBarcode(e.target.value); setEditEanSuggested(false); }}
+                            onBlur={() => void suggestEditNameFromBarcode()}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void suggestEditNameFromBarcode(); } }}
+                            disabled={editEanBusy}
+                            placeholder="Código de barras — bipe aqui p/ sugerir o nome"
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                           />
                         </Field>
