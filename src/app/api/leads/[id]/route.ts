@@ -66,11 +66,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   try {
-    await deleteLead(id, userId);
+    await deleteLead(id, ctx.tenantUserId, ctx.sessionUserId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

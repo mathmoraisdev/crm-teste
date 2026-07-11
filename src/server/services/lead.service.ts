@@ -8,6 +8,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { PLAN_LIMITS } from "@/lib/plans";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { invalidateLeadCaches } from "@/server/cache/keys";
+import { recordAudit } from "@/server/audit/record";
 
 /**
  * Capacidade de contatos do plano. grandfather (plan=null)/admin = ilimitado.
@@ -408,10 +409,16 @@ export async function reactivateLead(id: string, userId: string): Promise<Lead> 
 }
 
 /** Apaga um lead e tudo associado (mensagens, qualificação, reunião, jobs — cascade). */
-export async function deleteLead(id: string, userId: string): Promise<void> {
-  const exists = await prisma.lead.findFirst({ where: { id, userId }, select: { id: true } });
-  if (!exists) throw new Error("Lead não encontrado");
-  await prisma.lead.delete({ where: { id } });
+export async function deleteLead(id: string, userId: string, actorId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.lead.findFirst({ where: { id, userId }, select: { id: true, name: true, phone: true } });
+    if (!before) throw new Error("Lead não encontrado");
+    await tx.lead.delete({ where: { id } });
+    await recordAudit(tx, {
+      accountId: userId, actorId, action: "LEAD_DELETE", entityType: "Lead", entityId: id,
+      summary: `Excluiu o cliente "${before.name ?? before.phone ?? id}"`,
+    });
+  });
   await invalidateLeadCaches(userId);
 }
 
