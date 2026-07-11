@@ -47,4 +47,19 @@ describe("recordAudit", () => {
     expect(row?.actorName).toBe(ghostActorId);
     expect(row?.diff).toEqual({ priceCents: { from: 2000, to: 2400 } });
   });
+
+  it("usa actorName explícito (autor não-humano) sem buscar no User", async () => {
+    const owner = await makeUser("Dono3");
+    await prisma.$transaction(async (tx) => {
+      await recordAudit(tx, {
+        accountId: owner, actorId: "ia", actorName: "IA · Cliente (via WhatsApp)",
+        action: "APPOINTMENT_CANCEL", entityType: "Appointment", entityId: "appt-1",
+        summary: "Cancelou o horário — pedido do cliente",
+      });
+    });
+    const row = await prisma.auditLog.findFirst({ where: { accountId: owner } });
+    expect(row?.actorId).toBe("ia");
+    expect(row?.actorName).toBe("IA · Cliente (via WhatsApp)");
+    expect(row?.action).toBe("APPOINTMENT_CANCEL");
+  });
 });

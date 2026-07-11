@@ -10,11 +10,16 @@ export type AuditAction =
   | "LEAD_UPDATE"
   | "OPERATOR_PERMS_UPDATE"
   | "ORDER_DISCOUNT"
-  | "CATALOG_PRICE_UPDATE";
+  | "CATALOG_PRICE_UPDATE"
+  // Agenda (Tier 2): cancelar/remarcar/trocar profissional.
+  | "APPOINTMENT_CANCEL"
+  | "APPOINTMENT_RESCHEDULE"
+  | "APPOINTMENT_REASSIGN";
 
 export type AuditInput = {
   accountId: string;   // dono/tenant (tenantUserId)
-  actorId: string;     // sessionUserId de quem agiu
+  actorId: string;     // sessionUserId de quem agiu (ou sentinela p/ autor não-humano)
+  actorName?: string;  // nome do autor PRONTO (autor não-humano, ex.: IA); ausente = busca no User
   action: AuditAction;
   entityType: string;
   entityId: string;
@@ -29,15 +34,20 @@ export type AuditInput = {
  * Busca o nome do autor no momento (1 lookup por PK) e grava como snapshot.
  */
 export async function recordAudit(tx: Prisma.TransactionClient, input: AuditInput): Promise<void> {
-  const actor = await tx.user.findUnique({
-    where: { id: input.actorId },
-    select: { name: true, email: true },
-  });
+  // Autor não-humano (IA/sistema) passa `actorName` pronto → pula o lookup no User.
+  let actorName = input.actorName;
+  if (actorName === undefined) {
+    const actor = await tx.user.findUnique({
+      where: { id: input.actorId },
+      select: { name: true, email: true },
+    });
+    actorName = actor?.name ?? actor?.email ?? input.actorId;
+  }
   await tx.auditLog.create({
     data: {
       accountId: input.accountId,
       actorId: input.actorId,
-      actorName: actor?.name ?? actor?.email ?? input.actorId,
+      actorName,
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
