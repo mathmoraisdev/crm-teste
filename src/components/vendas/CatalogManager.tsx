@@ -192,8 +192,11 @@ export function CatalogManager({
     try {
       const res = await fetch(`/api/vendas/catalog/ean-info?barcode=${encodeURIComponent(code)}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.found && data?.name && !name.trim()) {
-        setName(data.name);
+      if (res.ok && data?.found && data?.name) {
+        // setState funcional lê o nome ATUAL no commit — o do closure pode estar
+        // velho se o usuário digitou durante a busca → nunca sobrescreve o digitado.
+        const suggestion = String(data.name);
+        setName((prev) => (prev.trim() ? prev : suggestion));
         setEanSuggested(true);
       }
     } catch {
@@ -212,8 +215,10 @@ export function CatalogManager({
     try {
       const res = await fetch(`/api/vendas/catalog/ean-info?barcode=${encodeURIComponent(code)}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.found && data?.name && !editName.trim()) {
-        setEditName(data.name);
+      if (res.ok && data?.found && data?.name) {
+        // setState funcional (mesma guarda anti-corrida do form de adicionar).
+        const suggestion = String(data.name);
+        setEditName((prev) => (prev.trim() ? prev : suggestion));
         setEditEanSuggested(true);
       }
     } catch {
