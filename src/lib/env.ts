@@ -164,6 +164,11 @@ const schema = z.object({
   EAN_LOOKUP_DISABLED: z.coerce.boolean().default(false),
   COSMOS_BASE_URL: z.string().default("https://api.cosmos.bluesoft.com.br"),
   COSMOS_API_TOKEN: z.string().optional().default(""),
+  // DotCompany: provedor grátis adicional (sem chave, ~25/dia POR IP — conta até
+  // erros; na Vercel o IP é compartilhado, então é bônus best-effort). Honesta no
+  // "não achei" (sucesso:false). DOTCOMPANY_DISABLED=true desliga (idioma da casa).
+  DOTCOMPANY_DISABLED: z.coerce.boolean().default(false),
+  DOTCOMPANY_BASE_URL: z.string().default("https://erp.dotcompany.com.br"),
   EAN_LOOKUP_TIMEOUT_MS: z.coerce.number().int().positive().default(4000), // cadastro é interativo: falha rápido
   EAN_NEGATIVE_TTL_DAYS: z.coerce.number().int().positive().default(30), // recheca "não achou" após N dias
 });
