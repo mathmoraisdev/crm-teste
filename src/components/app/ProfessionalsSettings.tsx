@@ -193,7 +193,7 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
                 <div
                   role="radiogroup"
                   aria-label="Cor do profissional"
-                  className="flex flex-wrap gap-2 py-1"
+                  className="flex flex-wrap items-center gap-1.5 py-1"
                 >
                   {COLORS.map((c) => {
                     const selected = color === c.key;
@@ -206,12 +206,14 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
                         aria-label={c.label}
                         title={c.label}
                         onClick={() => setColor(c.key)}
-                        className={`h-7 w-7 rounded-full transition-transform ${c.dot} ${
-                          selected
-                            ? "scale-110 ring-2 ring-ink"
-                            : "ring-1 ring-inset ring-black/10 hover:scale-105"
+                        className={`rounded-full p-0.5 transition-transform ${
+                          selected ? "ring-2 ring-ink" : "hover:scale-110"
                         }`}
-                      />
+                      >
+                        <span
+                          className={`block h-5 w-5 rounded-full ring-1 ring-inset ring-black/10 ${c.dot}`}
+                        />
+                      </button>
                     );
                   })}
                 </div>
