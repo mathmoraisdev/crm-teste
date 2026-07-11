@@ -9,6 +9,7 @@ import { PLAN_LIMITS } from "@/lib/plans";
 import { mergeCustomFields } from "@/server/services/custom-field.service";
 import { invalidateLeadCaches } from "@/server/cache/keys";
 import { recordAudit } from "@/server/audit/record";
+import { computeDiff } from "@/server/audit/diff";
 
 /**
  * Capacidade de contatos do plano. grandfather (plan=null)/admin = ilimitado.
@@ -337,15 +338,18 @@ export async function updateLead(
     personType?: "PF" | "PJ";
     document?: string | null;
   },
+  actorId: string,
 ): Promise<Lead> {
   const exists = await prisma.lead.findFirst({
     where: { id, userId },
-    select: { id: true, customFields: true, personType: true },
+    select: { id: true, customFields: true, personType: true, name: true, phone: true, email: true },
   });
   if (!exists) throw new Error("Lead não encontrado");
 
   const patch: Prisma.LeadUpdateInput = {};
-  if (data.name !== undefined) patch.name = data.name;
+  // Snapshot "depois" só dos campos de contato auditados (name/phone/email já normalizados).
+  const auditPatch: { name?: string; phone?: string; email?: string | null } = {};
+  if (data.name !== undefined) { patch.name = data.name; auditPatch.name = data.name; }
   if (data.status !== undefined) patch.status = data.status;
   if (data.customFields !== undefined) {
     patch.customFields = (await mergeCustomFields(
@@ -360,6 +364,7 @@ export async function updateLead(
     const email = data.email.trim() ? normalizeEmail(data.email) : null;
     if (data.email.trim() && !email) throw new Error("E-mail inválido.");
     patch.email = email;
+    auditPatch.email = email;
   }
   if (data.optOut !== undefined) {
     patch.optOut = data.optOut;
@@ -381,9 +386,26 @@ export async function updateLead(
       throw new Error("Já existe outro lead com este telefone.");
     }
     patch.phone = phone;
+    auditPatch.phone = phone;
   }
 
-  const updated = await prisma.lead.update({ where: { id }, data: patch });
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.lead.update({ where: { id }, data: patch });
+    // Só dados de contato (Tier 1). Mudança de funil (status) fica p/ o Tier 2.
+    const diff = computeDiff(
+      { name: exists.name, phone: exists.phone, email: exists.email },
+      auditPatch,
+      ["name", "phone", "email"],
+    );
+    if (Object.keys(diff).length) {
+      await recordAudit(tx, {
+        accountId: userId, actorId, action: "LEAD_UPDATE", entityType: "Lead", entityId: id,
+        summary: `Editou dados do cliente "${exists.name ?? exists.phone ?? id}"`,
+        diff,
+      });
+    }
+    return u;
+  });
   await invalidateLeadCaches(userId); // status/opt-out podem ter mudado
   return updated;
 }

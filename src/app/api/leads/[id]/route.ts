@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { LeadStatus } from "@prisma/client";
 import { deleteLead, getLeadDetail, updateLead } from "@/server/services/lead.service";
-import { getTenantUserId, getTenantContext } from "@/lib/tenant";
+import { getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +40,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getTenantUserId();
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const ctx = await getTenantContext();
+  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -52,7 +52,7 @@ export async function PATCH(
     );
   }
   try {
-    const lead = await updateLead(id, userId, parsed.data);
+    const lead = await updateLead(id, ctx.tenantUserId, parsed.data, ctx.sessionUserId);
     return NextResponse.json({ lead });
   } catch (e) {
     return NextResponse.json(

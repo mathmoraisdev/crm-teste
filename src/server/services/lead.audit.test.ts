@@ -3,7 +3,7 @@
 // asseverar linhas de AuditLog lá. Mesmo padrão do order.audit.test.ts.
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/server/db/client";
-import { createLead, deleteLead } from "./lead.service";
+import { createLead, deleteLead, updateLead } from "./lead.service";
 
 async function makeOwner() {
   const u = await prisma.user.create({
@@ -20,5 +20,22 @@ describe("lead audit", () => {
     const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "LEAD_DELETE" } });
     expect(log?.entityId).toBe(lead.id);
     expect(log?.summary).toContain("Fulano");
+  });
+
+  it("updateLead grava LEAD_UPDATE com diff dos campos de contato", async () => {
+    const a = await makeOwner();
+    const lead = await createLead(a, "Ana", "5511999998888");
+    await updateLead(lead.id, a, { name: "Ana Paula" }, a);
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "LEAD_UPDATE", entityId: lead.id } });
+    expect((log?.diff as any).name).toEqual({ from: "Ana", to: "Ana Paula" });
+    expect(log?.summary).toContain("Ana");
+  });
+
+  it("salvar sem mudar contato (só optOut) NÃO gera LEAD_UPDATE", async () => {
+    const a = await makeOwner();
+    const lead = await createLead(a, "Ana", "5511999997777");
+    await updateLead(lead.id, a, { optOut: true }, a); // optOut não é campo de contato auditado
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "LEAD_UPDATE", entityId: lead.id } });
+    expect(log).toBeNull();
   });
 });
