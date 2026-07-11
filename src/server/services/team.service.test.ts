@@ -6,7 +6,8 @@ vi.mock("@/server/db/client", () => {
     expense: { updateMany: vi.fn() },
     recurringExpense: { updateMany: vi.fn() },
     stockMovement: { updateMany: vi.fn() },
-    user: { delete: vi.fn() },
+    user: { delete: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+    auditLog: { create: vi.fn() }, // updateOperatorPerms grava audit dentro da tx
   };
   return {
     prisma: {
@@ -117,18 +118,22 @@ describe("updateOperatorPerms", () => {
 
   it("faz merge de canFinance só quando informado", async () => {
     const { prisma } = await import("@/server/db/client");
-    (prisma.user.findFirst as any).mockResolvedValue({ id: "op-1" });
-    (prisma.user.update as any) = vi.fn().mockResolvedValue({ id: "op-1" });
+    // update agora roda dentro do $transaction → asserta pelo tx mockado (prisma.__tx).
+    const tx = (prisma as any).__tx;
+    (prisma.user.findFirst as any).mockResolvedValue({
+      id: "op-1", name: "Op", canFinance: true, canSettings: false, canCampaigns: false, leadsScope: "ALL",
+    });
+    tx.user.update.mockResolvedValue({ id: "op-1" });
     const { updateOperatorPerms } = await import("./team.service");
 
     // Informado → entra no data.
-    await updateOperatorPerms("dono-1", "op-1", { canFinance: false });
-    expect((prisma.user.update as any).mock.calls[0][0].data).toEqual({ canFinance: false });
+    await updateOperatorPerms("dono-1", "op-1", { canFinance: false }, "dono-1");
+    expect(tx.user.update.mock.calls[0][0].data).toEqual({ canFinance: false });
 
     // Omitido → não entra no data (não mexe no campo).
-    (prisma.user.update as any).mockClear();
-    await updateOperatorPerms("dono-1", "op-1", { canSettings: true });
-    const data = (prisma.user.update as any).mock.calls[0][0].data;
+    tx.user.update.mockClear();
+    await updateOperatorPerms("dono-1", "op-1", { canSettings: true }, "dono-1");
+    const data = tx.user.update.mock.calls[0][0].data;
     expect(data).toEqual({ canSettings: true });
     expect(data).not.toHaveProperty("canFinance");
   });

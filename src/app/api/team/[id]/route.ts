@@ -36,7 +36,7 @@ export async function PATCH(
 
   const { id } = await params;
   try {
-    await updateOperatorPerms(ctx.tenantUserId, id, parsed.data);
+    await updateOperatorPerms(ctx.tenantUserId, id, parsed.data, ctx.sessionUserId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

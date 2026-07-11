@@ -3,6 +3,8 @@ import { hashPassword } from "@/lib/password";
 import { normalizeEmail } from "@/lib/email";
 import { PLAN_LIMITS } from "@/lib/plans";
 import type { AccountRole, LeadsScope } from "@prisma/client";
+import { recordAudit } from "@/server/audit/record";
+import { computeDiff } from "@/server/audit/diff";
 
 /** Limitações configuráveis de um operador. Default = acesso total (igual hoje). */
 export interface OperatorPermsInput {
@@ -116,20 +118,33 @@ export async function updateOperatorPerms(
   adminUserId: string,
   operatorId: string,
   perms: OperatorPermsInput,
+  actorId: string,
 ): Promise<void> {
-  const op = await prisma.user.findFirst({
+  const before = await prisma.user.findFirst({
     where: { id: operatorId, ownerId: adminUserId },
-    select: { id: true },
+    select: { id: true, name: true, canFinance: true, canSettings: true, canCampaigns: true, leadsScope: true },
   });
-  if (!op) throw new Error("Operador não encontrado nesta conta.");
-  await prisma.user.update({
-    where: { id: op.id },
-    data: {
-      ...(perms.canCampaigns !== undefined ? { canCampaigns: perms.canCampaigns } : {}),
-      ...(perms.canSettings !== undefined ? { canSettings: perms.canSettings } : {}),
-      ...(perms.canFinance !== undefined ? { canFinance: perms.canFinance } : {}),
-      ...(perms.leadsScope !== undefined ? { leadsScope: perms.leadsScope } : {}),
-    },
+  if (!before) throw new Error("Operador não encontrado nesta conta.");
+  const data: OperatorPermsInput = {
+    ...(perms.canCampaigns !== undefined ? { canCampaigns: perms.canCampaigns } : {}),
+    ...(perms.canSettings !== undefined ? { canSettings: perms.canSettings } : {}),
+    ...(perms.canFinance !== undefined ? { canFinance: perms.canFinance } : {}),
+    ...(perms.leadsScope !== undefined ? { leadsScope: perms.leadsScope } : {}),
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: before.id }, data });
+    const diff = computeDiff(
+      { canFinance: before.canFinance, canSettings: before.canSettings, canCampaigns: before.canCampaigns, leadsScope: before.leadsScope },
+      data,
+      ["canFinance", "canSettings", "canCampaigns", "leadsScope"],
+    );
+    if (Object.keys(diff).length) {
+      await recordAudit(tx, {
+        accountId: adminUserId, actorId, action: "OPERATOR_PERMS_UPDATE", entityType: "User", entityId: operatorId,
+        summary: `Alterou permissões de "${before.name ?? operatorId}"`,
+        diff,
+      });
+    }
   });
 }
 
