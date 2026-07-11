@@ -14,12 +14,14 @@ const inputClass =
  * Cores disponíveis para o profissional (usadas como bolinha na agenda). Só
  * tokens de design — nada de hex fixo. O valor gravado é a chave (ex.: "brand").
  */
-const COLORS: Array<{ key: string; label: string; dot: string }> = [
+const COLORS: Array<{ key: string; label: string; dot: string; legacy?: boolean }> = [
   { key: "slate", label: "Cinza", dot: "bg-slate-400" },
   { key: "brand", label: "Verde", dot: "bg-brand-500" },
   { key: "blue", label: "Azul", dot: "bg-info" },
   { key: "amber", label: "Âmbar", dot: "bg-warning" },
-  { key: "red", label: "Vermelho", dot: "bg-danger" },
+  // Vermelho: aposentado do seletor (colide com o status Faltou/Cancelado), mas
+  // mantido no mapa p/ profissionais que JÁ estavam nessa cor renderizarem certo.
+  { key: "red", label: "Vermelho", dot: "bg-danger", legacy: true },
   { key: "violet", label: "Violeta", dot: "bg-accent" },
   { key: "teal", label: "Turquesa", dot: "bg-pro-teal" },
   { key: "pink", label: "Rosa", dot: "bg-pro-pink" },
@@ -195,7 +197,7 @@ export function ProfessionalsSettings({ canEdit = true }: { canEdit?: boolean })
                   aria-label="Cor do profissional"
                   className="flex flex-wrap items-center gap-1.5 py-1"
                 >
-                  {COLORS.map((c) => {
+                  {COLORS.filter((c) => !c.legacy || c.key === color).map((c) => {
                     const selected = color === c.key;
                     return (
                       <button
