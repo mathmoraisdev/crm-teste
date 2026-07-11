@@ -23,11 +23,15 @@ const ACTION_LABEL: Record<string, string> = {
   OPERATOR_PERMS_UPDATE: "Permissões de operador",
   ORDER_DISCOUNT: "Ajuste de comanda",
   CATALOG_PRICE_UPDATE: "Alterou preço",
+  APPOINTMENT_CANCEL: "Cancelou horário",
+  APPOINTMENT_RESCHEDULE: "Remarcou horário",
+  APPOINTMENT_REASSIGN: "Trocou profissional",
 };
 
 const ENTITY_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "Tudo" },
   { value: "Order", label: "Comandas" },
+  { value: "Appointment", label: "Agenda" },
   { value: "Lead", label: "Clientes" },
   { value: "Expense", label: "Despesas" },
   { value: "CatalogItem", label: "Catálogo" },
