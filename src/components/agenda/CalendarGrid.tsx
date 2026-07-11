@@ -31,6 +31,11 @@ const BLOCK_TONE: Record<string, string> = {
   amber: "border-l-warning bg-warning-surface text-warning",
   red: "border-l-danger bg-danger-surface text-danger",
   violet: "border-l-accent bg-accent-surface text-accent",
+  // Categóricas de profissional (equipes maiores) — tokens pro-* (theme-aware).
+  teal: "border-l-pro-teal bg-pro-teal-surface text-pro-teal",
+  pink: "border-l-pro-pink bg-pro-pink-surface text-pro-pink",
+  indigo: "border-l-pro-indigo bg-pro-indigo-surface text-pro-indigo",
+  orange: "border-l-pro-orange bg-pro-orange-surface text-pro-orange",
 };
 
 const DOT_TONE: Record<string, string> = {
@@ -40,6 +45,10 @@ const DOT_TONE: Record<string, string> = {
   amber: "bg-warning",
   red: "bg-danger",
   violet: "bg-accent",
+  teal: "bg-pro-teal",
+  pink: "bg-pro-pink",
+  indigo: "bg-pro-indigo",
+  orange: "bg-pro-orange",
 };
 
 function blockTone(color: string): string {

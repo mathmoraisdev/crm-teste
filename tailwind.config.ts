@@ -68,6 +68,19 @@ const config: Config = {
         "success-surface": "rgb(var(--success-surface) / <alpha-value>)",
         accent: "rgb(var(--accent) / <alpha-value>)",
         "accent-surface": "rgb(var(--accent-surface) / <alpha-value>)",
+        // Categóricas de PROFISSIONAL (Agenda) — namespaced p/ NÃO colidir com os
+        // teal/indigo/orange/pink default do Tailwind. Só p/ diferenciar quem é quem
+        // no calendário; ficam fora das cores de status. Valores em globals.css.
+        pro: {
+          teal: "rgb(var(--pro-teal) / <alpha-value>)",
+          "teal-surface": "rgb(var(--pro-teal-surface) / <alpha-value>)",
+          pink: "rgb(var(--pro-pink) / <alpha-value>)",
+          "pink-surface": "rgb(var(--pro-pink-surface) / <alpha-value>)",
+          indigo: "rgb(var(--pro-indigo) / <alpha-value>)",
+          "indigo-surface": "rgb(var(--pro-indigo-surface) / <alpha-value>)",
+          orange: "rgb(var(--pro-orange) / <alpha-value>)",
+          "orange-surface": "rgb(var(--pro-orange-surface) / <alpha-value>)",
+        },
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],

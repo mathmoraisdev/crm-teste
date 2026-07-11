@@ -21,6 +21,10 @@ const COLORS: Array<{ key: string; label: string; dot: string }> = [
   { key: "amber", label: "Âmbar", dot: "bg-warning" },
   { key: "red", label: "Vermelho", dot: "bg-danger" },
   { key: "violet", label: "Violeta", dot: "bg-accent" },
+  { key: "teal", label: "Turquesa", dot: "bg-pro-teal" },
+  { key: "pink", label: "Rosa", dot: "bg-pro-pink" },
+  { key: "indigo", label: "Índigo", dot: "bg-pro-indigo" },
+  { key: "orange", label: "Laranja", dot: "bg-pro-orange" },
 ];
 
 function colorDot(color: string): string {

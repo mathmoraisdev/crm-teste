@@ -40,6 +40,14 @@
   --info: 44 91 214;            --info-surface: 234 240 254;     /* #2C5BD6 / #EAF0FE */
   --success: 11 125 82;         --success-surface: 231 246 238;  /* brand-700 / brand-50 */
   --accent: 109 67 214;         --accent-surface: 239 234 254;   /* #6D43D6 / #EFEAFE */
+
+  /* Categóricas de PROFISSIONAL (Agenda) — NÃO semânticas: existem só p/ diferenciar
+     quem é quem no calendário. Ficam FORA das cores de status de propósito (status já
+     usa danger/warning/info/accent). Base = ponto/borda/texto; surface = fundo do bloco. */
+  --pro-teal: 13 148 136;       --pro-teal-surface: 220 246 242;    /* #0D9488 */
+  --pro-pink: 219 39 119;       --pro-pink-surface: 252 231 243;    /* #DB2777 */
+  --pro-indigo: 79 70 229;      --pro-indigo-surface: 232 231 253;  /* #4F46E5 */
+  --pro-orange: 234 88 12;      --pro-orange-surface: 255 237 213;  /* #EA580C */
 }
 
 /* Tema escuro (neutro/near-black). O ramp neutro é INVERTIDO e afinado —
@@ -70,6 +78,12 @@
   --info: 143 176 245;     --info-surface: 26 40 66;
   --success: 95 214 158;   --success-surface: 18 46 30;
   --accent: 182 156 240;   --accent-surface: 40 32 66;
+
+  /* Categóricas de profissional no escuro: base clareada, superfície escurecida (contraste AA). */
+  --pro-teal: 45 212 191;    --pro-teal-surface: 15 46 43;
+  --pro-pink: 244 114 182;   --pro-pink-surface: 54 24 40;
+  --pro-indigo: 165 170 250; --pro-indigo-surface: 30 30 62;
+  --pro-orange: 251 146 60;  --pro-orange-surface: 56 34 16;
 }
 
 /* Escopo que FORÇA tema claro mesmo dentro de html[data-theme="dark"].
@@ -98,6 +112,11 @@
   --info: 44 91 214;            --info-surface: 234 240 254;
   --success: 11 125 82;         --success-surface: 231 246 238;
   --accent: 109 67 214;         --accent-surface: 239 234 254;
+
+  --pro-teal: 13 148 136;       --pro-teal-surface: 220 246 242;
+  --pro-pink: 219 39 119;       --pro-pink-surface: 252 231 243;
+  --pro-indigo: 79 70 229;      --pro-indigo-surface: 232 231 253;
+  --pro-orange: 234 88 12;      --pro-orange-surface: 255 237 213;
 }
 
 html,
