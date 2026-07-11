@@ -153,6 +153,19 @@ const schema = z.object({
   TRANSCRIBE_MODEL_OPENAI: z.string().default("whisper-1"),
   TRANSCRIBE_MAX_SECONDS: z.coerce.number().int().positive().default(300), // 5 min
   TRANSCRIBE_MAX_CHARS: z.coerce.number().int().positive().default(1200), // truncagem p/ contexto da IA
+
+  // ── Auto-sugerir nome por código de barras (EAN) ────────────────────────────
+  // Kill-switch: EAN_LOOKUP_DISABLED=true desliga tudo (default false = ligado).
+  // Idioma da casa (igual AI_TOOLCALLING_DISABLED) — evita a pegadinha de
+  // z.coerce.boolean() com default true (lá "false" coage p/ true e não desliga).
+  // ⚠️ NÃO setar =false p/ "ligar": qualquer valor não-vazio vira true. Deixe
+  // AUSENTE p/ manter ligado. Sem COSMOS_API_TOKEN → usa só o Open Food Facts
+  // (grátis, alimento/bebida). Tudo fail-open: erro/timeout NUNCA trava o cadastro.
+  EAN_LOOKUP_DISABLED: z.coerce.boolean().default(false),
+  COSMOS_BASE_URL: z.string().default("https://api.cosmos.bluesoft.com.br"),
+  COSMOS_API_TOKEN: z.string().optional().default(""),
+  EAN_LOOKUP_TIMEOUT_MS: z.coerce.number().int().positive().default(4000), // cadastro é interativo: falha rápido
+  EAN_NEGATIVE_TTL_DAYS: z.coerce.number().int().positive().default(30), // recheca "não achou" após N dias
 });
 
 /**
