@@ -220,7 +220,7 @@ async function main() {
     }
 
     // Poda do log de auditoria (Tier 1): apaga linhas mais velhas que a retenção.
-    // LIGADO por padrão (AUDIT_RETENTION_DAYS=180); 0 desliga. Throttle de 24h — a
+    // LIGADO por padrão (AUDIT_RETENTION_DAYS=90); 0 desliga. Throttle de 24h — a
     // granularidade é dia. Zero Upstash; custo só de storage.
     if (
       env.AUDIT_RETENTION_DAYS > 0 &&

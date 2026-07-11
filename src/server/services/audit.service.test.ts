@@ -58,7 +58,7 @@ describe("pruneAuditLogs", () => {
         createdAt: new Date("2026-07-11T00:00:00Z"),
       },
     });
-    const removed = await pruneAuditLogs(180, new Date("2026-07-11T12:00:00Z"));
+    const removed = await pruneAuditLogs(90, new Date("2026-07-11T12:00:00Z"));
     expect(removed).toBeGreaterThanOrEqual(1);
     expect(await prisma.auditLog.findUnique({ where: { id: old.id } })).toBeNull();
     expect(await prisma.auditLog.findUnique({ where: { id: recent.id } })).not.toBeNull();
