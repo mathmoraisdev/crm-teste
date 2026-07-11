@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { handleInbound } from "@/server/services/conversation.service";
 import { getCurrentUserId } from "@/lib/session";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,15 @@ const schema = z
  * para o avaliador exercitar o fluxo de IA sem WhatsApp de verdade.
  */
 export async function POST(req: NextRequest) {
+  // Backstop de segurança: esta rota SIMULA o lead respondendo (injeta INBOUND).
+  // Só faz sentido no modo mock (dev/avaliador). Em produção (baileys/cloud-api)
+  // ela fica trancada — senão uma resposta do operador viraria "recebida do lead".
+  if (env.WHATSAPP_MODE !== "mock") {
+    return NextResponse.json(
+      { error: "Rota de simulação disponível apenas no modo mock." },
+      { status: 403 },
+    );
+  }
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const body = await req.json().catch(() => null);

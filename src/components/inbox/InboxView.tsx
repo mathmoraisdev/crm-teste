@@ -22,7 +22,14 @@ import type {
 } from "@/server/services/inbox.service";
 import type { LeadDetail } from "@/server/services/lead.service";
 
-export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
+export function InboxView({
+  canSettings = false,
+  canSimulate = false,
+}: {
+  canSettings?: boolean;
+  /** Modo mock (dev/avaliador): libera a caixa que simula o lead respondendo. */
+  canSimulate?: boolean;
+}) {
   const [filter, setFilter] = useState<InboxFilter>("todas");
   // Seletor de número: null = todos os chips juntos; id = só aquele número.
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
@@ -226,6 +233,45 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
     }
   }
 
+  // Pega SÓ a trava de atendimento (takeover): o operador anterior é avisado em
+  // tempo real. Best-effort — nunca bloqueia. Passado à ConversationView p/ o
+  // auto-assumir-ao-responder ficar coerente (atribuição via /assign + cadeado aqui).
+  const takeoverLock = useCallback(async (id: string) => {
+    await fetch(`/api/inbox/${id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "takeover" }),
+    }).catch(() => {});
+    iHoldRef.current = true;
+    setHeldByOther(null);
+  }, []);
+
+  // Assumir COMPLETO num clique: atribuição (+ pausa a IA) + trava de atendimento.
+  // Fonte única dos botões "Assumir" (cabeçalho, banner de co-presença e banner de
+  // atribuição), p/ os três sinais (dono, IA, cadeado) andarem sempre juntos.
+  const assumeAndHold = useCallback(
+    async (id: string) => {
+      setActing(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/inbox/${id}/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Falha ao assumir");
+        await takeoverLock(id);
+        await Promise.all([loadDetail(id), loadList(filter)]);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Erro ao assumir");
+      } finally {
+        setActing(false);
+      }
+    },
+    [filter, loadList, loadDetail, takeoverLock],
+  );
+
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
   // Deep-link do CRM pode abrir uma conversa fora do filtro atual: aí
   // `selectedConv` é null e usamos o próprio `detail` como fonte do atendimento.
@@ -327,7 +373,7 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
                     {!isMine && (
                       <Button
                         size="sm"
-                        onClick={() => act(`/api/inbox/${selectedId}/assign`)}
+                        onClick={() => selectedId && assumeAndHold(selectedId)}
                         loading={acting}
                       >
                         <Hand size={14} /> Assumir
@@ -358,28 +404,41 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
                 {actionError && <p className="mt-2 text-xs text-danger">{actionError}</p>}
               </div>
 
-              {/* Trava de atendimento: outro operador está com esta conversa aberta.
-                  Um clique em Assumir transfere a trava na hora (avisa o anterior). */}
-              {heldByOther && (
+              {/* Trava de atendimento AO VIVO: outro operador está com esta conversa
+                  aberta AGORA. Assumir = atribuição + pausa IA + trava, tudo junto
+                  (avisa o anterior em tempo real). Sinal mais forte que a atribuição. */}
+              {heldByOther ? (
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-warning/25 bg-warning-surface px-4 py-2 text-sm text-warning">
                   <span className="inline-flex items-center gap-1.5">
                     <Lock size={14} /> {heldByOther.name} está atendendo esta conversa.
                   </span>
                   <button
-                    className="rounded bg-warning px-2 py-1 text-xs font-medium text-white"
-                    onClick={async () => {
-                      await fetch(`/api/inbox/${selectedId}/attendance`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "takeover" }),
-                      }).catch(() => {});
-                      iHoldRef.current = true;
-                      setHeldByOther(null);
-                    }}
+                    className="rounded bg-warning px-2 py-1 text-xs font-medium text-white disabled:opacity-60"
+                    onClick={() => assumeAndHold(detail.id)}
+                    disabled={acting}
                   >
                     Assumir
                   </button>
                 </div>
+              ) : (
+                assignedToId &&
+                !isMine && (
+                  /* Atribuição persistente: conversa é de OUTRO operador, mesmo que ele
+                     não esteja online agora. Cobre o caso "assumiu e saiu" — o próximo
+                     não fica sem aviso (a trava viva acima só pega co-presença). */
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-warning/25 bg-warning-surface px-4 py-2 text-sm text-warning">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Lock size={14} /> Atribuída a {assignedLabel ?? "outro operador"}.
+                    </span>
+                    <button
+                      className="rounded bg-warning px-2 py-1 text-xs font-medium text-white disabled:opacity-60"
+                      onClick={() => assumeAndHold(detail.id)}
+                      disabled={acting}
+                    >
+                      Assumir
+                    </button>
+                  </div>
+                )
               )}
 
               <div className="min-h-0 flex-1">
@@ -394,6 +453,8 @@ export function InboxView({ canSettings = false }: { canSettings?: boolean }) {
                   canReply
                   aiPaused={detail.aiPaused}
                   hideHandoff
+                  canSimulate={canSimulate}
+                  onAssumed={() => takeoverLock(detail.id)}
                 />
               </div>
             </>

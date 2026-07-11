@@ -26,7 +26,14 @@ const SALE_STATUS_LABEL: Record<string, string> = {
   CANCELED: "Cancelado",
 };
 
-export function LeadDetailView({ leadId }: { leadId: string }) {
+export function LeadDetailView({
+  leadId,
+  canSimulate = false,
+}: {
+  leadId: string;
+  /** Modo mock (dev/avaliador): libera a caixa que simula o lead respondendo. */
+  canSimulate?: boolean;
+}) {
   const router = useRouter();
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -151,6 +158,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               onReplied={load}
               canReply={canReply}
               aiPaused={lead.aiPaused}
+              canSimulate={canSimulate}
             />
           </Card>
         </div>

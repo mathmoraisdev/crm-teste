@@ -4,6 +4,7 @@ import { getTenantContext } from "@/lib/tenant";
 import { prisma } from "@/server/db/client";
 import { InboxView } from "@/components/inbox/InboxView";
 import { SetupRequired } from "@/components/app/SetupRequired";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,10 @@ export default async function InboxPage() {
     );
   }
 
-  return <InboxView canSettings={ctx.perms.canSettings} />;
+  return (
+    <InboxView
+      canSettings={ctx.perms.canSettings}
+      canSimulate={env.WHATSAPP_MODE === "mock"}
+    />
+  );
 }

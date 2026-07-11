@@ -37,6 +37,8 @@ export function ConversationView({
   canReply,
   aiPaused,
   hideHandoff = false,
+  canSimulate = false,
+  onAssumed,
 }: {
   leadId: string;
   /** Nome do lead — usado p/ resolver {{nome}} nas respostas rápidas. */
@@ -47,7 +49,19 @@ export function ConversationView({
   aiPaused: boolean;
   /** Oculta o toggle de handoff embutido (o inbox tem ações próprias no header). */
   hideHandoff?: boolean;
+  /** Modo mock (dev/avaliador): habilita a caixa que SIMULA o lead respondendo
+   *  (injeta INBOUND). Em produção fica false — a caixa real é a única, e enviar
+   *  por ela assume a conversa. Sem isto, o simulador vazava p/ produção e a
+   *  resposta do operador virava "recebida do lead". */
+  canSimulate?: boolean;
+  /** Chamado logo após o auto-assumir (atribuição) ao responder. O inbox usa p/
+   *  pegar TAMBÉM a trava de atendimento (takeover) — mantém dono, IA e cadeado
+   *  coerentes. Sem isto (ex.: tela de lead), só a atribuição acontece. */
+  onAssumed?: () => void | Promise<void>;
 }) {
+  // Em produção (sem simulador) a caixa REAL de resposta é a única — mesmo com a
+  // IA ativa. Enviar por ela assume a conversa (pausa a IA) antes de mandar.
+  const showRealBox = aiPaused || !canSimulate;
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +164,25 @@ export function ConversationView({
     return sendReply();
   }
 
+  // Auto-assumir ao responder: se a IA ainda está ativa, assume a conversa (mesmo
+  // efeito do botão "Assumir": atribui a mim, pausa a IA) ANTES de enviar, p/ a
+  // mensagem sair como NOSSA e a IA não responder por cima. A rede de segurança é
+  // o "Reativar IA após inatividade" (devolve à IA sozinho se esquecer de retomar).
+  async function assumeIfNeeded() {
+    if (aiPaused) return;
+    const res = await fetch(`/api/inbox/${leadId}/assign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "Falha ao assumir a conversa");
+    }
+    // Coerência: deixa o inbox pegar também a trava de atendimento (takeover).
+    await onAssumed?.();
+  }
+
   // Resposta manual do operador, enviada ao lead pelo mesmo chip.
   async function sendReply() {
     const content = reply.trim();
@@ -157,6 +190,7 @@ export function ConversationView({
     setReplying(true);
     setReplyError(null);
     try {
+      await assumeIfNeeded();
       const res = await fetch(`/api/leads/${leadId}/reply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -181,6 +215,7 @@ export function ConversationView({
     setReplying(true);
     setReplyError(null);
     try {
+      await assumeIfNeeded();
       const fd = new FormData();
       fd.append("file", file);
       if (reply.trim()) fd.append("caption", reply.trim());
@@ -240,7 +275,7 @@ export function ConversationView({
   // O seletor de "/" abre quando o operador começa a resposta com "/". O texto
   // após a barra filtra por título/atalho. Selecionar troca o texto pelo snippet
   // com {{nome}} resolvido (não envia — o operador revisa).
-  const snippetOpen = aiPaused && reply.startsWith("/");
+  const snippetOpen = showRealBox && reply.startsWith("/");
   const snippetQuery = snippetOpen ? reply.slice(1).trim().toLowerCase() : "";
   const filteredSnippets = (quickReplies ?? []).filter((q) => {
     if (!snippetQuery) return true;
@@ -265,7 +300,7 @@ export function ConversationView({
           </p>
         )}
         {messages.map((m) => (
-          <Bubble key={m.id} message={m} onReply={aiPaused ? startQuote : undefined} />
+          <Bubble key={m.id} message={m} onReply={showRealBox ? startQuote : undefined} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -315,7 +350,7 @@ export function ConversationView({
               <p className="mb-2 text-xs text-danger">{handoffError}</p>
             )}
 
-            {aiPaused ? (
+            {showRealBox ? (
               /* Caixa de resposta manual do operador (envia ao lead pelo chip). */
               <>
                 {quoting && (
@@ -483,7 +518,10 @@ export function ConversationView({
                 </p>
               </>
             ) : (
-              /* Caixa "responder como o lead" (demo local / simula o inbound). */
+              /* Caixa "responder como o lead" — SÓ no modo mock (canSimulate):
+                 simula o inbound (injeta INBOUND) p/ o avaliador exercitar a IA
+                 sem WhatsApp real. Em produção nunca renderiza (showRealBox=true),
+                 senão a resposta do operador viraria "recebida do lead". */
               <>
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   <textarea
