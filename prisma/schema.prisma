@@ -1413,3 +1413,22 @@ model DeliveryZone {
 
   @@index([accountId, active])
 }
+
+/// Log de auditoria central e imutável (Tier 1). Sem FKs de propósito:
+/// sobrevive a delete de operador (FKs reatribuídas ao dono) e a cascade de conta.
+/// `action`/`entityType` são String (não enum) p/ não exigir migration a cada ação nova.
+model AuditLog {
+  id         String   @id @default(cuid())
+  accountId  String   // dono/tenant (= tenantUserId), escopo de leitura
+  actorId    String   // sessionUserId de quem executou a ação
+  actorName  String   // snapshot do nome/email do autor (sobrevive ao delete)
+  action     String   // ver union AuditAction em src/server/audit/record.ts
+  entityType String   // "Order" | "Lead" | "Expense" | "CatalogItem" | "User"
+  entityId   String
+  summary    String   // texto pt-BR pronto p/ exibir
+  diff       Json?    // só os campos mudados: { campo: { from, to } }
+  createdAt  DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, entityType, entityId])
+}
