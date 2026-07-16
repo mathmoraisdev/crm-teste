@@ -1,5 +1,13 @@
 # Mini CRM de Prospecção com IA
 
+## Proposta de Valor (Vaga de IA Challenge)
+Este sistema foi desenhado para maximizar a conversão de vendas através da **IA Explicável (XAI)**. Diferente de soluções que apenas automatizam mensagens, este CRM utiliza uma **State Machine** determinística combinada com agentes de IA para:
+- **Priorização Inteligente:** O vendedor não perde tempo com leads frios. O dashboard exibe leads ordenados por um score de qualificação, acompanhados da **justificativa textual** da IA.
+- **Qualificação Estruturada:** Utilizamos *Function Calling* forçado para garantir que a extração de dados da conversa siga um esquema rigoroso (Zod/JSON Schema), eliminando alucinações.
+- **Human Handoff:** O sistema detecta automaticamente o momento de passar a conversa para um humano, garantindo a transição imediata para objeções complexas.
+
+---
+
 MVP de uma plataforma onde o cliente sobe uma lista de leads (nome + telefone),
 dispara mensagens ativas no WhatsApp, conversa com cada lead, **qualifica
 automaticamente com IA**, move o lead num pipeline comercial e **agenda reunião**
