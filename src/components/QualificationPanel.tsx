@@ -17,6 +17,7 @@ import {
   Gauge,
   Wallet,
   ListChecks,
+  MessageSquareQuote,
 } from "lucide-react";
 
 function Field({
@@ -141,6 +142,14 @@ export function QualificationPanel({
                 <p className="mb-2 rounded-md bg-slate-50 p-2.5 text-sm text-slate-600">
                   {qualification.summary}
                 </p>
+              )}
+              {"scoreJustification" in qualification && qualification.scoreJustification && (
+                <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-100 bg-amber-50 p-2.5">
+                  <MessageSquareQuote size={15} className="mt-0.5 shrink-0 text-amber-500" />
+                  <p className="text-xs text-amber-800">
+                    {qualification.scoreJustification as string}
+                  </p>
+                </div>
               )}
               <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                 <Field

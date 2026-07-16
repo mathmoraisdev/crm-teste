@@ -987,6 +987,7 @@ model Qualification {
   budget               String?
   preferredMeetingTime String?
   score                Int      @default(0) // espelhado em Lead.score (desnormalizado p/ listagem)
+  scoreJustification   String?  // justificativa curta focada em vendas (gerada pela IA)
   summary              String?
   nextAction           String? // "ask_question" | "schedule_meeting" | "discard"
   raw                  Json // JSON bruto da IA (auditoria)

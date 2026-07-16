@@ -26,6 +26,7 @@ export const qualificationSchema = z.object({
   preferredMeetingTime: z.string().nullable(),
   email: z.string().nullable(),
   score: z.number().min(0).max(100),
+  scoreJustification: z.string(),
   summary: z.string(),
   nextAction: z.enum(NEXT_ACTIONS),
   // Oferta escolhida pela IA quando nextAction = "send_offer". Deve ser um id da
@@ -80,6 +81,11 @@ export const qualificationJsonSchema = {
       description:
         "Score de qualificação 0–100. >=70 qualifica; <40 com desinteresse = descarte.",
     },
+    scoreJustification: {
+      type: "string",
+      description:
+        "Justificativa curta (1 frase) focada em vendas que explica o score atribuído, baseada nos últimos turnos da conversa. Exemplos: 'O lead demonstrou urgência na compra e confirmou ser o decisor.', 'Lead sem dor identificada e sem engajamento com as perguntas.', 'Interesse alto, mas orçamento ainda não confirmado.'",
+    },
     summary: {
       type: "string",
       description: "Resumo curto (1–2 frases) da situação do lead.",
@@ -106,6 +112,7 @@ export const qualificationJsonSchema = {
     "preferredMeetingTime",
     "email",
     "score",
+    "scoreJustification",
     "summary",
     "nextAction",
     "offerId",

@@ -20,6 +20,7 @@ const validQual = {
   preferredMeetingTime: null,
   email: "joao@empresa.com",
   score: 82,
+  scoreJustification: "O lead demonstrou urgência na compra e confirmou ser o decisor.",
   summary: "Lead engajado, dor clara, decisor.",
   nextAction: "schedule_meeting",
 };
@@ -68,6 +69,21 @@ describe("qualificationSchema (validação de saída do modelo)", () => {
     const { summary, ...noSummary } = validQual;
     void summary;
     expect(qualificationSchema.safeParse(noSummary).success).toBe(false);
+  });
+
+  it("rejeita qualificação sem scoreJustification", () => {
+    const { scoreJustification, ...noJustification } = validQual;
+    void scoreJustification;
+    expect(qualificationSchema.safeParse(noJustification).success).toBe(false);
+  });
+
+  it("aceita scoreJustification como string não-vazia", () => {
+    expect(
+      qualificationSchema.safeParse({
+        ...validQual,
+        scoreJustification: "Lead pediu proposta imediata, sinal forte de intenção de compra.",
+      }).success,
+    ).toBe(true);
   });
 });
 

@@ -59,6 +59,9 @@ export interface LeadListItem {
   email: string | null;
   status: LeadStatus;
   score: number;
+  // Justificativa do score gerada pela IA (Qualification.scoreJustification).
+  // null quando o lead ainda não foi qualificado.
+  scoreJustification: string | null;
   optOut: boolean;
   campaignName: string | null;
   lastMessage: string | null;
@@ -76,9 +79,12 @@ export interface ListLeadsParams {
   take?: number; // default 50, cap 100
   query?: string; // busca em name/phone
   status?: LeadStatus;
+  statuses?: LeadStatus[]; // multi-status (usado pela view de prioridade)
   campaignId?: string | null; // null = sem campanha
   optOut?: boolean;
   tagId?: string;
+  orderBy?: "score" | "updatedAt"; // default: updatedAt
+  onlyScored?: boolean; // true = exclui leads com score = 0 (sem qualificação da IA)
 }
 
 export interface ListLeadsResult {
@@ -102,6 +108,8 @@ export async function listLeads(
     userId,
     ...(params.assignedToId ? { assignedToId: params.assignedToId } : {}),
     ...(params.status ? { status: params.status } : {}),
+    ...(params.statuses?.length ? { status: { in: params.statuses } } : {}),
+    ...(params.onlyScored ? { score: { gt: 0 } } : {}),
     ...(params.campaignId === null
       ? { campaignId: null }
       : params.campaignId
@@ -124,10 +132,13 @@ export async function listLeads(
         })()
       : {}),
   };
+  const orderBy: Prisma.LeadOrderByWithRelationInput =
+    params.orderBy === "score" ? { score: "desc" } : { updatedAt: "desc" };
+
   const [rows, total] = await Promise.all([
     prisma.lead.findMany({
       where,
-      orderBy: { updatedAt: "desc" },
+      orderBy,
       skip,
       take,
       include: {
@@ -138,6 +149,9 @@ export async function listLeads(
           take: 1,
           select: { content: true, createdAt: true },
         },
+        // Justificativa da IA: campo extra para a view de prioridade do vendedor.
+        // Incluso na listagem geral sem custo (já é 1:1, indexed por leadId).
+        qualification: { select: { scoreJustification: true } },
       },
     }),
     prisma.lead.count({ where }),
@@ -151,6 +165,7 @@ export async function listLeads(
       email: l.email,
       status: l.status,
       score: l.score,
+      scoreJustification: l.qualification?.scoreJustification ?? null,
       optOut: l.optOut,
       campaignName: l.campaign?.name ?? null,
       lastMessage: l.messages[0]?.content ?? null,

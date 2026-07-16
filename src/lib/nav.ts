@@ -24,6 +24,7 @@ import {
   ChefHat,
   ShoppingBag,
   ScrollText,
+  PhoneCall,
 } from "lucide-react";
 import type { BusinessCategory } from "@/lib/business-templates";
 
@@ -114,6 +115,7 @@ export function buildNav(ctx: NavCtx): NavGroup[] {
       title: "Clientes",
       items: [
         { href: "/leads", label: "Leads", icon: Users },
+        { href: "/leads/prioridade", label: "Fila de ligações", icon: PhoneCall },
         { href: "/clientes", label: "Clientes", icon: Contact },
         { href: "/empresas", label: "Empresas", icon: Building2 },
         { href: "/campaigns", label: "Campanhas", icon: Send },

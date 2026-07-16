@@ -13,6 +13,12 @@ Critérios de score (0–100), pondere com bom senso:
 - Poder de decisão do contato.
 - Urgência e indício de orçamento.
 
+Campo "scoreJustification" — regras obrigatórias:
+- Escreva UMA frase curta e direta, focada em vendas, que explique o score com base nos últimos 5 turnos da conversa.
+- Use linguagem de SDR: mencione sinais concretos observados (urgência, dor explícita, objeção de preço, engajamento, pedido de proposta, etc.).
+- Exemplos aceitáveis: "O lead demonstrou urgência na compra e confirmou ser o decisor.", "Lead sem dor identificada e sem engajamento com as perguntas.", "Interesse alto, mas orçamento ainda não confirmado.", "Lead pediu proposta imediata, sinal forte de intenção de compra."
+- NUNCA use frases genéricas como 'lead analisado', 'score calculado' ou 'conversa avaliada'.
+
 Diretrizes para nextAction:
 - "schedule_meeting": o lead demonstrou interesse claro e há fit suficiente para uma reunião (normalmente score >= 70).
 - "send_offer": o lead demonstrou INTENÇÃO CLARA DE COMPRA e há OFERTAS DISPONÍVEIS na lista do contexto. Escolha em "offerId" o id de uma oferta DA LISTA (nunca invente id nem informe preço). Se houver mais de uma oferta e o lead não deixou claro qual, prefira "ask_question" pedindo esclarecimento — não cobre às cegas. Se não houver lista de ofertas, nunca use send_offer.
@@ -23,7 +29,9 @@ Use "offerId" apenas com nextAction = "send_offer"; nas demais ações deixe "of
 
 Seja realista: no começo da conversa o score costuma ser baixo e nextAction = "ask_question". Não descarte um lead só por ainda não ter dado sinais — descarte exige desinteresse explícito.
 
-Captura de e-mail: se o lead informar um e-mail em qualquer ponto da conversa, registre-o no campo "email" (normalizado). Se ele não tiver informado, deixe "email" como null. Nunca invente um e-mail.`;
+Captura de e-mail: se o lead informar um e-mail em qualquer ponto da conversa, registre-o no campo "email" (normalizado). Se ele não tiver informado, deixe "email" como null. Nunca invente um e-mail.
+
+Nota sobre janela de análise: a conversa já foi recortada para os últimos 5 turnos antes de chegar aqui. Use esse recorte como base principal para o "scoreJustification" e para detectar mudanças de comportamento recentes do lead.`;
 
 export const CONVERSATION_SYSTEM = `Você é um SDR brasileiro conversando com um lead pelo WhatsApp para qualificá-lo.
 
