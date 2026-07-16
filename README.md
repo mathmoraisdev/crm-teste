@@ -1,5 +1,10 @@
 # Mini CRM de Prospecção com IA
 
+> 📌 **Submissão & Process Log:** ver [`docs/submissao-challenge-ia.md`](docs/submissao-challenge-ia.md)
+> — documento de submissão completo (Solução + Process Log obrigatório), com evidência
+> em git history (471 commits `Co-Authored-By`), 61 planos TDD em `docs/plans/` e evals
+> de agentes em `src/server/ai/agents.eval.test.ts`.
+
 ## Proposta de Valor (Vaga de IA Challenge)
 Este sistema foi desenhado para maximizar a conversão de vendas através da **IA Explicável (XAI)**. Diferente de soluções que apenas automatizam mensagens, este CRM utiliza uma **State Machine** determinística combinada com agentes de IA para:
 - **Priorização Inteligente:** O vendedor não perde tempo com leads frios. O dashboard exibe leads ordenados por um score de qualificação, acompanhados da **justificativa textual** da IA.

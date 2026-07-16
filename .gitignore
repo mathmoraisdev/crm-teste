@@ -38,6 +38,10 @@ conexao-*.json
 *credentials*.json
 .vscode/*
 !.vscode/extensions.json
+
+# Config local de IA/IDE e scripts de infra com segredos — NUNCA commitar
+.claude/
+scripts/vigia-a1.*
 /coverage
 .vercel
 .env*

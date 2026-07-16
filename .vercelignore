@@ -4,3 +4,9 @@
 .next
 node_modules
 .git
+
+# Arquivos locais/pessoais — não pertencem ao build de produção.
+# vigia-a1.* contém IP do servidor e caminho de chave SSH (segredo).
+.claude/
+scripts/vigia-a1.ps1
+scripts/vigia-a1.log
