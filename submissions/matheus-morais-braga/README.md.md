@@ -398,24 +398,19 @@ teria estabelecido sozinha a partir do enunciado do challenge.
 - [x] **Evals de agentes** — [`src/server/ai/agents.eval.test.ts`](../src/server/ai/agents.eval.test.ts)
       chamam a IA de verdade (opt-in, `RUN_AI_EVALS=1`) e assertam comportamento por faixa.
       É IA avaliando IA — o instrumento de feedback que diz se um prompt/modelo regrediu.
-- [ ] **Screenshots das conversas com IA** *Para chegar às decisões de arquitetura e infraestrutura descritas, utilizei sessões de pair-programming com IA para validar custos, riscos e fluxos de negócio em tempo real.
+- [x] **Screenshots das conversas com IA** *Para chegar às decisões de arquitetura e infraestrutura descritas, utilizei sessões de pair-programming com IA para validar custos, riscos e fluxos de negócio em tempo real.
 
-![Sessão de Análise 1](docs/design/uploads/claude-code-sessao.png)![alt text](image.png)
-![Sessão de Análise 2](docs/design/uploads/claude-code-sessao2.png)
-![Sessão de Análise 3](docs/design/uploads/claude-code-sessao3.png)
-![Sessão de Análise 4](docs/design/uploads/claude-code-sessao4.png)
-![Sessão de Análise 5](docs/design/uploads/claude-code-sessao5.png)
-![Sessão de Análise 6](docs/design/uploads/claude-code-sessao6.png)
+## Processo Iterativo e Tomada de Decisão (Vibe Coding)
 
-- [ ] Screen recording do workflow
-- [ ] Chat exports
-- [ ] Outro: _____________
+Para chegar às decisões de arquitetura e infraestrutura descritas, utilizei sessões de pair-programming com IA para validar custos, riscos e fluxos de negócio em tempo real.
 
-
+![Sessão de Análise 1](process-log/screenshots/claude-code-sessao.png)
+![Sessão de Análise 2](process-log/screenshots/claude-code-sessao2.png)
+![Sessão de Análise 3](process-log/screenshots/claude-code-sessao3.png)
+![Sessão de Análise 4](process-log/screenshots/claude-code-sessao4.png)
+![Sessão de Análise 5](process-log/screenshots/claude-code-sessao5.png)
+![Sessão de Análise 6](process-log/screenshots/claude-code-sessao6.png)
 
 
+Agradeço a atenção!
 
-
-> **Recomendação:** com git history + planos TDD + evals a submissão já é defensável, mas
-> 1 screenshot de uma interação com o Claude Code (mostrando o agente no VSCode
-> propondo/recebendo correção) é o melhor custo-benefício para evidenciar o *como usei IA*.

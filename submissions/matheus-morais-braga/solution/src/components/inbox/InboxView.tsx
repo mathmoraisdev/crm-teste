@@ -1,0 +1,496 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { Bot, CheckCircle2, ExternalLink, Hand, Lock, RotateCcw, Settings } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { ConversationView } from "@/components/ConversationView";
+import { LeadStatusBadge } from "@/components/LeadStatusBadge";
+import { QualificationPanel } from "@/components/QualificationPanel";
+import { TagPicker } from "@/components/TagPicker";
+import { ConversationList } from "@/components/inbox/ConversationList";
+import { ATTENDANCE_META } from "@/components/inbox/ConversationListItem";
+import { useTenantStream } from "@/lib/use-tenant-stream";
+import { formatPhone } from "@/lib/phone";
+import type {
+  InboxFilter,
+  InboxConversation,
+  InboxCounts,
+  InboxNumber,
+} from "@/server/services/inbox.service";
+import type { LeadDetail } from "@/server/services/lead.service";
+
+export function InboxView({
+  canSettings = false,
+  canSimulate = false,
+}: {
+  canSettings?: boolean;
+  /** Modo mock (dev/avaliador): libera a caixa que simula o lead respondendo. */
+  canSimulate?: boolean;
+}) {
+  const [filter, setFilter] = useState<InboxFilter>("todas");
+  // Seletor de número: null = todos os chips juntos; id = só aquele número.
+  const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+  const [numbers, setNumbers] = useState<InboxNumber[]>([]);
+  const [conversations, setConversations] = useState<InboxConversation[]>([]);
+  const [counts, setCounts] = useState<InboxCounts | null>(null);
+  const [me, setMe] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(true);
+
+  // Ref p/ loadList ler o número atual sem precisar entrar na lista de deps.
+  const numberRef = useRef<string | null>(selectedNumber);
+  numberRef.current = selectedNumber;
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<LeadDetail | null>(null);
+  const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selectedId;
+
+  // Trava de atendimento (anti-colisão): `iHoldRef` = eu seguro a trava da conversa
+  // aberta (p/ detectar quando alguém a assume). `heldByOther` = outro operador está
+  // atendendo esta conversa → mostra o banner "Assumir".
+  const iHoldRef = useRef(false);
+  const [heldByOther, setHeldByOther] = useState<{ userId: string; name: string } | null>(null);
+
+  const loadList = useCallback(async (f: InboxFilter): Promise<InboxConversation[] | null> => {
+    try {
+      const n = numberRef.current;
+      const url = `/api/inbox?filter=${f}${n ? `&number=${encodeURIComponent(n)}` : ""}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      const convs = (data.conversations as InboxConversation[]) ?? [];
+      setConversations(convs);
+      setCounts((data.counts as InboxCounts) ?? null);
+      setNumbers((data.numbers as InboxNumber[]) ?? []);
+      setMe((data.me as string) ?? null);
+      return convs;
+    } catch {
+      return null; // mantém estado
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
+
+  // Polling de FALLBACK (60s): o SSE abaixo cobre o tempo real na hora; este
+  // intervalo só protege contra SSE indisponível, então é folgado (60s) p/ poupar
+  // invocação na Vercel e query no banco. Recarrega ao trocar de número.
+  useEffect(() => {
+    setLoadingList(true);
+    loadList(filter);
+    const t = setInterval(() => loadList(filter), 60000);
+    return () => clearInterval(t);
+  }, [filter, selectedNumber, loadList]);
+
+  const loadDetail = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/leads/${id}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (selectedRef.current === id) setDetail(data.lead as LeadDetail);
+    } catch {
+      // mantém estado
+    }
+  }, []);
+
+  // Polling de FALLBACK do detalhe selecionado (60s) — o SSE revalida na hora; o
+  // timer só cobre SSE fora, então folgado p/ poupar Vercel/DB.
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    loadDetail(selectedId);
+    const t = setInterval(() => loadDetail(selectedId), 60000);
+    return () => clearInterval(t);
+  }, [selectedId, loadDetail]);
+
+  // Tempo real: evento da conta → revalida a lista e o detalhe aberto na hora.
+  useTenantStream(async () => {
+    const fresh = await loadList(filter);
+    if (selectedRef.current) loadDetail(selectedRef.current);
+    // Trava: eu segurava a conversa aberta e alguém a assumiu → cai pro banner
+    // "Fulano está atendendo" (posso reassumir). Usa a lista recém-buscada (o
+    // `attendingBy` já exclui a mim mesmo, então só aponta quando é OUTRO).
+    const row = fresh?.find((c) => c.id === selectedRef.current);
+    if (iHoldRef.current && row?.attendingBy) {
+      iHoldRef.current = false;
+      setHeldByOther({ userId: row.attendingBy.userId, name: row.attendingBy.name });
+    }
+  });
+
+  // Trava de atendimento (anti-colisão event-driven): ao abrir uma conversa,
+  // reivindico a trava (claim). Livre → eu seguro; ocupada por outro → mostro o
+  // banner "Fulano está atendendo" (posso Assumir). Ao fechar/trocar, libero
+  // (DELETE, só solta se ainda for minha). Sem heartbeat/timer — escreve só nas
+  // transições. Best-effort — falha nunca bloqueia responder.
+  useEffect(() => {
+    if (!selectedId) return;
+    const id = selectedId;
+    setHeldByOther(null);
+    iHoldRef.current = false;
+    fetch(`/api/inbox/${id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "claim" }),
+    })
+      .then((r) => r.json())
+      .then((r: { ok: boolean; heldBy: { userId: string; name: string } | null }) => {
+        // Ignora respostas atrasadas de uma conversa que já não é a aberta.
+        if (selectedRef.current !== id) return;
+        if (r.ok) iHoldRef.current = true;
+        else setHeldByOther(r.heldBy);
+      })
+      .catch(() => {});
+    return () => {
+      iHoldRef.current = false;
+      fetch(`/api/inbox/${id}/attendance`, { method: "DELETE", keepalive: true }).catch(() => {});
+    };
+  }, [selectedId]);
+
+  // Deep-link vindo do CRM (/inbox?c=<leadId>): pré-seleciona a conversa e marca
+  // como lida. Abre em "Todas" p/ maximizar a chance de a conversa estar na
+  // lista; se estiver fora do filtro (ex.: resolvida), o painel central ainda
+  // renderiza a partir do `detail` carregado direto por id (guard abaixo).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("c");
+    if (!id) return;
+    setFilter("todas");
+    setSelectedId(id);
+    fetch(`/api/inbox/${id}/read`, { method: "POST" }).catch(() => {});
+    // roda só na montagem — leitura única do parâmetro
+  }, []);
+
+  // useCallback: identidade estável p/ a ConversationList memoizada não
+  // re-renderizar a cada poll (4s) por causa de um novo onSelect.
+  const select = useCallback(
+    async (id: string) => {
+      setSelectedId(id);
+      setDetail(null);
+      setActionError(null);
+      // Marca como lida e atualiza a lista (apaga a bolinha).
+      try {
+        await fetch(`/api/inbox/${id}/read`, { method: "POST" });
+      } catch {
+        // não bloqueia a abertura
+      }
+      loadList(filter);
+    },
+    [filter, loadList],
+  );
+
+  // Exclusão em lote: apaga cada lead (endpoint tenant-guarded que cascateia
+  // mensagens/qualificação/agenda). Se a conversa aberta foi apagada, limpa o
+  // detalhe. Recarrega a lista ao final e sinaliza falhas parciais.
+  const deleteConversations = useCallback(
+    async (ids: string[]) => {
+      // Lotes de 5 p/ não inundar o pooler do banco quando muitas são apagadas.
+      let failed = 0;
+      for (let i = 0; i < ids.length; i += 5) {
+        const chunk = ids.slice(i, i + 5);
+        const results = await Promise.allSettled(
+          chunk.map(async (id) => {
+            const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error();
+          }),
+        );
+        failed += results.filter((r) => r.status === "rejected").length;
+      }
+      if (selectedRef.current && ids.includes(selectedRef.current)) {
+        setSelectedId(null);
+        setDetail(null);
+      }
+      await loadList(filter);
+      if (failed > 0) throw new Error(`${failed} conversa(s) não puderam ser excluídas.`);
+    },
+    [filter, loadList],
+  );
+
+  async function act(
+    path: string,
+    body?: Record<string, unknown>,
+  ) {
+    if (!selectedId) return;
+    setActing(true);
+    setActionError(null);
+    try {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Falha na ação");
+      await Promise.all([loadDetail(selectedId), loadList(filter)]);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Erro na ação");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  // Pega SÓ a trava de atendimento (takeover): o operador anterior é avisado em
+  // tempo real. Best-effort — nunca bloqueia. Passado à ConversationView p/ o
+  // auto-assumir-ao-responder ficar coerente (atribuição via /assign + cadeado aqui).
+  const takeoverLock = useCallback(async (id: string) => {
+    await fetch(`/api/inbox/${id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "takeover" }),
+    }).catch(() => {});
+    iHoldRef.current = true;
+    setHeldByOther(null);
+  }, []);
+
+  // Assumir COMPLETO num clique: atribuição (+ pausa a IA) + trava de atendimento.
+  // Fonte única dos botões "Assumir" (cabeçalho, banner de co-presença e banner de
+  // atribuição), p/ os três sinais (dono, IA, cadeado) andarem sempre juntos.
+  const assumeAndHold = useCallback(
+    async (id: string) => {
+      setActing(true);
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/inbox/${id}/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Falha ao assumir");
+        await takeoverLock(id);
+        await Promise.all([loadDetail(id), loadList(filter)]);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Erro ao assumir");
+      } finally {
+        setActing(false);
+      }
+    },
+    [filter, loadList, loadDetail, takeoverLock],
+  );
+
+  const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
+  // Deep-link do CRM pode abrir uma conversa fora do filtro atual: aí
+  // `selectedConv` é null e usamos o próprio `detail` como fonte do atendimento.
+  const attendanceStatus = selectedConv?.attendanceStatus ?? detail?.attendanceStatus ?? null;
+  const assignedToId = selectedConv?.assignedTo?.id ?? detail?.assignedToId ?? null;
+  const isMine = !!assignedToId && assignedToId === me;
+  const assignedLabel = selectedConv?.assignedTo
+    ? selectedConv.assignedTo.id === me
+      ? "Você"
+      : selectedConv.assignedTo.name
+    : assignedToId
+      ? assignedToId === me
+        ? "Você"
+        : null
+      : null;
+  const meta = attendanceStatus ? ATTENDANCE_META[attendanceStatus] : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-[-0.025em] text-ink sm:text-[30px]">
+            Atendimento
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Fila, atribuição e respostas — handoff IA ↔ humano.
+          </p>
+        </div>
+        {canSettings && (
+          <Link
+            href="/inbox/config"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            <Settings size={14} /> Configurar
+          </Link>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_330px]">
+        {/* Esquerda: lista */}
+        <Card className="h-[75vh] overflow-hidden p-0">
+          <ConversationList
+            conversations={conversations}
+            counts={counts}
+            filter={filter}
+            onFilter={setFilter}
+            numbers={numbers}
+            selectedNumber={selectedNumber}
+            onSelectNumber={setSelectedNumber}
+            selectedId={selectedId}
+            onSelect={select}
+            loading={loadingList}
+            onDeleteConversations={deleteConversations}
+          />
+        </Card>
+
+        {/* Centro: conversa */}
+        <Card className="flex h-[75vh] flex-col overflow-hidden p-0">
+          {!detail ? (
+            <div className="flex h-full items-center justify-center text-sm text-slate-400">
+              Selecione uma conversa.
+            </div>
+          ) : (
+            <>
+              <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-bold text-ink">{detail.name}</span>
+                      {meta && <Badge tone={meta.tone}>{meta.label}</Badge>}
+                      <LeadStatusBadge status={detail.status} />
+                      {detail.optOut && <Badge tone="red">Opt-out</Badge>}
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {formatPhone(detail.phone)}
+                      {selectedConv?.whatsAppNumber && <> · {selectedConv.whatsAppNumber}</>}
+                      {assignedLabel && <> · {assignedLabel}</>}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(detail.status === "DESCARTADO" || detail.optOut) && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Este contato foi descartado/opt-out (pediu para não ser abordado). Reativar libera a IA e as campanhas para ele novamente. Confirmar?",
+                            )
+                          ) {
+                            act(`/api/leads/${selectedId}/reactivate`);
+                          }
+                        }}
+                        loading={acting}
+                      >
+                        <RotateCcw size={14} /> Reativar
+                      </Button>
+                    )}
+                    {!isMine && (
+                      <Button
+                        size="sm"
+                        onClick={() => selectedId && assumeAndHold(selectedId)}
+                        loading={acting}
+                      >
+                        <Hand size={14} /> Assumir
+                      </Button>
+                    )}
+                    {detail.aiPaused && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => act(`/api/leads/${selectedId}/handoff`, { paused: false })}
+                        loading={acting}
+                      >
+                        <Bot size={14} /> Devolver à IA
+                      </Button>
+                    )}
+                    {attendanceStatus !== "RESOLVIDA" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => act(`/api/inbox/${selectedId}/resolve`, { returnToAi: true })}
+                        loading={acting}
+                      >
+                        <CheckCircle2 size={14} /> Resolver
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {actionError && <p className="mt-2 text-xs text-danger">{actionError}</p>}
+              </div>
+
+              {/* Trava de atendimento AO VIVO: outro operador está com esta conversa
+                  aberta AGORA. Assumir = atribuição + pausa IA + trava, tudo junto
+                  (avisa o anterior em tempo real). Sinal mais forte que a atribuição. */}
+              {heldByOther ? (
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-warning/25 bg-warning-surface px-4 py-2 text-sm text-warning">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lock size={14} /> {heldByOther.name} está atendendo esta conversa.
+                  </span>
+                  <button
+                    className="rounded bg-warning px-2 py-1 text-xs font-medium text-white disabled:opacity-60"
+                    onClick={() => assumeAndHold(detail.id)}
+                    disabled={acting}
+                  >
+                    Assumir
+                  </button>
+                </div>
+              ) : (
+                assignedToId &&
+                !isMine && (
+                  /* Atribuição persistente: conversa é de OUTRO operador, mesmo que ele
+                     não esteja online agora. Cobre o caso "assumiu e saiu" — o próximo
+                     não fica sem aviso (a trava viva acima só pega co-presença). */
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-warning/25 bg-warning-surface px-4 py-2 text-sm text-warning">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Lock size={14} /> Atribuída a {assignedLabel ?? "outro operador"}.
+                    </span>
+                    <button
+                      className="rounded bg-warning px-2 py-1 text-xs font-medium text-white disabled:opacity-60"
+                      onClick={() => assumeAndHold(detail.id)}
+                      disabled={acting}
+                    >
+                      Assumir
+                    </button>
+                  </div>
+                )
+              )}
+
+              <div className="min-h-0 flex-1">
+                <ConversationView
+                  leadId={detail.id}
+                  leadName={detail.name}
+                  messages={detail.messages}
+                  onReplied={() => {
+                    loadDetail(detail.id);
+                    loadList(filter);
+                  }}
+                  canReply
+                  aiPaused={detail.aiPaused}
+                  hideHandoff
+                  canSimulate={canSimulate}
+                  onAssumed={() => takeoverLock(detail.id)}
+                />
+              </div>
+            </>
+          )}
+        </Card>
+
+        {/* Direita: painel do lead */}
+        <div className="h-[75vh] overflow-y-auto">
+          {detail ? (
+            <div className="space-y-4">
+              <Card className="p-3">
+                <TagPicker
+                  leadId={detail.id}
+                  value={detail.tags}
+                  onChange={(tags) => setDetail((p) => (p ? { ...p, tags } : p))}
+                />
+                <Link
+                  href={`/leads/${detail.id}`}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
+                >
+                  <ExternalLink size={13} /> Abrir no CRM
+                </Link>
+              </Card>
+              <QualificationPanel
+                qualification={detail.qualification}
+                meeting={detail.meeting}
+                customFields={detail.customFields}
+              />
+            </div>
+          ) : (
+            <Card className="flex h-full items-center justify-center text-sm text-slate-400">
+              —
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

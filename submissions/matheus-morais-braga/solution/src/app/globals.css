@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Paleta de marca default (verde Disparador.ai). Espelha DEFAULT_PALETTE em
+   src/lib/theme/palette.ts. O layout do app SOBRESCREVE estas vars por conta. */
+:root {
+  color-scheme: light; /* controles nativos (date/scrollbar/inputs sem bg) seguem o tema */
+  --brand-50: 231 246 238;
+  --brand-100: 200 234 215;
+  --brand-200: 166 220 192;
+  --brand-300: 95 227 161;
+  --brand-400: 16 185 129;
+  --brand-500: 14 164 107;
+  --brand-600: 11 140 90;
+  --brand-700: 11 125 82;
+  --brand-800: 6 122 82;
+  --brand-900: 10 61 41;
+  --brand-950: 10 27 20;
+
+  /* Neutros (espelham os hex atuais do tailwind.config → zero mudança visual). */
+  --slate-50: 244 247 245;   --slate-100: 237 242 239; --slate-200: 226 234 230;
+  --slate-300: 213 223 218;  --slate-400: 148 163 155; --slate-500: 107 122 115;
+  --slate-600: 70 84 77;     --slate-700: 52 67 59;    --slate-800: 26 42 35;
+  --slate-900: 10 27 20;     --slate-950: 5 13 9;
+  --ink: 10 20 16;
+
+  /* Tokens semânticos de superfície/texto/borda (tema claro). */
+  --surface-app: 244 247 245;    /* fundo da página */
+  --surface-card: 255 255 255;   /* cards           */
+  --surface-raised: 255 255 255; /* modal/popover    */
+  --surface-inset: 244 247 245;  /* inputs/wells     */
+  --border-subtle: 237 242 239;
+  --border-default: 226 234 230;
+  --border-strong: 213 223 218;
+
+  /* Status semânticos (claro = hex já usados no design → zero mudança visual). */
+  --danger: 192 57 43;          --danger-surface: 253 236 236;   /* #C0392B / #FDECEC */
+  --warning: 185 115 9;         --warning-surface: 254 243 226;  /* #B97309 / #FEF3E2 */
+  --info: 44 91 214;            --info-surface: 234 240 254;     /* #2C5BD6 / #EAF0FE */
+  --success: 11 125 82;         --success-surface: 231 246 238;  /* brand-700 / brand-50 */
+  --accent: 109 67 214;         --accent-surface: 239 234 254;   /* #6D43D6 / #EFEAFE */
+
+  /* Categóricas de PROFISSIONAL (Agenda) — NÃO semânticas: existem só p/ diferenciar
+     quem é quem no calendário. Ficam FORA das cores de status de propósito (status já
+     usa danger/warning/info/accent). Base = ponto/borda/texto; surface = fundo do bloco. */
+  --pro-teal: 13 148 136;       --pro-teal-surface: 220 246 242;    /* #0D9488 */
+  --pro-pink: 219 39 119;       --pro-pink-surface: 252 231 243;    /* #DB2777 */
+  --pro-indigo: 79 70 229;      --pro-indigo-surface: 232 231 253;  /* #4F46E5 */
+  --pro-orange: 234 88 12;      --pro-orange-surface: 255 237 213;  /* #EA580C */
+}
+
+/* Tema escuro (neutro/near-black). O ramp neutro é INVERTIDO e afinado —
+   50 = superfície escura … 900/950 = texto claro — então bg-slate-50/100
+   escurecem e text-slate-600/700/900 clareiam sem editar componente.
+   Canais RGB neutros (levemente frios) p/ um dark de verdade, sem tinta verde;
+   a cor da marca fica só nos acentos (brand e status).
+   NÃO sobrescreva --brand-* aqui (o BrandingStyle injeta por conta depois). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --slate-50: 18 18 21;     --slate-100: 24 24 28;    --slate-200: 32 32 37;
+  --slate-300: 45 45 51;    --slate-400: 114 116 122; --slate-500: 150 152 158;
+  --slate-600: 180 182 188; --slate-700: 205 207 212; --slate-800: 225 227 231;
+  --slate-900: 236 238 242; --slate-950: 245 246 249;
+  --ink: 232 234 238;
+
+  --surface-app: 11 11 13;    /* near-black            */
+  --surface-card: 20 20 24;   /* card elevado          */
+  --surface-raised: 27 27 32; /* modal/popover elevado */
+  --surface-inset: 15 15 18;  /* inputs/wells recuados */
+  --border-subtle: 32 32 37;
+  --border-default: 42 42 48;
+  --border-strong: 55 55 62;
+
+  /* Status no escuro: texto clareado, superfície escurecida (contraste AA). */
+  --danger: 240 118 122;   --danger-surface: 56 28 30;
+  --warning: 232 176 92;   --warning-surface: 56 44 22;
+  --info: 143 176 245;     --info-surface: 26 40 66;
+  --success: 95 214 158;   --success-surface: 18 46 30;
+  --accent: 182 156 240;   --accent-surface: 40 32 66;
+
+  /* Categóricas de profissional no escuro: base clareada, superfície escurecida (contraste AA). */
+  --pro-teal: 45 212 191;    --pro-teal-surface: 15 46 43;
+  --pro-pink: 244 114 182;   --pro-pink-surface: 54 24 40;
+  --pro-indigo: 165 170 250; --pro-indigo-surface: 30 30 62;
+  --pro-orange: 251 146 60;  --pro-orange-surface: 56 34 16;
+}
+
+/* Escopo que FORÇA tema claro mesmo dentro de html[data-theme="dark"].
+   Usado por páginas sempre-claras (landing/marketing/login/legal) que foram
+   desenhadas p/ o claro e não devem herdar a inversão do dark. Espelha os
+   neutros/superfícies/status do :root — NÃO mexe em --brand-* (o BrandingStyle
+   continua vencendo por ordem de DOM). */
+[data-theme="light"] {
+  color-scheme: light;
+  --slate-50: 244 247 245;   --slate-100: 237 242 239; --slate-200: 226 234 230;
+  --slate-300: 213 223 218;  --slate-400: 148 163 155; --slate-500: 107 122 115;
+  --slate-600: 70 84 77;     --slate-700: 52 67 59;    --slate-800: 26 42 35;
+  --slate-900: 10 27 20;     --slate-950: 5 13 9;
+  --ink: 10 20 16;
+
+  --surface-app: 244 247 245;
+  --surface-card: 255 255 255;
+  --surface-raised: 255 255 255;
+  --surface-inset: 244 247 245;
+  --border-subtle: 237 242 239;
+  --border-default: 226 234 230;
+  --border-strong: 213 223 218;
+
+  --danger: 192 57 43;          --danger-surface: 253 236 236;
+  --warning: 185 115 9;         --warning-surface: 254 243 226;
+  --info: 44 91 214;            --info-surface: 234 240 254;
+  --success: 11 125 82;         --success-surface: 231 246 238;
+  --accent: 109 67 214;         --accent-surface: 239 234 254;
+
+  --pro-teal: 13 148 136;       --pro-teal-surface: 220 246 242;
+  --pro-pink: 219 39 119;       --pro-pink-surface: 252 231 243;
+  --pro-indigo: 79 70 229;      --pro-indigo-surface: 232 231 253;
+  --pro-orange: 234 88 12;      --pro-orange-surface: 255 237 213;
+}
+
+html,
+body {
+  @apply bg-surface text-ink antialiased;
+}
+
+::selection {
+  background: rgb(var(--brand-500));
+  color: #fff;
+}
+
+/* Scrollbar GLOBAL elegante (estilo macOS): vale para toda área rolável do
+   sistema. Thumb neutro translúcido (via --slate-400, que inverte por tema →
+   lê bem no claro e no escuro), trilho invisível, cantos arredondados, sem
+   setas. A borda transparente + background-clip dão o efeito "flutuante". */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--slate-400) / 0.45) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--slate-400) / 0.45);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--slate-400) / 0.7);
+}
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Scrollbar ainda mais discreta (conversa, kanban): herda o estilo global,
+   só afina o thumb. Mantida por retrocompat de quem já usa a classe. */
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Scrollbar overlay minimalista (estilo macOS) para áreas ESCURAS (sidebar):
+   trilho invisível, thumb fino translúcido branco, arredondado, sem setas —
+   quase imperceptível parado, ganha contraste no hover. */
+.scroll-overlay {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.scroll-overlay::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-overlay::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+}
+.scroll-overlay:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+.scroll-overlay::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Barras de abas/setores roláveis na horizontal: trilho visível para deixar
+   claro que dá para deslizar (o strip é baixo, então a barra padrão some). */
+.scroll-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--brand-500)) rgb(var(--slate-100));
+}
+.scroll-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+.scroll-tabs::-webkit-scrollbar-track {
+  @apply rounded-full bg-slate-100;
+}
+.scroll-tabs::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-brand-500;
+}
+
+/* <details> sem o marcador nativo — usado no FAQ da landing. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details[open] .faq-plus {
+  transform: rotate(45deg);
+}
