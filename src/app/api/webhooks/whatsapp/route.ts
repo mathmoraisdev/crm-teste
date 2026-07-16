@@ -8,8 +8,15 @@ import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
+/** Em modo Cloud API a validação de assinatura é OBRIGATÓRIA (fail-closed):
+ *  sem `WHATSAPP_APP_SECRET` o POST é rejeitado, nunca aceito. Nos modos mock/
+ *  baileys o webhook do Graph API não está no ar, então a ausência do secret é
+ *  tolerada (fail-open) só para não atrapalhar o dev. */
+const REQUIRE_SIGNATURE = env.WHATSAPP_MODE === "cloud-api";
+
 /**
  * GET — verificação do webhook (Meta envia hub.challenge na configuração).
+ * Requer `WHATSAPP_VERIFY_TOKEN` não-vazio; token vazio = 403 (não há fallback).
  */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
@@ -17,7 +24,11 @@ export async function GET(req: NextRequest) {
   const token = params.get("hub.verify_token");
   const challenge = params.get("hub.challenge");
 
-  if (mode === "subscribe" && token === env.WHATSAPP_VERIFY_TOKEN) {
+  if (
+    env.WHATSAPP_VERIFY_TOKEN.length > 0 &&
+    mode === "subscribe" &&
+    token === env.WHATSAPP_VERIFY_TOKEN
+  ) {
     return new Response(challenge ?? "", { status: 200 });
   }
   return new Response("Forbidden", { status: 403 });
@@ -25,11 +36,11 @@ export async function GET(req: NextRequest) {
 
 /**
  * Valida a assinatura `X-Hub-Signature-256` (HMAC SHA-256 do corpo bruto com o
- * App Secret). Só roda quando `WHATSAPP_APP_SECRET` está setado — em mock/dev
- * sem secret a validação é pulada para não atrapalhar o desenvolvimento.
+ * App Secret). Em modo Cloud API exige o secret (fail-closed); nos demais modos
+ * sem secret a validação é pulada (webhook não está no ar em mock/baileys).
  */
 function isValidSignature(raw: string, signature: string | null): boolean {
-  if (!env.WHATSAPP_APP_SECRET) return true;
+  if (!env.WHATSAPP_APP_SECRET) return !REQUIRE_SIGNATURE;
   if (!signature) return false;
   const expected =
     "sha256=" +

@@ -32,11 +32,18 @@ export async function listAudit(accountId: string, f: AuditFilters) {
 /**
  * Poda por retenção: apaga linhas de auditoria mais velhas que `retentionDays`.
  * `retentionDays <= 0` = no-op (nunca poda). Roda no worker (uma vez/dia). Devolve
- * quantas foram apagadas. Passa `now` p/ ser determinístico/testável.
+ * quantas foram apagadas (AuditLog + AiCallLog, mesma janela). Passa `now` p/ ser
+ * determinístico/testável.
  */
 export async function pruneAuditLogs(retentionDays: number, now: Date = new Date()): Promise<number> {
   if (!retentionDays || retentionDays <= 0) return 0;
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
-  const { count } = await prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
-  return count;
+  // AiCallLog segue a MESMA retenção da AuditLog: ambos são logs append-only de
+  // observabilidade que não devem crescer para sempre (dúvida/briga/custo aparece
+  // no mês vigente + folga).
+  const [audit, aiCalls] = await Promise.all([
+    prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+    prisma.aiCallLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+  ]);
+  return audit.count + aiCalls.count;
 }

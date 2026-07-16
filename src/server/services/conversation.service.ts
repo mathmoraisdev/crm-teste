@@ -1,12 +1,13 @@
 import crypto from "node:crypto";
 import { prisma } from "@/server/db/client";
-import type { AttendanceStatus } from "@prisma/client";
+import { type AttendanceStatus, type Prisma } from "@prisma/client";
 import type { ConversationTurn } from "@/server/ai/qualification.agent";
 import { sessionWindow } from "@/server/ai/transcript";
 import { generateAttendanceReply, generateAgenticReply, interpretAppointmentReply } from "@/server/ai/conversation.agent";
 import { buildAttendanceTools } from "@/server/ai/tools/attendance-tools";
 import { getAiClient } from "@/server/ai/resolve";
-import type { AiClient } from "@/server/ai/provider";
+import { type AiClient, AiProviderError } from "@/server/ai/provider";
+import { runWithAiCallContext } from "@/server/ai/call-context";
 import { decideApptTransition, applyApptTransition } from "./appointment.service";
 import { formatSlot } from "@/lib/utils";
 import { consumeAiCredit, resolveAiModelForUser } from "@/server/services/entitlements";
@@ -32,6 +33,7 @@ import {
   enqueueManualMedia,
 } from "./messaging";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
 import { shouldCreateContact } from "./inbound-resolve";
@@ -533,10 +535,70 @@ async function tryHandleAppointmentReply(
   return true;
 }
 
+/**
+ * Wrapper de `respondToLeadInner`: captura falhas do provedor de IA (OpenAI/
+ * Anthropic — já logadas em provider.ts como `AiProviderError`) e move o lead a
+ * `AI_ERROR` para um operador assumir, em vez de deixar o inbound sem resposta
+ * silenciosamente. Outros erros (Prisma/bugs) continuam subindo: o worker os
+ * loga no console. `AiProviderError` cobre timeout/rate-limit/chave inválida/5xx
+ * após esgotar os retries do SDK (AI_MAX_RETRIES).
+ */
 export async function respondToLead(leadId: string): Promise<void> {
+  try {
+    await respondToLeadInner(leadId);
+  } catch (err) {
+    if (err instanceof AiProviderError) {
+      await markLeadAiError(leadId, err);
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Marca o lead cuja resposta automática falhou: attendanceStatus=AI_ERROR (badge
+ * vermelho no inbox, conta como não-lida), aiPaused=true (próximos inbounds não
+ * martelam a IA falha) e queuedAt=agora (dispara o SLA humano). Idempotente.
+ */
+async function markLeadAiError(leadId: string, err: AiProviderError): Promise<void> {
+  logger.error(
+    { leadId, provider: err.provider, model: err.model, tier: err.tier, err: err.cause ?? err.message },
+    "[ai] resposta automática falhou — lead movido a AI_ERROR para atendimento humano",
+  );
+  try {
+    const lead = await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        attendanceStatus: "AI_ERROR",
+        aiPaused: true,
+        aiPausedAt: new Date(),
+        queuedAt: new Date(),
+      },
+      select: { userId: true },
+    });
+    await invalidateLeadCaches(lead.userId);
+  } catch (dbErr) {
+    // Não mascarar a falha original se o update/invalidação também falhar.
+    logger.error({ leadId, err: dbErr }, "[ai] falha ao marcar lead como AI_ERROR");
+  }
+}
+
+async function respondToLeadInner(leadId: string): Promise<void> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!lead) return;
+  // Contexto de auditoria de custo: todas as chamadas de IA deste turno são
+  // atribuídas a este lead/conta (gravadas em AiCallLog pelo provider). O
+  // purpose "respond" cobre qualificação + resposta/agendamento do mesmo turno.
+  await runWithAiCallContext(
+    { userId: lead.userId, leadId: lead.id, purpose: "respond" },
+    () => respondToLeadBody(lead),
+  );
+}
 
+/** Linha completa de Lead (findUnique sem select) — entrada de respondToLeadBody. */
+type LeadRow = Prisma.LeadGetPayload<{}>;
+
+async function respondToLeadBody(lead: LeadRow): Promise<void> {
   // Handoff humano: por padrão a IA fica em silêncio. Mas se a conversa esfriou
   // por mais de inactivityResumeMinutes (config do número), devolvemos o controle
   // à IA — evita lead órfão quando o operador esquece de retomar.
@@ -875,20 +937,24 @@ export async function suggestAttendanceReply(
   const { block: catalogBlock } = await loadCatalogBlock(lead.userId);
   const businessAddress = await getBusinessAddress(lead.userId);
 
-  return generateAttendanceReply({
-    ai,
-    company: {
-      displayName: company?.displayName ?? company?.label ?? null,
-      systemPromptOverride: company?.systemPromptOverride ?? null,
-      persona: company?.persona ?? null,
-      knowledgeBase: company?.knowledgeBase ?? null,
-      businessHours: company?.businessHours ?? null,
-      businessAddress,
-      customInstructions: company?.customInstructions ?? null,
-    },
-    catalogBlock,
-    conversation,
-  });
+  // Auditoria de custo: a chamada de IA do rascunho é atribuída a este lead.
+  return runWithAiCallContext(
+    { userId: lead.userId, leadId: lead.id, purpose: "suggest_reply" },
+    () => generateAttendanceReply({
+      ai,
+      company: {
+        displayName: company?.displayName ?? company?.label ?? null,
+        systemPromptOverride: company?.systemPromptOverride ?? null,
+        persona: company?.persona ?? null,
+        knowledgeBase: company?.knowledgeBase ?? null,
+        businessHours: company?.businessHours ?? null,
+        businessAddress,
+        customInstructions: company?.customInstructions ?? null,
+      },
+      catalogBlock,
+      conversation,
+    }),
+  );
 }
 
 /**

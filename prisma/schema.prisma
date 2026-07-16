@@ -302,6 +302,7 @@ model User {
   // Delivery / Cardápio online (Onda L): settings 1:1 e zonas de entrega da conta.
   deliverySettings         DeliverySettings?
   deliveryZones            DeliveryZone[]
+  aiCallLogs               AiCallLog[]
 }
 
 // Biblioteca de mídia da CONTA (Onda E, iniciativa 7) — arquivos que o operador
@@ -791,6 +792,7 @@ enum AttendanceStatus {
   ATENDENDO // operador atribuído, em atendimento
   AGUARDANDO // operador respondeu, aguardando o cliente
   RESOLVIDA // encerrada
+  AI_ERROR // IA falhou ao responder (provedor fora/chave inválida) — operador assume
 }
 
 enum WhatsAppNumberStatus {
@@ -856,6 +858,7 @@ model Lead {
   lastReadAt        DateTime? // leitura (inbox compartilhado)
   internalNotes     InternalNote[]
   outboundJobs      OutboundJob[]
+  aiCallLogs        AiCallLog[]
   // chip "dono" da conversa, p/ responder pelo mesmo número (Baileys multi-número)
   whatsAppNumber    WhatsAppNumber?  @relation(fields: [whatsAppNumberId], references: [id])
   whatsAppNumberId  String?
@@ -1449,4 +1452,33 @@ model AuditLog {
 
   @@index([accountId, createdAt])
   @@index([accountId, entityType, entityId])
+}
+
+// Auditoria de CADA chamada de IA (observabilidade de custo): tokens consumidos
+// e custo estimado por lead/conta. Append-only; o worker poda pelo mesmo
+// AUDIT_RETENTION_DAYS da AuditLog. Gravada fire-and-forget pelo provider
+// (res.usage) via AsyncLocalStorage (call-context) — não derruba a resposta do
+// lead se a inserção falhar. O `userId` é a conta dona (escopo de leitura); o
+// `leadId` é nullable (chamadas fora do contexto de uma conversa, ex.: teste de
+// chave em ai-credential.service, não geram linha).
+model AiCallLog {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String   // conta dona (= tenantUserId)
+  lead            Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId          String?  // conversa que disparou a chamada (null fora de um lead)
+  provider        String   // "OPENAI" | "ANTHROPIC"
+  model           String   // ID do modelo efetivo (ex.: gpt-4o-mini)
+  tier            String   // "cheap" | "strong"
+  purpose         String   // "next_question" | "qualification" | "attendance" | ...
+  promptTokens    Int      // tokens de entrada (res.usage.prompt_tokens)
+  completionTokens Int     // tokens de saída (res.usage.completion_tokens)
+  totalTokens     Int      // soma (pré-calculada p/ ordenação/agregação sem recompute)
+  costCents       Int      // custo estimado em centavos (tokens × preço por modelo/tier)
+  error           Boolean  @default(false) // true quando a chamada falhou (sem tokens)
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])   // dashboard de custo por conta no tempo
+  @@index([leadId, createdAt])   // "quanto custei este lead?"
+  @@index([userId, leadId, createdAt])
 }

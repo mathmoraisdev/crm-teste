@@ -34,7 +34,9 @@ const schema = z.object({
   WHATSAPP_MODE: z.enum(["mock", "cloud-api", "baileys"]).default("mock"),
   WHATSAPP_TOKEN: z.string().optional().default(""),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(""),
-  WHATSAPP_VERIFY_TOKEN: z.string().optional().default("meu-verify-token"),
+  // Token de verificação do webhook (GET hub.verify_token). Sem default fraco:
+  // vazio força o operador a definir um valor próprio ao ligar o Cloud API.
+  WHATSAPP_VERIFY_TOKEN: z.string().optional().default(""),
 
   CALENDAR_MODE: z.enum(["mock", "google-calendar"]).default("mock"),
   GOOGLE_CLIENT_EMAIL: z.string().optional().default(""),
@@ -218,3 +220,19 @@ export const isEncryptionConfigured = /^[0-9a-fA-F]{64}$/.test(env.ENCRYPTION_KE
  *  recebida do lead continua virando apenas placeholder no inbox (sem download). */
 export const isMediaStorageConfigured =
   env.SUPABASE_URL.length > 0 && env.SUPABASE_SERVICE_ROLE_KEY.length > 0;
+
+// Aviso de segurança em startup: o webhook do Cloud API só é seguro com App
+// Secret (HMAC fail-closed) e verify token próprio. Em modo cloud-api sem eles,
+// o POST é rejeitado e o GET devolve 403 — o webhook NÃO funciona. Avisamos em
+// vez de quebrar o boot p/ não impedir um deploy de correção (ex.: re-scan).
+if (
+  !isBuildPhase &&
+  env.WHATSAPP_MODE === "cloud-api" &&
+  (env.WHATSAPP_APP_SECRET.length === 0 || env.WHATSAPP_VERIFY_TOKEN.length === 0)
+) {
+  console.warn(
+    "[env] WHATSAPP_MODE=cloud-api sem WHATSAPP_APP_SECRET/WHATSAPP_VERIFY_TOKEN: " +
+      "webhook rejeita assinaturas (fail-closed) e o GET de verificação devolve 403. " +
+      "Defina ambas p/ receber inbounds do Graph API.",
+  );
+}

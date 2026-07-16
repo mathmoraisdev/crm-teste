@@ -15,6 +15,7 @@ export const ATTENDANCE_META: Record<AttendanceStatus, { label: string; tone: To
   ATENDENDO: { label: "Atendendo", tone: "violet" },
   AGUARDANDO: { label: "Aguardando", tone: "slate" },
   RESOLVIDA: { label: "Resolvida", tone: "green" },
+  AI_ERROR: { label: "IA falhou", tone: "red" },
 };
 
 // Tempo de espera compacto p/ o selo de SLA ("3min", "1h20", "2d").

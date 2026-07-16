@@ -7,10 +7,12 @@ import { recordAudit } from "@/server/audit/record";
 
 export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 
-/** Estados "ativos" do inbox humano (fora IA e RESOLVIDA) — base de não-lidas/SLA. */
-const ACTIVE: AttendanceStatus[] = ["FILA", "ATENDENDO", "AGUARDANDO"];
+/** Estados "ativos" do inbox humano (fora IA e RESOLVIDA) — base de não-lidas/SLA.
+ *  AI_ERROR entra aqui: a IA falhou e o lead precisa de humano, então conta como
+ *  não-lida para chamar atenção do operador (sem inflar o contador da aba FILA). */
+const ACTIVE: AttendanceStatus[] = ["FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR"];
 /** Tudo que não está encerrado — inclui IA, p/ a aba "Todas" monitorar e assumir. */
-const NON_RESOLVED: AttendanceStatus[] = ["IA", "FILA", "ATENDENDO", "AGUARDANDO"];
+const NON_RESOLVED: AttendanceStatus[] = ["IA", "FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR"];
 
 export interface InboxConversation {
   id: string;

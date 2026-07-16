@@ -29,6 +29,7 @@ const ATTENDANCE_HINT: Partial<Record<AttendanceStatus, { label: string; cls: st
   FILA: { label: "Na fila", cls: "bg-warning-surface text-warning" },
   ATENDENDO: { label: "Atendendo", cls: "bg-accent-surface text-accent" },
   AGUARDANDO: { label: "Aguardando", cls: "bg-slate-100 text-slate-500" },
+  AI_ERROR: { label: "IA falhou", cls: "bg-danger-surface text-danger" },
 };
 
 /** Pill de atendimento do card; vira vermelho quando a fila estoura o SLA. */
