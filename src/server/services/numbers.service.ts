@@ -82,6 +82,7 @@ export interface WhatsAppNumberListItem {
   persona: string | null;
   knowledgeBase: string | null;
   businessHours: string | null;
+  timezone: string | null;
   customInstructions: string | null;
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
@@ -123,6 +124,7 @@ export async function listWhatsAppNumbers(
         persona: true,
         knowledgeBase: true,
         businessHours: true,
+        timezone: true,
         customInstructions: true,
         autoReplyEnabled: true,
         qualifyEnabled: true,
@@ -166,6 +168,7 @@ export async function updateWhatsAppNumber(
     persona?: string | null;
     knowledgeBase?: string | null;
     businessHours?: string | null;
+    timezone?: string | null;
     customInstructions?: string | null;
     autoReplyEnabled?: boolean;
     qualifyEnabled?: boolean;
@@ -208,6 +211,7 @@ export async function updateWhatsAppNumber(
   if (data.persona !== undefined) patch.persona = data.persona;
   if (data.knowledgeBase !== undefined) patch.knowledgeBase = data.knowledgeBase;
   if (data.businessHours !== undefined) patch.businessHours = data.businessHours;
+  if (data.timezone !== undefined) patch.timezone = data.timezone;
   if (data.customInstructions !== undefined) patch.customInstructions = data.customInstructions;
   if (data.autoReplyEnabled !== undefined) patch.autoReplyEnabled = data.autoReplyEnabled;
   if (data.qualifyEnabled !== undefined) patch.qualifyEnabled = data.qualifyEnabled;

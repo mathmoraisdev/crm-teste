@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   buildAttendanceContext,
+  buildNowBlock,
   renderActiveOffers,
   renderCatalogForAI,
   renderCatalogForTools,
   renderMediaAssetsForAI,
+  renderSystemPromptOverride,
 } from "./attendance-context";
 
 describe("buildAttendanceContext", () => {
@@ -218,5 +220,78 @@ describe("renderMediaAssetsForAI", () => {
   });
   it("vazio → string vazia", () => {
     expect(renderMediaAssetsForAI([])).toBe("");
+  });
+});
+
+describe("buildNowBlock", () => {
+  // 2026-07-17T14:35:00Z → 11:35 em São Paulo (UTC−3) e 10:35 em Porto Velho (UTC−4).
+  // Mesmo instante, horas diferentes — prova que o fuso do número é respeitado.
+  const NOW = new Date("2026-07-17T14:35:00.000Z");
+
+  it("mostra data, hora, dia da semana e fuso no fuso do número", () => {
+    const out = buildNowBlock({ tz: "America/Porto_Velho", now: NOW });
+    expect(out).toContain("Data/hora atual: 17/07/2026 10:35");
+    expect(out).toContain("Fuso horário: America/Porto_Velho");
+    expect(out).toContain("sexta-feira");
+  });
+
+  it("respeita o fuso — mesma hora Z dá horas diferentes por número", () => {
+    const sp = buildNowBlock({ tz: "America/Sao_Paulo", now: NOW });
+    const ro = buildNowBlock({ tz: "America/Porto_Velho", now: NOW });
+    expect(sp).toContain("11:35");
+    expect(ro).toContain("10:35");
+  });
+
+  it("inclui a linha de expediente quando informada", () => {
+    const out = buildNowBlock({
+      tz: "America/Porto_Velho",
+      businessHours: "Seg–Sex, 09:00–15:00",
+      now: NOW,
+    });
+    expect(out).toContain("Expediente: Seg–Sex, 09:00–15:00");
+  });
+
+  it("omite a linha de expediente quando ausente", () => {
+    const out = buildNowBlock({ tz: "America/Porto_Velho", now: NOW });
+    expect(out).not.toContain("Expediente");
+  });
+});
+
+describe("renderSystemPromptOverride", () => {
+  const NOW = new Date("2026-07-17T14:35:00.000Z");
+
+  it("substitui o alias legado {{DATA_E_HORA_DO_SISTEMA}} pela data/hora real", () => {
+    const out = renderSystemPromptOverride(
+      "O horário atual é: {{DATA_E_HORA_DO_SISTEMA}}",
+      { tz: "America/Porto_Velho", now: NOW },
+    );
+    expect(out).not.toContain("{{DATA_E_HORA_DO_SISTEMA}}");
+    expect(out).toContain("17/07/2026 10:35");
+  });
+
+  it("substitui {{HORA_ATUAL}}, {{FUSO}} e {{EXPEDIENTE}}", () => {
+    const out = renderSystemPromptOverride(
+      "Agora={{HORA_ATUAL}} Fuso={{FUSO}} Expediente={{EXPEDIENTE}}",
+      { tz: "America/Porto_Velho", businessHours: "09–15", now: NOW },
+    );
+    expect(out).toContain("Agora=10:35");
+    expect(out).toContain("Fuso=America/Porto_Velho");
+    expect(out).toContain("Expediente=09–15");
+  });
+
+  it("expediente ausente vira string vazia no placeholder", () => {
+    const out = renderSystemPromptOverride("Expediente:{{EXPEDIENTE}}", {
+      tz: "America/Porto_Velho",
+      now: NOW,
+    });
+    expect(out).toBe("Expediente:");
+  });
+
+  it("placeholders ausentes no template não alteram o texto", () => {
+    const out = renderSystemPromptOverride("Texto sem placeholders.", {
+      tz: "America/Porto_Velho",
+      now: NOW,
+    });
+    expect(out).toBe("Texto sem placeholders.");
   });
 });

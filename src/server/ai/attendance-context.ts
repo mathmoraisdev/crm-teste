@@ -5,6 +5,91 @@ import type {
 } from "@/server/services/booking-availability.service";
 
 /**
+ * Partes de data/hora de `now` no fuso `tz`, prontas para compor o bloco de
+ * contexto ou para preencher placeholders do prompt mestre. `hour12:false` pode
+ * devolver "24" na meia-noite em alguns ICU — normalizamos para "00".
+ */
+function formatNowParts(now: Date, tz: string): {
+  weekday: string;
+  date: string; // dd/mm/yyyy
+  time: string; // HH:MM
+} {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const p = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  const hh = p("hour") === "24" ? "00" : p("hour");
+  return {
+    weekday: p("weekday"),
+    date: `${p("day")}/${p("month")}/${p("year")}`,
+    time: `${hh}:${p("minute")}`,
+  };
+}
+
+/**
+ * Bloco de data/hora ATUAL injetado no prompt de atendimento, no fuso do número.
+ * Dá à IA o que ela precisa para decidir "aberto agora" (regra do próprio prompt)
+ * e referências temporais ("válido até DD/MM", "abrem hoje?"). Antes só a DATA em
+ * fuso fixo Brasília era injetada — insuficiente e errada para outros estados.
+ *
+ * `now` injetável (default = new Date()) para testes determinísticos em fusos
+ * diferentes. A linha de expediente só aparece quando `businessHours` é informada.
+ */
+export function buildNowBlock(opts: {
+  tz: string;
+  businessHours?: string | null;
+  now?: Date;
+}): string {
+  const now = opts.now ?? new Date();
+  const { weekday, date, time } = formatNowParts(now, opts.tz);
+  const lines = [
+    `Data/hora atual: ${date} ${time} (${weekday})`,
+    `Fuso horário: ${opts.tz}`,
+  ];
+  const hours = opts.businessHours?.trim();
+  if (hours) lines.push(`Expediente: ${hours}`);
+  return lines.join("\n");
+}
+
+/**
+ * Substitui placeholders do prompt mestre (systemPromptOverride) pelos valores
+ * reais de data/hora no fuso do número. Reusa a idiomática `.replace(/\{\{ key \}\}/gi)`
+ * dos lembretes (appointment-reminders.ts). Assim o mesmo prompt funciona para
+ * qualquer cliente/estado sem edição — o operador escreve {{DATA_E_HORA_DO_SISTEMA}}
+ * e a IA recebe a hora real, não o texto literal.
+ *
+ * Placeholders suportados:
+ * - {{DATA_E_HORA_DO_SISTEMA}} e {{DATA_HORA_ATUAL}} → "dd/mm/yyyy HH:MM (weekday)"
+ * - {{HORA_ATUAL}} → "HH:MM"
+ * - {{FUSO}} → identificador IANA (ex.: "America/Porto_Velho")
+ * - {{EXPEDIENTE}} → texto do expediente informado (vazio se ausente)
+ *
+ * `now` injetável para testes. Placeholders ausentes no template não têm efeito.
+ */
+export function renderSystemPromptOverride(
+  template: string,
+  vars: { tz: string; businessHours?: string | null; now?: Date },
+): string {
+  const now = vars.now ?? new Date();
+  const { weekday, date, time } = formatNowParts(now, vars.tz);
+  const dateTime = `${date} ${time} (${weekday})`;
+  const hours = vars.businessHours?.trim() ?? "";
+  return template
+    .replace(/\{\{\s*DATA_E_HORA_DO_SISTEMA\s*\}\}/gi, dateTime)
+    .replace(/\{\{\s*DATA_HORA_ATUAL\s*\}\}/gi, dateTime)
+    .replace(/\{\{\s*HORA_ATUAL\s*\}\}/gi, time)
+    .replace(/\{\{\s*FUSO\s*\}\}/gi, vars.tz)
+    .replace(/\{\{\s*EXPEDIENTE\s*\}\}/gi, hours);
+}
+
+/**
  * Monta (PURA) o bloco de contexto da empresa para o prompt de atendimento.
  * Omite seções ausentes para não poluir o prompt com "null".
  */

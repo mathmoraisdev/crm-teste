@@ -12,6 +12,7 @@ import { AI_MODELS_BY_PROVIDER, type AiProviderName } from "@/lib/ai-models";
 import { OffersManager } from "@/components/OffersManager";
 import { BusinessTemplatePicker } from "@/components/BusinessTemplatePicker";
 import { applyTemplate, hasTextContent, type BusinessTemplate } from "@/lib/business-templates";
+import { BR_TIMEZONES } from "@/lib/timezones";
 
 interface NumberItem {
   id: string;
@@ -27,6 +28,7 @@ interface NumberItem {
   persona: string | null;
   knowledgeBase: string | null;
   businessHours: string | null;
+  timezone: string | null;
   customInstructions: string | null;
   autoReplyEnabled: boolean;
   qualifyEnabled: boolean;
@@ -50,6 +52,7 @@ interface ServiceConfig {
   systemPromptOverride: string;
   persona: string;
   businessHours: string;
+  timezone: string;
   knowledgeBase: string;
   customInstructions: string;
   autoReplyEnabled: boolean;
@@ -303,6 +306,7 @@ export function WhatsAppNumbersPanel() {
       systemPromptOverride: n.systemPromptOverride ?? "",
       persona: n.persona ?? "",
       businessHours: n.businessHours ?? "",
+      timezone: n.timezone ?? "",
       knowledgeBase: n.knowledgeBase ?? "",
       customInstructions: n.customInstructions ?? "",
       autoReplyEnabled: n.autoReplyEnabled,
@@ -335,6 +339,7 @@ export function WhatsAppNumbersPanel() {
         systemPromptOverride: service.systemPromptOverride.trim() || null,
         persona: service.persona.trim() || null,
         businessHours: service.businessHours.trim() || null,
+        timezone: service.timezone.trim() || null,
         knowledgeBase: service.knowledgeBase.trim() || null,
         customInstructions: service.customInstructions.trim() || null,
         autoReplyEnabled: service.autoReplyEnabled,
@@ -819,6 +824,29 @@ export function WhatsAppNumbersPanel() {
                 placeholder="Ex.: Seg–Sex 9h às 18h"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Fuso horário
+              </label>
+              <select
+                value={service.timezone}
+                onChange={(e) =>
+                  setService({ ...service, timezone: e.target.value })
+                }
+                className="w-full rounded-lg border border-line-default bg-inset px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                <option value="">Padrão (Brasília)</option>
+                {BR_TIMEZONES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Fuso do número — a IA usa para saber a hora real do expediente e
+                decidir se está aberto ou fechado. Padrão: Brasília.
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">

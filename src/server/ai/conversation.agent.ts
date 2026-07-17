@@ -1,5 +1,9 @@
 import { ATTENDANCE_SYSTEM, CONVERSATION_SYSTEM, SLOT_CHOICE_SYSTEM } from "./prompts";
-import { buildAttendanceContext } from "./attendance-context";
+import {
+  buildAttendanceContext,
+  buildNowBlock,
+  renderSystemPromptOverride,
+} from "./attendance-context";
 import {
   slotChoiceJsonSchema,
   slotChoiceSchema,
@@ -100,23 +104,30 @@ export async function interpretAppointmentReply(opts: {
 }
 
 /**
- * Linha "Data de hoje" injetada no prompt de atendimento. O modelo não recebe
- * timestamps no transcript, então sem isto ele não sabe que dia é hoje — o que
- * quebra avisos com validade ("válido até DD/MM") e perguntas tipo "abrem hoje?".
- * Só a DATA (não a hora): o atendimento nunca decide "aberto agora" — isso é regra
- * do próprio prompt. Timezone padrão Brasília; a data só diverge de outros fusos
- * BR na janela de ~1h em torno da meia-noite, irrelevante p/ validade de aviso.
+ * Bloco de data/hora ATUAL injetado no prompt de atendimento, no fuso do número.
+ * O modelo não recebe timestamps no transcript, então sem isto ele não sabe que
+ * dia/hora são — o que quebra avisos com validade ("válido até DD/MM"), perguntas
+ * tipo "abrem hoje?" e, principalmente, a regra de expediente (aberto/fechado).
+ *
+ * Diferente da versão antiga (só DATA em fuso fixo Brasília), agora envia DATA +
+ * HORA + dia da semana + fuso + expediente no fuso real do número — assim o mesmo
+ * prompt funciona para qualquer empresa/estado. `now` injetável p/ testes.
+ *
+ * O fuso deve vir RESOLVIDO (string IANA válida) do chamador de servidor
+ * (`conversation.service`, via `resolveTimezone`) — este módulo é importado por
+ * testes de agent puros que não carregam `@/lib/env`, então evitamos importá-lo
+ * aqui. Fallback local só p/ testes diretos sem número.
  */
-function brazilTodayLine(): string {
-  const hoje = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date());
-  return `Data de hoje: ${hoje}.`;
+function attendanceNowBlock(
+  tz: string | null | undefined,
+  businessHours: string | null | undefined,
+  now?: Date,
+): string {
+  return buildNowBlock({ tz: tz || DEFAULT_TZ, businessHours, now });
 }
+
+/** Fuso de segurança quando o chamador de teste não resolve (runtime usa o do número). */
+const DEFAULT_TZ = "America/Sao_Paulo";
 
 interface AttendanceCompany {
   displayName?: string | null;
@@ -126,20 +137,36 @@ interface AttendanceCompany {
   businessHours?: string | null;
   businessAddress?: string | null;
   customInstructions?: string | null;
+  /** Fuso IANA já RESOLVIDO pelo chamador de servidor (resolveTimezone). */
+  timezone?: string | null;
 }
 
 /**
  * Monta (PURA) o `system` base + o prefixo de contexto (empresa/catálogo/extra)
  * comum aos dois caminhos de atendimento — a resposta livre (`generateText`) e o
  * loop de tools (`runToolLoop`). Prompt mestre da empresa (override), quando
- * setado, SUBSTITUI o padrão e zera o bloco de contexto (o operador escreve tudo
- * inline). Extrai o trecho para não duplicar entre os dois caminhos.
+ * setado, SUBSTITUI o padrão. Antes o override zera todo o contexto; agora ele
+ * ainda recebe: (a) substituição de placeholders de data/hora/fuso/expediente
+ * (ex.: {{DATA_E_HORA_DO_SISTEMA}}) e (b) o bloco de contexto "agora" injetado à
+ * parte pelo chamador — garantindo que a IA saiba a hora real mesmo no override.
+ * Extrai o trecho para não duplicar entre os dois caminhos.
  */
 function buildAttendancePrompt(opts: {
   company: AttendanceCompany;
   catalogBlock?: string;
-}): { system: string; contextPrefix: string } {
-  const override = opts.company.systemPromptOverride?.trim();
+  now?: Date;
+}): { system: string; contextPrefix: string; nowBlock: string } {
+  const tz = opts.company.timezone || DEFAULT_TZ;
+  const overrideRaw = opts.company.systemPromptOverride?.trim();
+  // Override tem placeholders de data/hora/fuso/expediente resolvidos no fuso do
+  // número — antes iam cru para o LLM (bug "cartório fechado": a IA não sabia a hora).
+  const override = overrideRaw
+    ? renderSystemPromptOverride(overrideRaw, {
+        tz,
+        businessHours: opts.company.businessHours,
+        now: opts.now,
+      })
+    : null;
   const system = override || ATTENDANCE_SYSTEM;
   const context = override ? "" : buildAttendanceContext(opts.company);
   const catalog = !override && opts.catalogBlock ? `\n\n${opts.catalogBlock}` : "";
@@ -148,7 +175,8 @@ function buildAttendancePrompt(opts: {
       ? `\n\nInstruções adicionais da empresa:\n${opts.company.customInstructions}`
       : "";
   const contextPrefix = context || catalog || extra ? `${context}${catalog}${extra}\n\n` : "";
-  return { system, contextPrefix };
+  const nowBlock = attendanceNowBlock(tz, opts.company.businessHours, opts.now);
+  return { system, contextPrefix, nowBlock };
 }
 
 /**
@@ -160,14 +188,16 @@ export async function generateAttendanceReply(opts: {
   company: AttendanceCompany;
   catalogBlock?: string;
   conversation: ConversationTurn[];
+  /** Instante de referência (default agora). Injetável p/ testes determinísticos. */
+  now?: Date;
 }): Promise<string> {
-  const { system, contextPrefix } = buildAttendancePrompt(opts);
+  const { system, contextPrefix, nowBlock } = buildAttendancePrompt(opts);
   const text = await opts.ai.generateText({
     tier: "cheap",
     maxTokens: 700,
     system,
     user:
-      `${brazilTodayLine()}\n\n` +
+      `${nowBlock}\n\n` +
       `${contextPrefix}` +
       `Conversa:\n${formatTranscript(opts.conversation)}\n\n` +
       `Escreva a próxima mensagem ao cliente.`,
@@ -208,14 +238,16 @@ export async function generateAgenticReply(opts: {
   offersBlock?: string;
   /** Bloco AGENDAMENTO (serviceId/professionalId + link) p/ a IA usar em agendar. */
   bookingBlock?: string;
+  /** Instante de referência (default agora). Injetável p/ testes determinísticos. */
+  now?: Date;
 }): Promise<AgenticReplyResult> {
-  const { system: baseSystem, contextPrefix } = buildAttendancePrompt(opts);
+  const { system: baseSystem, contextPrefix, nowBlock } = buildAttendancePrompt(opts);
   const contextBlock = contextPrefix.trimEnd();
   const offers = opts.offersBlock?.trim() ? `\n\n${opts.offersBlock.trim()}` : "";
   const media = opts.mediaBlock?.trim() ? `\n\n${opts.mediaBlock.trim()}` : "";
   const booking = opts.bookingBlock?.trim() ? `\n\n${opts.bookingBlock.trim()}` : "";
   const system =
-    `${baseSystem}\n\n${brazilTodayLine()}` +
+    `${baseSystem}\n\n${nowBlock}` +
     (contextBlock ? `\n\n${contextBlock}` : "") +
     offers +
     media +

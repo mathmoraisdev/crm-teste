@@ -1206,6 +1206,7 @@ model WhatsAppNumber {
   persona                    String? // tom/estilo do atendente ("formal", "descontraído", instruções)
   knowledgeBase              String? // FAQ / produtos / serviços (texto livre injetado no prompt)
   businessHours              String? // horário de atendimento em texto livre ("Seg–Sex 9h–18h")
+  timezone                   String? // fuso IANA do número (ex.: "America/Porto_Velho"); null = SCHEDULING_TIMEZONE. A IA usa para saber a data/hora real do expediente.
   customInstructions         String? // instruções extras específicas da empresa
   autoReplyEnabled           Boolean @default(true) // IA responde automaticamente o inbound
   qualifyEnabled             Boolean @default(false) // roda qualificação/score (funil de vendas)

@@ -45,3 +45,4 @@ scripts/vigia-a1.*
 /coverage
 .vercel
 .env*
+.zcode/

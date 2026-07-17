@@ -7,6 +7,7 @@ import {
 } from "@/server/services/numbers.service";
 import { getTenantUserId, getTenantContext } from "@/lib/tenant";
 import { ALL_AI_MODEL_VALUES } from "@/lib/ai-models";
+import { BR_TIMEZONES } from "@/lib/timezones";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,11 @@ const updateSchema = z
     persona: z.string().max(2000).nullable().optional(),
     knowledgeBase: z.string().max(8000).nullable().optional(), // teto p/ caber no prompt
     businessHours: z.string().max(500).nullable().optional(),
+    timezone: z
+      .string()
+      .refine((v) => BR_TIMEZONES.some((t) => t.value === v), "Fuso horário inválido")
+      .nullable()
+      .optional(),
     customInstructions: z.string().max(2000).nullable().optional(),
     autoReplyEnabled: z.boolean().optional(),
     qualifyEnabled: z.boolean().optional(),

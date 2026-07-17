@@ -36,6 +36,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { isOptOut } from "@/lib/optout";
 import { brPhoneVariants } from "@/lib/phone";
+import { resolveTimezone } from "@/lib/timezones";
 import { shouldCreateContact } from "./inbound-resolve";
 import { isAccountActiveByLead } from "@/server/services/account.service";
 import { getBusinessAddress } from "@/server/services/branding.service";
@@ -691,7 +692,7 @@ async function respondToLeadBody(lead: LeadRow): Promise<void> {
         select: {
           displayName: true, label: true, aiModel: true, systemPromptOverride: true,
           persona: true, knowledgeBase: true,
-          businessHours: true, customInstructions: true,
+          businessHours: true, timezone: true, customInstructions: true,
           autoReplyEnabled: true, qualifyEnabled: true, scheduleEnabled: true,
           salesEnabled: true, aiToolCallingEnabled: true,
           contextResetMinutes: true,
@@ -785,6 +786,8 @@ async function respondToLeadBody(lead: LeadRow): Promise<void> {
       businessHours: company?.businessHours ?? null,
       businessAddress,
       customInstructions: company?.customInstructions ?? null,
+      // Fuso já RESOLVIDO (IANA válido) — o agente consome direto, sem importar env.
+      timezone: resolveTimezone(company?.timezone ?? null),
     };
 
     // Caminho AGÊNTICO (opt-in por número + kill-switch global). Fora dele, o
@@ -915,7 +918,7 @@ export async function suggestAttendanceReply(
         select: {
           displayName: true, label: true, aiModel: true, systemPromptOverride: true,
           persona: true, knowledgeBase: true, businessHours: true,
-          customInstructions: true, contextResetMinutes: true,
+          timezone: true, customInstructions: true, contextResetMinutes: true,
         },
       })
     : null;
@@ -950,6 +953,8 @@ export async function suggestAttendanceReply(
         businessHours: company?.businessHours ?? null,
         businessAddress,
         customInstructions: company?.customInstructions ?? null,
+        // Fuso já RESOLVIDO (IANA válido) — o agente consome direto, sem importar env.
+        timezone: resolveTimezone(company?.timezone ?? null),
       },
       catalogBlock,
       conversation,
