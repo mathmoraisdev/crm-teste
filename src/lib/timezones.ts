@@ -1,5 +1,3 @@
-import { env } from "@/lib/env";
-
 /**
  * Fusos horários brasileiros (IANA) oferecidos na UI do número de WhatsApp.
  * Cobrem todos os fusos vigentes no BR. O `value` é o identificador IANA usado
@@ -8,6 +6,10 @@ import { env } from "@/lib/env";
  * O sistema é multi-estado: cada número (empresa) tem seu próprio fuso, então a
  * IA consegue saber a data/hora real do expediente de qualquer cartório/loja do
  * Brasil a partir do mesmo prompt — sem precisar editar o prompt por cliente.
+ *
+ * Este módulo é client-safe: NÃO importa `@/lib/env` (que throwa no browser,
+ * onde DATABASE_URL não existe). A função `resolveTimezone` recebe o default
+ * do chamador (server-side, que já tem `env.SCHEDULING_TIMEZONE`).
  */
 export const BR_TIMEZONES: { value: string; label: string }[] = [
   { value: "America/Noronha", label: "Fernando de Noronha/PE (UTC−2)" },
@@ -33,9 +35,13 @@ export function isValidBrTimezone(tz: string | null | undefined): tz is string {
 
 /**
  * Resolve o fuso efetivo de um número: valida contra a lista de fusos BR e cai
- * em `env.SCHEDULING_TIMEZONE` (default Brasília) quando ausente/inálido. Nunca
+ * em `defaultTz` (passado pelo chamador server-side — tipicamente
+ * `env.SCHEDULING_TIMEZONE`, default Brasília) quando ausente/inválido. Nunca
  * devolve null/vazio — é a fonte canônica para a IA e para a UI.
  */
-export function resolveTimezone(tz: string | null | undefined): string {
-  return isValidBrTimezone(tz) ? tz : env.SCHEDULING_TIMEZONE;
+export function resolveTimezone(
+  tz: string | null | undefined,
+  defaultTz: string,
+): string {
+  return isValidBrTimezone(tz) ? tz : defaultTz;
 }

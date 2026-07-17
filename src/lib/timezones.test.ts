@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
-
-// Mock determinístico do env — resolveTimezone cai em SCHEDULING_TIMEZONE quando
-// o número não tem fuso. Isolado do ambiente real para o teste não depender de .env.
-vi.mock("@/lib/env", () => ({ env: { SCHEDULING_TIMEZONE: "America/Sao_Paulo" } }));
+import { describe, it, expect } from "vitest";
 
 import { BR_TIMEZONES, isValidBrTimezone, resolveTimezone } from "./timezones";
+
+// Default passado pelo chamador server-side (tipicamente env.SCHEDULING_TIMEZONE).
+const DEFAULT_TZ = "America/Sao_Paulo";
 
 describe("isValidBrTimezone", () => {
   it("aceita fusos IANA brasileiros da lista", () => {
@@ -22,18 +21,18 @@ describe("isValidBrTimezone", () => {
 
 describe("resolveTimezone", () => {
   it("preserva um fuso válido", () => {
-    expect(resolveTimezone("America/Porto_Velho")).toBe("America/Porto_Velho");
+    expect(resolveTimezone("America/Porto_Velho", DEFAULT_TZ)).toBe("America/Porto_Velho");
   });
-  it("cai no default (SCHEDULING_TIMEZONE) quando ausente", () => {
-    expect(resolveTimezone(null)).toBe("America/Sao_Paulo");
-    expect(resolveTimezone(undefined)).toBe("America/Sao_Paulo");
-    expect(resolveTimezone("")).toBe("America/Sao_Paulo");
+  it("cai no default quando ausente", () => {
+    expect(resolveTimezone(null, DEFAULT_TZ)).toBe("America/Sao_Paulo");
+    expect(resolveTimezone(undefined, DEFAULT_TZ)).toBe("America/Sao_Paulo");
+    expect(resolveTimezone("", DEFAULT_TZ)).toBe("America/Sao_Paulo");
   });
   it("cai no default quando o fuso é inválido", () => {
-    expect(resolveTimezone("America/New_York")).toBe("America/Sao_Paulo");
+    expect(resolveTimezone("America/New_York", DEFAULT_TZ)).toBe("America/Sao_Paulo");
   });
   it("nunca devolve null/vazio", () => {
-    expect(resolveTimezone(null).length).toBeGreaterThan(0);
+    expect(resolveTimezone(null, DEFAULT_TZ).length).toBeGreaterThan(0);
   });
 });
 

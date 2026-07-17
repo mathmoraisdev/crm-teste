@@ -787,7 +787,7 @@ async function respondToLeadBody(lead: LeadRow): Promise<void> {
       businessAddress,
       customInstructions: company?.customInstructions ?? null,
       // Fuso já RESOLVIDO (IANA válido) — o agente consome direto, sem importar env.
-      timezone: resolveTimezone(company?.timezone ?? null),
+      timezone: resolveTimezone(company?.timezone ?? null, env.SCHEDULING_TIMEZONE),
     };
 
     // Caminho AGÊNTICO (opt-in por número + kill-switch global). Fora dele, o
@@ -954,7 +954,7 @@ export async function suggestAttendanceReply(
         businessAddress,
         customInstructions: company?.customInstructions ?? null,
         // Fuso já RESOLVIDO (IANA válido) — o agente consome direto, sem importar env.
-        timezone: resolveTimezone(company?.timezone ?? null),
+        timezone: resolveTimezone(company?.timezone ?? null, env.SCHEDULING_TIMEZONE),
       },
       catalogBlock,
       conversation,
