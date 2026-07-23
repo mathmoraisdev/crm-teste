@@ -1,0 +1,253 @@
+import { describe, it, expect } from "vitest";
+import { prisma } from "@/server/db/client";
+import { createCatalogItem, listCatalogItems, updateCatalogItem, deleteCatalogItem, seedCatalogFromTemplate, findByBarcode, setCatalogItemCustomFields, duplicateCatalogItem } from "./catalog.service";
+import { createDef } from "@/server/services/custom-field.service";
+
+// Cria um usuário-dono descartável por teste (isolamento).
+async function makeOwner() {
+  const u = await prisma.user.create({
+    data: { email: `cat_${Math.round(performance.now())}_${Math.random()}@t.test`, name: "T", passwordHash: "x" },
+  });
+  return u.id;
+}
+
+describe("catalog.service", () => {
+  it("cria item e lista escopado por conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO" });
+    await createCatalogItem(b, { name: "X-Burguer", priceCents: 2500, kind: "PRODUTO" });
+    const listA = await listCatalogItems(a);
+    expect(listA).toHaveLength(1);
+    expect(listA[0].name).toBe("Corte");
+    expect(listA[0].priceCents).toBe(4000);
+  });
+
+  it("cardápio: menuVisible default true, e create/update de categoria e descrição", async () => {
+    const a = await makeOwner();
+    // Sem passar campos de cardápio → visível por padrão, categoria/descrição nulas.
+    const base = await createCatalogItem(a, { name: "Coca", priceCents: 600, kind: "PRODUTO" });
+    expect(base.menuVisible).toBe(true);
+    expect(base.menuCategory).toBeNull();
+    expect(base.menuDescription).toBeNull();
+
+    // Create com os campos.
+    const burger = await createCatalogItem(a, {
+      name: "X-Burguer",
+      priceCents: 2500,
+      kind: "PRODUTO",
+      menuVisible: false,
+      menuCategory: "  Lanches  ",
+      menuDescription: "  Pão, carne, queijo  ",
+    });
+    expect(burger.menuVisible).toBe(false);
+    expect(burger.menuCategory).toBe("Lanches"); // trim
+    expect(burger.menuDescription).toBe("Pão, carne, queijo");
+
+    // Update dos campos (inclusive esvaziar categoria → null).
+    const upd = await updateCatalogItem(a, burger.id, { menuVisible: true, menuCategory: "  " }, a);
+    expect(upd.menuVisible).toBe(true);
+    expect(upd.menuCategory).toBeNull();
+  });
+
+  it("rejeita nome vazio e preço negativo", async () => {
+    const a = await makeOwner();
+    await expect(createCatalogItem(a, { name: "  ", priceCents: 1000 })).rejects.toThrow();
+    await expect(createCatalogItem(a, { name: "X", priceCents: -1 })).rejects.toThrow();
+  });
+
+  it("update só afeta item da própria conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Barba", priceCents: 3000 });
+    await expect(updateCatalogItem(b, item.id, { priceCents: 1 }, b)).rejects.toThrow();
+    const upd = await updateCatalogItem(a, item.id, { priceCents: 3500, active: false }, a);
+    expect(upd.priceCents).toBe(3500);
+    expect(upd.active).toBe(false);
+  });
+
+  it("delete remove o item", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Sobrancelha", priceCents: 1500 });
+    await deleteCatalogItem(a, item.id);
+    expect(await listCatalogItems(a)).toHaveLength(0);
+  });
+
+  it("seedCatalogFromTemplate semeia itens do ramo com preço zerado", async () => {
+    const a = await makeOwner();
+    const items = await seedCatalogFromTemplate(a, "barbearia");
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.map((i) => i.name)).toContain("Corte");
+    expect(items.every((i) => i.priceCents === 0)).toBe(true); // dono precifica depois
+  });
+
+  it("seed é não-destrutivo: recusa se o catálogo já tem itens", async () => {
+    const a = await makeOwner();
+    await createCatalogItem(a, { name: "Já existe", priceCents: 100 });
+    await expect(seedCatalogFromTemplate(a, "barbearia")).rejects.toThrow();
+  });
+
+  it("seed rejeita modelo inexistente ou sem itens", async () => {
+    const a = await makeOwner();
+    await expect(seedCatalogFromTemplate(a, "nao-existe")).rejects.toThrow();
+    await expect(seedCatalogFromTemplate(a, "advocacia")).rejects.toThrow(); // só placeholder
+  });
+
+  it("usa priceCents do catalogPreset quando informado", async () => {
+    const acc = await makeOwner();
+    // A ótica tem preset com itens precificados (Lentes de grau/contato).
+    const items = await seedCatalogFromTemplate(acc, "otica");
+    expect(items.some((i) => i.priceCents > 0)).toBe(true);
+  });
+
+  it("ramo só-heurística continua nascendo com preço 0", async () => {
+    const acc = await makeOwner();
+    // Salão de beleza não tem catalogPreset — só heurística.
+    const items = await seedCatalogFromTemplate(acc, "salao-beleza");
+    expect(items.every((i) => i.priceCents === 0)).toBe(true);
+  });
+
+  it("cria produto com controle de estoque e expõe os campos", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, {
+      name: "Pomada", priceCents: 2500, kind: "PRODUTO",
+      trackStock: true, sku: "POM-01", minStock: 3, costCents: 1200,
+    });
+    expect(item.trackStock).toBe(true);
+    expect(item.sku).toBe("POM-01");
+    expect(item.stockQty).toBe(0); // nasce zerado; entra estoque via movimento
+    expect(item.minStock).toBe(3);
+    expect(item.costCents).toBe(1200);
+
+    const upd = await updateCatalogItem(a, item.id, { minStock: 5, trackStock: false, sku: null }, a);
+    expect(upd.minStock).toBe(5);
+    expect(upd.trackStock).toBe(false);
+    expect(upd.sku).toBeNull();
+  });
+
+  it("durationMinutes faz round-trip para serviço e aceita null", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO", durationMinutes: 45 });
+    expect(item.durationMinutes).toBe(45);
+    const semDur = await createCatalogItem(a, { name: "Barba", priceCents: 3000, kind: "SERVICO" });
+    expect(semDur.durationMinutes).toBeNull();
+    const upd = await updateCatalogItem(a, item.id, { durationMinutes: 30 }, a);
+    expect(upd.durationMinutes).toBe(30);
+    const cleared = await updateCatalogItem(a, item.id, { durationMinutes: null }, a);
+    expect(cleared.durationMinutes).toBeNull();
+  });
+
+  it("serviço comum ignora campos de estoque (default off)", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 4000, kind: "SERVICO" });
+    expect(item.trackStock).toBe(false);
+    expect(item.stockQty).toBe(0);
+    expect(item.sku).toBeNull();
+  });
+
+  it("barcode é único por conta (P2002 vira erro amigável)", async () => {
+    const acc = await makeOwner();
+    await createCatalogItem(acc, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    await expect(createCatalogItem(acc, { name: "B", priceCents: 200, kind: "PRODUTO", barcode: "789" }))
+      .rejects.toThrow(/código de barras|já/i);
+  });
+
+  it("contas diferentes podem repetir o mesmo barcode", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createCatalogItem(a, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    await expect(createCatalogItem(b, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" })).resolves.toBeTruthy();
+  });
+
+  it("findByBarcode resolve o item da conta pelo código", async () => {
+    const acc = await makeOwner();
+    const p = await createCatalogItem(acc, { name: "A", priceCents: 100, kind: "PRODUTO", barcode: "789" });
+    expect((await findByBarcode(acc, "789"))?.id).toBe(p.id);
+    expect(await findByBarcode(acc, "000")).toBeNull(); // inexistente
+    expect(await findByBarcode(acc, "  ")).toBeNull(); // vazio
+  });
+
+  it("persiste variantGroup (grade) e devolve no DTO; update limpa com null", async () => {
+    const acc = await makeOwner();
+    const p = await createCatalogItem(acc, { name: "Camiseta P", priceCents: 3000, kind: "PRODUTO", variantGroup: "Camiseta" });
+    expect(p.variantGroup).toBe("Camiseta");
+    const cleared = await updateCatalogItem(acc, p.id, { variantGroup: null }, acc);
+    expect(cleared.variantGroup).toBeNull();
+  });
+
+  it("grava specs (PRODUCT) no item e valida chave desconhecida", async () => {
+    const a = await makeOwner();
+    await createDef(a, { label: "Ano", type: "NUMBER", scope: "PRODUCT" });
+    await createDef(a, { label: "Cor", type: "TEXT", scope: "PRODUCT" });
+    const item = await createCatalogItem(a, { name: "Onix 2019", priceCents: 5490000, kind: "PRODUTO" });
+
+    const upd = await setCatalogItemCustomFields(a, item.id, { ano: 2019, cor: "Prata" });
+    expect(upd.customFields).toEqual({ ano: 2019, cor: "Prata" });
+
+    // chave desconhecida (não existe def PRODUCT com essa key) → erro
+    await expect(
+      setCatalogItemCustomFields(a, item.id, { placa: "ABC1D23" }),
+    ).rejects.toThrow();
+  });
+
+  it("não deixa gravar specs em item de outra conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    await createDef(a, { label: "Ano", type: "NUMBER", scope: "PRODUCT" });
+    const item = await createCatalogItem(a, { name: "Carro", priceCents: 100, kind: "PRODUTO" });
+    await expect(setCatalogItemCustomFields(b, item.id, { ano: 2020 })).rejects.toThrow();
+  });
+
+  it("duplica copiando descritivos+ficha, mas zera sku/barcode/estoque", async () => {
+    const a = await makeOwner();
+    await createDef(a, { label: "Cor", type: "TEXT", scope: "PRODUCT" });
+    const src = await createCatalogItem(a, {
+      name: "Camiseta P", priceCents: 5000, kind: "PRODUTO",
+      trackStock: true, sku: "CAM-P", barcode: "789", minStock: 10, costCents: 2000, variantGroup: "Camiseta",
+    });
+    await setCatalogItemCustomFields(a, src.id, { cor: "Azul" });
+
+    const copy = await duplicateCatalogItem(a, src.id);
+    expect(copy.id).not.toBe(src.id);
+    expect(copy.name).toBe("Camiseta P (cópia)");
+    expect(copy.priceCents).toBe(5000);
+    expect(copy.kind).toBe("PRODUTO");
+    expect(copy.trackStock).toBe(true);
+    expect(copy.minStock).toBe(10);
+    expect(copy.costCents).toBe(2000);
+    expect(copy.variantGroup).toBe("Camiseta");
+    expect(copy.customFields).toEqual({ cor: "Azul" });
+    // NÃO copiados (identidade/quantidade):
+    expect(copy.sku).toBeNull();
+    expect(copy.barcode).toBeNull();
+    expect(copy.stockQty).toBe(0);
+  });
+
+  it("não duplica item de outra conta", async () => {
+    const a = await makeOwner();
+    const b = await makeOwner();
+    const src = await createCatalogItem(a, { name: "X", priceCents: 100, kind: "PRODUTO" });
+    await expect(duplicateCatalogItem(b, src.id)).rejects.toThrow();
+  });
+});
+
+describe("catalog audit (CATALOG_PRICE_UPDATE)", () => {
+  it("grava AuditLog quando o preço muda (com summary R$)", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 2000 });
+    await updateCatalogItem(a, item.id, { priceCents: 2400 }, a);
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "CATALOG_PRICE_UPDATE", entityId: item.id } });
+    expect(log).toBeTruthy();
+    expect((log?.diff as any).priceCents).toEqual({ from: 2000, to: 2400 });
+    expect(log?.summary).toContain("R$ 20,00");
+    expect(log?.summary).toContain("R$ 24,00");
+  });
+
+  it("salvar sem mudar o preço (só nome) NÃO gera log", async () => {
+    const a = await makeOwner();
+    const item = await createCatalogItem(a, { name: "Corte", priceCents: 2000 });
+    await updateCatalogItem(a, item.id, { name: "Corte masculino" }, a);
+    const log = await prisma.auditLog.findFirst({ where: { accountId: a, action: "CATALOG_PRICE_UPDATE", entityId: item.id } });
+    expect(log).toBeNull();
+  });
+});
