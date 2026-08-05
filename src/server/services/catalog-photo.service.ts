@@ -1,9 +1,8 @@
-import crypto from "node:crypto";
 import { prisma } from "@/server/db/client";
 import {
-  uploadInboundMedia,
-  removeMediaObjects,
-} from "@/server/storage/media-storage";
+  uploadCatalogPhoto,
+  removeCatalogObjects,
+} from "@/server/storage/catalog-storage";
 
 export interface CatalogItemPhotoDTO {
   id: string;
@@ -51,9 +50,8 @@ export async function addCatalogItemPhoto(
   const ext = IMG_EXT[data.mime.toLowerCase()];
   if (!ext) throw new Error("Envie uma imagem (JPEG, PNG, WebP ou GIF).");
 
-  const mediaPath = await uploadInboundMedia(data.buffer, {
-    leadId: accountId, // assets da conta ficam em <accountId>/<uuid>.<ext>
-    messageKey: crypto.randomUUID(),
+  const mediaPath = await uploadCatalogPhoto(data.buffer, {
+    accountId, // assets da conta ficam em <accountId>/<uuid>.<ext> (bucket público)
     mime: data.mime,
     ext,
   });
@@ -73,7 +71,7 @@ export async function deleteCatalogItemPhoto(accountId: string, itemId: string, 
     select: { id: true, mediaPath: true },
   });
   if (!photo) throw new Error("Foto não encontrada.");
-  await removeMediaObjects([photo.mediaPath]); // best-effort
+  await removeCatalogObjects([photo.mediaPath]); // best-effort
   await prisma.catalogItemPhoto.delete({ where: { id: photo.id } });
 }
 

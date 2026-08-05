@@ -128,6 +128,8 @@ export async function sendWhatsAppMessage(
     });
     await prisma.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
     await invalidateConversation(lead.id); // OUTBOUND novo → contexto da IA mudou
+    // Avisa o front (SSE) — quem estiver com o detalhe/inbox deste lead revalida.
+    await publishTenantEvent(lead.userId, { type: "conversation:changed", leadId: lead.id });
     return;
   }
 

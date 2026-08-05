@@ -144,7 +144,8 @@ export function AgendaView({
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000);
+    // Agendamentos mudam pouco; 30s é suficiente p/ refletir confirmações.
+    const t = setInterval(load, 30000);
     return () => clearInterval(t);
   }, [load]);
 

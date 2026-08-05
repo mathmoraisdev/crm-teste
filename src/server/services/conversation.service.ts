@@ -42,6 +42,7 @@ import { isAccountActiveByLead } from "@/server/services/account.service";
 import { getBusinessAddress } from "@/server/services/branding.service";
 import { cached } from "@/server/cache/cache";
 import { cacheKeys, invalidateConversation, invalidateLeadCaches } from "@/server/cache/keys";
+import { publishTenantEvent } from "@/server/events/bus";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
 import { uploadInboundMedia } from "@/server/storage/media-storage";
 import { transcribeAudio } from "@/server/ai/transcribe";
@@ -303,6 +304,9 @@ export async function ingestInboundMedia(input: {
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
   await invalidateConversation(lead.id);
   await invalidateLeadCaches(lead.userId);
+  // Avisa o front (SSE) que a conversa deste lead mudou — quem estiver com o
+  // detalhe aberto revalida na hora, sem precisar do polling.
+  await publishTenantEvent(lead.userId, { type: "conversation:changed", leadId: lead.id });
   // Lead resolvido que manda mídia também reabre no inbox p/ o operador ver.
   await reopenIfResolved(lead);
 
@@ -429,6 +433,9 @@ export async function ingestInbound(input: InboundInput): Promise<IngestResult> 
   // Nova mensagem → contexto da IA e contadores de inbox (não-lidas) mudaram.
   await invalidateConversation(lead.id);
   await invalidateLeadCaches(lead.userId);
+  // Avisa o front (SSE) que a conversa deste lead mudou — quem estiver com o
+  // detalhe aberto revalida na hora, sem precisar do polling.
+  await publishTenantEvent(lead.userId, { type: "conversation:changed", leadId: lead.id });
 
   // Opt-out (LGPD): tem precedência sobre tudo — inclusive sobre o handoff humano.
   // Mesmo com a IA pausada (operador no controle), um "PARAR/SAIR" precisa encerrar

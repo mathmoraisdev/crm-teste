@@ -23,7 +23,8 @@
     "ai:smoke": "tsx --env-file-if-exists=.env scripts/ai-smoke.ts",
     "seed:test": "tsx --env-file-if-exists=.env scripts/seed-test-leads.ts",
     "smoke:atendimento": "tsx --env-file-if-exists=.env scripts/smoke-atendimento.ts",
-    "check:dupes": "tsx scripts/check-lead-dupes.ts"
+    "check:dupes": "tsx scripts/check-lead-dupes.ts",
+    "backfill:catalog": "tsx --env-file-if-exists=.env scripts/backfill-catalog-photos.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

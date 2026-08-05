@@ -22,11 +22,16 @@ export async function GET() {
       select: { aiProvider: true, aiKeyEnc: true, email: true, plan: true, paymentProvider: true },
     }),
   ]);
-  // converte o QR cru em data URL p/ a UI renderizar como <img>
+  // converte o QR cru em data URL SÓ para números em pareamento (CONNECTING).
+  // Antes codificava o QR de TODOS os números a cada poll (2-5s), mesmo já
+  // conectados — o custo dominante do endpoint. `status` vem no payload.
   const withQr = await Promise.all(
     numbers.map(async ({ pairingQr, ...n }) => ({
       ...n,
-      qrDataUrl: pairingQr ? await QRCode.toDataURL(pairingQr, { margin: 1, width: 240 }) : null,
+      qrDataUrl:
+        pairingQr && n.status === "CONNECTING"
+          ? await QRCode.toDataURL(pairingQr, { margin: 1, width: 240 })
+          : null,
     })),
   );
   // provider efetivo p/ a UI adaptar o catálogo de modelos (BYOK ou plataforma=OPENAI)

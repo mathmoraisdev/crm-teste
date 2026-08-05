@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db/client";
-import { createMediaSignedUrl } from "@/server/storage/media-storage";
+import { getCatalogPublicUrl } from "@/server/storage/catalog-storage";
 
 export interface MenuModifierOptionDTO {
   id: string;
@@ -41,7 +41,8 @@ const UNCATEGORIZED = "Outros";
 /**
  * Cardápio público: itens ativos e visíveis agrupados por `menuCategory`.
  * Itens esgotados (trackStock com stockQty 0) aparecem marcados `available=false`.
- * A foto de capa = `CatalogItemPhoto` de menor `order`, assinada sob demanda.
+ * A foto de capa = `CatalogItemPhoto` de menor `order`, servida via URL pública
+ * (bucket público + CDN) — síncrono, sem round-trip de signing por item.
  */
 export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
   const [rows, settingsRow] = await Promise.all([
@@ -70,33 +71,32 @@ export async function getPublicMenu(accountId: string): Promise<PublicMenuDTO> {
     ),
   );
 
-  // Assina as capas em paralelo (1 round-trip Supabase por item com foto).
-  const withPhotos = await Promise.all(
-    rows.map(async (r) => {
-      const cover = r.photos[0];
-      const photoUrl = cover ? await createMediaSignedUrl(cover.mediaPath) : null;
-      const item: MenuItemDTO = {
-        id: r.id,
-        name: r.name,
-        description: r.menuDescription,
-        priceCents: r.priceCents,
-        available: !r.trackStock || r.stockQty > 0,
-        photoUrl,
-        variantGroup: r.variantGroup ?? null,
-        // grupo sem opção ativa não vai p/ o cardápio (evita grupo obrigatório vazio).
-        modifierGroups: r.modifierGroups
-          .filter((g) => g.options.length > 0)
-          .map((g) => ({
-            id: g.id,
-            name: g.name,
-            minSelect: g.minSelect,
-            maxSelect: g.maxSelect,
-            options: g.options.map((o) => ({ id: o.id, name: o.name, priceDeltaCents: o.priceDeltaCents })),
-          })),
-      };
-      return { row: r, item };
-    }),
-  );
+  // URL pública da capa — síncrono (getPublicUrl não faz rede, só monta a URL).
+  // Antes: 1 round-trip de signing por item com foto a cada view do cardápio.
+  const withPhotos = rows.map((r) => {
+    const cover = r.photos[0];
+    const photoUrl = cover ? getCatalogPublicUrl(cover.mediaPath) : null;
+    const item: MenuItemDTO = {
+      id: r.id,
+      name: r.name,
+      description: r.menuDescription,
+      priceCents: r.priceCents,
+      available: !r.trackStock || r.stockQty > 0,
+      photoUrl,
+      variantGroup: r.variantGroup ?? null,
+      // grupo sem opção ativa não vai p/ o cardápio (evita grupo obrigatório vazio).
+      modifierGroups: r.modifierGroups
+        .filter((g) => g.options.length > 0)
+        .map((g) => ({
+          id: g.id,
+          name: g.name,
+          minSelect: g.minSelect,
+          maxSelect: g.maxSelect,
+          options: g.options.map((o) => ({ id: o.id, name: o.name, priceDeltaCents: o.priceDeltaCents })),
+        })),
+    };
+    return { row: r, item };
+  });
 
   const byCat = new Map<string, MenuItemDTO[]>();
   for (const { row, item } of withPhotos) {

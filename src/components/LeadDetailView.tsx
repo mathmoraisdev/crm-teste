@@ -17,6 +17,7 @@ import { TagPicker } from "@/components/TagPicker";
 import { formatPhone } from "@/lib/phone";
 import { formatCentsBRL } from "@/lib/money";
 import { resolveStatusMeta, type PipelineLabels } from "@/lib/leadStatus";
+import { useTenantStream } from "@/lib/use-tenant-stream";
 import type { LeadDetail } from "@/server/services/lead.service";
 
 const SALE_STATUS_LABEL: Record<string, string> = {
@@ -63,10 +64,17 @@ export function LeadDetailView({
     }
   }, [leadId]);
 
-  // Polling para ver a IA respondendo / mudança de status em near-real-time.
+  // Tempo real via SSE: quando a conversa DESTE lead muda (inbound, resposta da
+  // IA, lock de atendimento), revalida na hora. O publish de conversation:changed
+  // agora cobre inbound e respostas da IA (além do lock e do envio manual).
+  useTenantStream((e) => {
+    if (e.type === "conversation:changed" && e.leadId === leadId) load();
+  });
+  // Polling de FALLBACK (30s) — cobre SSE indisponível e mudanças de status que
+  // só emitem tenant:changed (assign/resolve/handoff), que o filtro acima ignora.
   useEffect(() => {
     load();
-    const t = setInterval(load, 3000);
+    const t = setInterval(load, 30000);
     return () => clearInterval(t);
   }, [load]);
 

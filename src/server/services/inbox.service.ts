@@ -14,6 +14,12 @@ const ACTIVE: AttendanceStatus[] = ["FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR
 /** Tudo que não está encerrado — inclui IA, p/ a aba "Todas" monitorar e assumir. */
 const NON_RESOLVED: AttendanceStatus[] = ["IA", "FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR"];
 
+/** Teto de conversações devolvidas pelo inbox. A lista cresce sem bound ao longo
+ *  da vida da conta e era reenviada a cada revalidação; carregar tudo custava
+ *  egress de banco. 150 cobre o volume útil (recentes/ativas); o sort JS abaixo
+ *  reordena esse conjunto. Paginação infinita fica p/ um passo futuro. */
+const INBOX_MAX_CONVERSATIONS = 150;
+
 export interface InboxConversation {
   id: string;
   name: string;
@@ -112,6 +118,11 @@ export async function listConversations(
   const [leads, owner] = await Promise.all([
     prisma.lead.findMany({
       where,
+      // Limita o conjunto ANTES do sort JS (que só reordena o que veio). A fila
+      // prioriza o mais antigo (queuedAt asc); as demais, o mais recente. updatedAt
+      // é tocado a cada mensagem, então reflete bem "última atividade".
+      orderBy: filter === "fila" ? { queuedAt: "asc" } : { updatedAt: "desc" },
+      take: INBOX_MAX_CONVERSATIONS,
       include: {
         assignedTo: { select: { id: true, name: true } },
         attendingTo: { select: { id: true, name: true } },

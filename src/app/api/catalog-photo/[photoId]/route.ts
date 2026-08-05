@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
 import { prisma } from "@/server/db/client";
-import { createMediaSignedUrl } from "@/server/storage/media-storage";
+import { getCatalogPublicUrl } from "@/server/storage/catalog-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pho
   if (!photo || photo.catalogItem.accountId !== ctx.tenantUserId) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
   }
-  const url = await createMediaSignedUrl(photo.mediaPath, 300);
+  // URL pública (bucket público + CDN) — antes era signed URL gerada por request.
+  const url = getCatalogPublicUrl(photo.mediaPath);
   if (!url) return NextResponse.json({ error: "Storage de mídia indisponível" }, { status: 503 });
   return NextResponse.redirect(url, 302);
 }

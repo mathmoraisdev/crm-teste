@@ -18,6 +18,13 @@ export async function GET(req: NextRequest) {
   const filter = (FILTERS.includes(raw as InboxFilter) ? raw : "todas") as InboxFilter;
   // Seletor de número: vazio/"todos" = sem filtro (mostra todos os chips juntos).
   const number = req.nextUrl.searchParams.get("number")?.trim() || undefined;
+  // Modo enxuto: só os contadores (badges do Sidebar). Pula listConversations e
+  // listAccountNumbers — evita varrer a lista de conversas só p/ atualizar um nº.
+  const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
+  if (countsOnly) {
+    const counts = await inboxCounts(ctx.tenantUserId, ctx.sessionUserId, number);
+    return NextResponse.json({ counts });
+  }
   const [conversations, counts, numbers] = await Promise.all([
     listConversations(ctx.tenantUserId, {
       filter,

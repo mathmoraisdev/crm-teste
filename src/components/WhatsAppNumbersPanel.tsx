@@ -171,8 +171,9 @@ export function WhatsAppNumbersPanel() {
 
   useEffect(() => {
     load();
-    // poll mais rápido enquanto o modal de pareamento está aberto (QR/Status)
-    const t = setInterval(load, open ? 2000 : 5000);
+    // Modal de pareamento aberto → refresca o QR a cada 5s (QRs Baileys valem
+    // ~20s). Fechado → 30s p/ só observar status dos chips sem martelar o banco.
+    const t = setInterval(load, open ? 5000 : 30000);
     return () => clearInterval(t);
   }, [load, open]);
 

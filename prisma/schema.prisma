@@ -1356,13 +1356,13 @@ model WhatsAppAuthState {
 }
 
 // Foto de um item de catálogo (galeria do anúncio). O binário vive no Supabase
-// Storage (bucket privado, mesmo de MediaAsset/Message); aqui guardamos só o
-// caminho do objeto. `order` define a ordem de exibição (0 = capa).
+// Storage (bucket PÚBLICO catalog-media, servido via URL pública + CDN); aqui
+// guardamos só o caminho do objeto. `order` define a ordem de exibição (0 = capa).
 model CatalogItemPhoto {
   id            String      @id @default(cuid())
   catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
   catalogItemId String
-  mediaPath     String // caminho no bucket (NÃO é URL; assinamos sob demanda)
+  mediaPath     String // caminho no bucket público (URL pública via getPublicUrl)
   mediaMime     String
   order         Int         @default(0)
   createdAt     DateTime    @default(now())

@@ -4,10 +4,10 @@ import { createCatalogItem } from "./catalog.service";
 import { getPublicMenu } from "./menu.service";
 import { saveItemModifiers } from "./modifier.service";
 
-// O helper de assinatura de Storage mora fora do serviço (chama Supabase).
+// O helper de URL pública de Storage mora fora do serviço (chama Supabase).
 // Mockamos p/ o teste não depender do Storage: devolve null (item sem foto visível).
-vi.mock("@/server/storage/media-storage", () => ({
-  createMediaSignedUrl: vi.fn().mockResolvedValue(null),
+vi.mock("@/server/storage/catalog-storage", () => ({
+  getCatalogPublicUrl: vi.fn(() => null),
 }));
 
 async function makeOwner() {

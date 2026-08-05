@@ -10,9 +10,43 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { env, isMediaStorageConfigured } from "@/lib/env";
+import { cached } from "@/server/cache/cache";
+import { cacheKeys } from "@/server/cache/keys";
 
 let client: SupabaseClient | null = null;
 let bucketEnsured = false;
+
+/**
+ * Cache em processo do binário de mídia (downloadMediaBuffer). O AI tool
+ * `enviar_midia` re-baixa o mesmo asset da biblioteca a cada conversa; `mediaPath`
+ * é write-once, então a chave é imutável e o reuso é alto. Fica em processo (não
+ * no Redis) p/ evitar pressão de memória com binários e p/ devolver um Buffer
+ * real (o `cached()` do Redis serializa via JSON, quebraria o Buffer). Cap + TTL
+ * curto limitam o footprint; o worker Baileys é persistente, então o cache vive.
+ * (Fotos de catálogo têm cache próprio em catalog-storage.ts — bucket público.)
+ */
+const MEDIA_BUFFER_TTL_MS = 10 * 60 * 1000; // 10 min
+const MEDIA_BUFFER_MAX_ENTRIES = 100;
+const mediaBufferCache = new Map<string, { buf: Buffer; exp: number }>();
+
+function getCachedMediaBuffer(path: string): Buffer | null {
+  const hit = mediaBufferCache.get(path);
+  if (!hit) return null;
+  if (Date.now() > hit.exp) {
+    mediaBufferCache.delete(path);
+    return null;
+  }
+  return hit.buf;
+}
+
+function setCachedMediaBuffer(path: string, buf: Buffer): void {
+  mediaBufferCache.set(path, { buf, exp: Date.now() + MEDIA_BUFFER_TTL_MS });
+  // Evicção simples (FIFO) ao passar do teto — guarda memória sem dependência.
+  if (mediaBufferCache.size > MEDIA_BUFFER_MAX_ENTRIES) {
+    const oldest = mediaBufferCache.keys().next().value;
+    if (oldest) mediaBufferCache.delete(oldest);
+  }
+}
 
 /** Client lazy com a service_role key (ignora RLS — uso server-only). null se
  *  o storage não estiver configurado. */
@@ -79,6 +113,8 @@ export async function uploadInboundMedia(
  * Retorna null se o storage não está configurado ou o download falhou.
  */
 export async function downloadMediaBuffer(path: string): Promise<Buffer | null> {
+  const hit = getCachedMediaBuffer(path);
+  if (hit) return hit;
   const sb = getClient();
   if (!sb) return null;
   const { data, error } = await sb.storage.from(env.SUPABASE_MEDIA_BUCKET).download(path);
@@ -86,7 +122,9 @@ export async function downloadMediaBuffer(path: string): Promise<Buffer | null> 
     console.warn(`[media-storage] download "${path}" falhou: ${error?.message}`);
     return null;
   }
-  return Buffer.from(await data.arrayBuffer());
+  const buf = Buffer.from(await data.arrayBuffer());
+  setCachedMediaBuffer(path, buf);
+  return buf;
 }
 
 /**
@@ -117,14 +155,23 @@ export async function createMediaSignedUrl(
   path: string,
   ttlSeconds = 300,
 ): Promise<string | null> {
-  const sb = getClient();
-  if (!sb) return null;
-  const { data, error } = await sb.storage
-    .from(env.SUPABASE_MEDIA_BUCKET)
-    .createSignedUrl(path, ttlSeconds);
-  if (error || !data) {
-    console.warn(`[media-storage] signedUrl "${path}" falhou: ${error?.message}`);
-    return null;
-  }
-  return data.signedUrl;
+  // Reusa a assinatura entre chamadas próximas (inbox: download de mídia do lead)
+  // — TTL do cache fica abaixo da validade da URL p/ nunca devolver uma URL já
+  // vencida. (Fotos de catálogo migraram p/ bucket público — não passam mais aqui.)
+  return cached(
+    cacheKeys.mediaSignedUrl(path, ttlSeconds),
+    Math.max(60, ttlSeconds - 60),
+    async () => {
+      const sb = getClient();
+      if (!sb) return null;
+      const { data, error } = await sb.storage
+        .from(env.SUPABASE_MEDIA_BUCKET)
+        .createSignedUrl(path, ttlSeconds);
+      if (error || !data) {
+        console.warn(`[media-storage] signedUrl "${path}" falhou: ${error?.message}`);
+        return null;
+      }
+      return data.signedUrl;
+    },
+  );
 }

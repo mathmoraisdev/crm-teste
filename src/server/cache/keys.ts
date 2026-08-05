@@ -16,6 +16,9 @@ export const cacheKeys = {
   // Contexto de conversa montado p/ a IA (por lead). resetMinutes é estável por
   // lead (config do número), então não entra na chave.
   conversation: (leadId: string) => `conv:${leadId}`,
+  // URL assinada de mídia (Storage). TTL curto (< validade da URL) p/ reusar a
+  // mesma assinatura entre views do cardápio público e revalidações do inbox.
+  mediaSignedUrl: (path: string, ttlSeconds: number) => `media:surl:${ttlSeconds}:${path}`,
 };
 
 /** Invalida o contexto de conversa cacheado de um lead (após gravar Message). */

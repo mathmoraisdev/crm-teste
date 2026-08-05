@@ -11,6 +11,7 @@ vi.mock("@/server/services/messaging", () => ({
 vi.mock("@/server/services/media-asset.service", () => ({ getMediaAsset: vi.fn() }));
 vi.mock("@/server/services/catalog-photo.service", () => ({ listCatalogItemPhotos: vi.fn() }));
 vi.mock("@/server/storage/media-storage", () => ({ downloadMediaBuffer: vi.fn() }));
+vi.mock("@/server/storage/catalog-storage", () => ({ downloadCatalogBuffer: vi.fn() }));
 vi.mock("@/server/services/sales.service", () => ({ sendOffer: vi.fn() }));
 vi.mock("@/server/services/appointment-chat.service", () => ({ proposeAppointmentSlots: vi.fn() }));
 vi.mock("@/server/services/order.service", () => ({
@@ -33,6 +34,7 @@ import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
 import { listCatalogItemPhotos } from "@/server/services/catalog-photo.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
+import { downloadCatalogBuffer } from "@/server/storage/catalog-storage";
 import { sendOffer } from "@/server/services/sales.service";
 import { proposeAppointmentSlots } from "@/server/services/appointment-chat.service";
 import { buildAttendanceTools, type AttendanceToolCtx } from "./attendance-tools";
@@ -48,6 +50,7 @@ const addNoteMock = vi.mocked(addNote);
 const getMediaAssetMock = vi.mocked(getMediaAsset);
 const listPhotosMock = vi.mocked(listCatalogItemPhotos);
 const downloadMock = vi.mocked(downloadMediaBuffer);
+const downloadCatalogMock = vi.mocked(downloadCatalogBuffer);
 const sendOfferMock = vi.mocked(sendOffer);
 const proposeApptMock = vi.mocked(proposeAppointmentSlots);
 
@@ -91,6 +94,7 @@ beforeEach(() => {
   getMediaAssetMock.mockReset();
   listPhotosMock.mockReset();
   downloadMock.mockReset();
+  downloadCatalogMock.mockReset();
   sendOfferMock.mockReset();
   proposeApptMock.mockReset();
 });
@@ -342,7 +346,7 @@ describe("enviar_fotos", () => {
       { id: "p2", mediaPath: "acc_1/b.jpg", mediaMime: "image/jpeg", order: 1 },
     ]);
     listMock.mockResolvedValue([item({ id: "car_1", name: "Onix 2019", customFields: { ano: 2019, cor: "Prata" } })]);
-    downloadMock.mockResolvedValue(Buffer.from("img"));
+    downloadCatalogMock.mockResolvedValue(Buffer.from("img"));
     sendMediaMock.mockResolvedValue();
 
     const r = await fotosTool().handler({ itemId: "car_1" });

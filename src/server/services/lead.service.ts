@@ -179,19 +179,29 @@ export async function listLeads(
   };
 }
 
+/** Teto de mensagens carregadas no detalhe do lead. O histórico cresce sem bound
+ *  ao longo da vida do lead; carregar tudo (e reenviar a cada revalidação de 30s
+ *  × operador com a aba aberta) era o maior ofensor de egress do banco. 200 msgs
+ *  recentes cobrem o thread visível; histórico antigo fica p/ um futuro "carregar
+ *  mais". A IA usa contexto próprio (take:12 em conversation.service), sem impacto. */
+const LEAD_DETAIL_MESSAGE_LIMIT = 200;
+
 /** Detalhe completo de um lead: mensagens (cronológicas), qualificação e reunião. */
 export async function getLeadDetail(
   id: string,
   userId: string,
   opts: { assignedToId?: string } = {},
 ) {
-  return prisma.lead.findFirst({
+  const lead = await prisma.lead.findFirst({
     where: { id, userId, ...(opts.assignedToId ? { assignedToId: opts.assignedToId } : {}) },
     include: {
       campaign: { select: { id: true, name: true } },
       tags: { select: { id: true, name: true, color: true }, orderBy: { name: "asc" } },
       messages: {
-        orderBy: { createdAt: "asc" },
+        // Pega as últimas N (desc + take) e reverte p/ ordem cronológica — mesmo
+        // padrão do conversation.service. Evita carregar o histórico inteiro.
+        orderBy: { createdAt: "desc" },
+        take: LEAD_DETAIL_MESSAGE_LIMIT,
         // Citação (reply): inclui um resumo da msg citada p/ a bolha renderizar.
         include: { replyTo: { select: { id: true, content: true, direction: true } } },
       },
@@ -205,6 +215,8 @@ export async function getLeadDetail(
       },
     },
   });
+  if (lead) lead.messages.reverse(); // desc → cronológico (o que a UI espera)
+  return lead;
 }
 
 export type LeadDetail = NonNullable<Awaited<ReturnType<typeof getLeadDetail>>>;

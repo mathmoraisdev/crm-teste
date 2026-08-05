@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, X, ChevronRight } from "lucide-react";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/app/Logo";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { buildNav, type NavItem } from "@/lib/nav";
+import { useTenantStream } from "@/lib/use-tenant-stream";
 import type { BusinessCategory } from "@/lib/business-templates";
 
 export function Sidebar({
@@ -34,27 +35,24 @@ export function Sidebar({
   // Bolinha de notificação da Agenda: booking online ainda não confirmado.
   const [agendaDot, setAgendaDot] = useState(0);
 
-  // Badge de "Atendimento" = fila + não-lidas. Polling leve.
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      try {
-        const res = await fetch("/api/inbox?filter=fila", { cache: "no-store" });
-        const data = await res.json();
-        if (active && data.counts) {
-          setInboxBadge((data.counts.fila ?? 0) + (data.counts.naoLidas ?? 0));
-        }
-      } catch {
-        // ignora
-      }
+  // Badge de "Atendimento" = fila + não-lidas. Revalida via SSE (qualquer evento
+  // de conta pode mudar contagens) com fallback de 60s; usa countsOnly p/ a rota
+  // só devolver os números (sem varrer a lista de conversas inteira a cada tick).
+  const loadInboxBadge = useCallback(async () => {
+    try {
+      const res = await fetch("/api/inbox?filter=fila&countsOnly=1", { cache: "no-store" });
+      const data = await res.json();
+      if (data.counts) setInboxBadge((data.counts.fila ?? 0) + (data.counts.naoLidas ?? 0));
+    } catch {
+      // ignora
     }
-    load();
-    const t = setInterval(load, 10000);
-    return () => {
-      active = false;
-      clearInterval(t);
-    };
   }, []);
+  useEffect(() => {
+    loadInboxBadge();
+    const t = setInterval(loadInboxBadge, 60000);
+    return () => clearInterval(t);
+  }, [loadInboxBadge]);
+  useTenantStream(() => loadInboxBadge());
 
   // Badge de "Agenda" = agendamentos cuja resposta do cliente ao lembrete aguarda
   // conferência (needsReview). Polling leve, igual ao de Atendimento.
@@ -71,7 +69,7 @@ export function Sidebar({
       }
     }
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 60000);
     return () => {
       active = false;
       clearInterval(t);
@@ -92,7 +90,7 @@ export function Sidebar({
       }
     }
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 60000);
     return () => {
       active = false;
       clearInterval(t);
@@ -113,7 +111,7 @@ export function Sidebar({
       }
     }
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 60000);
     return () => {
       active = false;
       clearInterval(t);

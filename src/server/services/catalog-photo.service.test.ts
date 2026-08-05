@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prisma } from "@/server/db/client";
 
-vi.mock("@/server/storage/media-storage", () => ({
-  uploadInboundMedia: vi.fn(async () => "acct/uuid-1.jpg"),
-  removeMediaObjects: vi.fn(async () => true),
-  downloadMediaBuffer: vi.fn(async () => Buffer.from("x")),
-  createMediaSignedUrl: vi.fn(async () => "https://signed.example/x"),
+vi.mock("@/server/storage/catalog-storage", () => ({
+  uploadCatalogPhoto: vi.fn(async () => "acct/uuid-1.jpg"),
+  removeCatalogObjects: vi.fn(async () => true),
+  getCatalogPublicUrl: vi.fn(() => "https://public.example/x"),
+  downloadCatalogBuffer: vi.fn(async () => Buffer.from("x")),
 }));
 
 import {

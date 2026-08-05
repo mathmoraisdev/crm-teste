@@ -46,9 +46,11 @@ export async function createConsultantLead(
   });
 }
 
-/** Lista os leads do funil de consultor para o admin (mais recentes primeiro). */
+/** Lista os leads do funil de consultor para o admin (mais recentes primeiro).
+ *  Limitado aos 200 mais recentes — a lista cresce sem bound e era carregada
+ *  inteira no page-load do admin. Paginação fica p/ um passo futuro se precisar. */
 export async function listConsultantLeads(): Promise<ConsultantLead[]> {
-  return prisma.consultantLead.findMany({ orderBy: { createdAt: "desc" } });
+  return prisma.consultantLead.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
 }
 
 /** Quantos leads ainda não vistos pelo admin (alimenta o badge do sidebar). */

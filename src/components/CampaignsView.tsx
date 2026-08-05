@@ -53,7 +53,8 @@ export function CampaignsView({ canCampaigns = true }: { canCampaigns?: boolean 
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 4000);
+    // Progresso de disparo muda devagar; 15s acompanha sem martelar o banco.
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
 

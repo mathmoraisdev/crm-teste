@@ -6,6 +6,7 @@ import { addItem, listOpenOrders, openOrder } from "@/server/services/order.serv
 import { addNote } from "@/server/services/internal-note.service";
 import { getMediaAsset } from "@/server/services/media-asset.service";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
+import { downloadCatalogBuffer } from "@/server/storage/catalog-storage";
 import { sendWhatsAppMessage, sendWhatsAppMedia } from "@/server/services/messaging";
 import { sendOffer } from "@/server/services/sales.service";
 import { proposeAppointmentSlots } from "@/server/services/appointment-chat.service";
@@ -364,7 +365,7 @@ function enviarFotos(ctx: AttendanceToolCtx): ToolDef {
 
       let sent = 0;
       for (let i = 0; i < photos.length; i++) {
-        const buffer = await downloadMediaBuffer(photos[i].mediaPath);
+        const buffer = await downloadCatalogBuffer(photos[i].mediaPath);
         if (!buffer) continue;
         await sendWhatsAppMedia(
           ctx.lead,

@@ -101,6 +101,10 @@ const schema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(""), // chave de serviço (server-only)
   SUPABASE_MEDIA_BUCKET: z.string().default("whatsapp-media"),
   SUPABASE_BRANDING_BUCKET: z.string().default("branding"),
+  // Bucket PÚBLICO p/ fotos de catálogo (cardápio online). Servidas via URL
+  // pública + CDN (getPublicUrl) em vez de signed URL — o cardápio é público, e
+  // assinar 1 URL por item por visitante era o maior ofensor de egress de Storage.
+  SUPABASE_CATALOG_BUCKET: z.string().default("catalog-media"),
   // Retenção de mídia: apaga o BINÁRIO do Storage após N dias. A Message e a
   // transcrição de áudio (em `content`) PERMANECEM — o inbox só cai no placeholder
   // ("🎤 Áudio"), caminho que o sistema já trata por degradação segura. 0 =
