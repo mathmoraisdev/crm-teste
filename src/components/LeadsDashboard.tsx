@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutGrid, List, RefreshCw, Plus, Search, X, Tag as TagIcon } from "lucide-react";
+import { LayoutGrid, List, RefreshCw, Plus, Search, X, Tag as TagIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { LeadsTable } from "@/components/LeadsTable";
 import { LeadForm } from "@/components/LeadForm";
+import { CsvUpload } from "@/components/CsvUpload";
 import { PipelineBoard } from "@/components/PipelineBoard";
 import { TagManagerModal } from "@/components/TagManagerModal";
 import { StatCard } from "@/components/app/StatCard";
@@ -39,6 +40,7 @@ export function LeadsDashboard() {
 
   const [view, setView] = useState<View>("table");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<LeadListItem | null>(null);
   const [deleting, setDeleting] = useState<LeadListItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -269,6 +271,9 @@ export function LeadsDashboard() {
           <Button variant="secondary" size="sm" onClick={manualRefresh} loading={refreshing}>
             <RefreshCw size={14} /> Atualizar
           </Button>
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload size={14} /> Importar CSV
+          </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus size={14} /> Novo lead
           </Button>
@@ -374,6 +379,10 @@ export function LeadsDashboard() {
             setCreateOpen(false);
           }}
         />
+      </Modal>
+
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importar leads via CSV">
+        <CsvUpload onImported={refresh} />
       </Modal>
 
       <Modal
