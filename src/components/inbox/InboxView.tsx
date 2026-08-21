@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, ExternalLink, Hand, Lock, RotateCcw, Settings } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Hand, Lock, Plus, RotateCcw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -11,6 +11,7 @@ import { LeadStatusBadge } from "@/components/LeadStatusBadge";
 import { QualificationPanel } from "@/components/QualificationPanel";
 import { TagPicker } from "@/components/TagPicker";
 import { ConversationList } from "@/components/inbox/ConversationList";
+import { StartConversationDialog } from "@/components/inbox/StartConversationDialog";
 import { ATTENDANCE_META } from "@/components/inbox/ConversationListItem";
 import { useTenantStream } from "@/lib/use-tenant-stream";
 import { formatPhone } from "@/lib/phone";
@@ -38,6 +39,8 @@ export function InboxView({
   const [counts, setCounts] = useState<InboxCounts | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
+  // Modal "Nova conversa": abre chat por número (estilo WhatsApp), sem cadastro prévio.
+  const [startOpen, setStartOpen] = useState(false);
 
   // Ref p/ loadList ler o número atual sem precisar entrar na lista de deps.
   const numberRef = useRef<string | null>(selectedNumber);
@@ -183,6 +186,29 @@ export function InboxView({
     [filter, loadList],
   );
 
+  // "Nova conversa": resolve/cria o lead pelo número no backend e abre o chat.
+  // Manda "todas" p/ a conversa aparecer na lista após a 1ª mensagem; o `select`
+  // marca lida, recarrega a lista e dispara o loadDetail (thread vazia mostra
+  // "Nenhuma mensagem ainda" até o operador enviar).
+  const openByPhone = useCallback(
+    async (phone: string, name: string | undefined, numberId: string | null) => {
+      const res = await fetch("/api/inbox/start-conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, name, whatsAppNumberId: numberId }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error ?? "Não foi possível abrir a conversa");
+      }
+      const { leadId } = (await res.json()) as { leadId: string };
+      setStartOpen(false);
+      setFilter("todas");
+      select(leadId);
+    },
+    [select],
+  );
+
   // Exclusão em lote: apaga cada lead (endpoint tenant-guarded que cascateia
   // mensagens/qualificação/agenda). Se a conversa aberta foi apagada, limpa o
   // detalhe. Recarrega a lista ao final e sinaliza falhas parciais.
@@ -300,14 +326,19 @@ export function InboxView({
             Fila, atribuição e respostas — handoff IA ↔ humano.
           </p>
         </div>
-        {canSettings && (
-          <Link
-            href="/inbox/config"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            <Settings size={14} /> Configurar
-          </Link>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => setStartOpen(true)} variant="secondary">
+            <Plus size={14} /> Nova conversa
+          </Button>
+          {canSettings && (
+            <Link
+              href="/inbox/config"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            >
+              <Settings size={14} /> Configurar
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_330px]">
@@ -491,6 +522,14 @@ export function InboxView({
           )}
         </div>
       </div>
+
+      <StartConversationDialog
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        numbers={numbers}
+        defaultNumberId={selectedNumber}
+        onSubmit={openByPhone}
+      />
     </div>
   );
 }

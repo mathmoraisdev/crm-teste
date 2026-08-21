@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db/client";
 import type { AttendanceStatus, Lead, LeadStatus, Prisma } from "@prisma/client";
 import { parseLeadsCsv } from "@/lib/csv";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, brPhoneVariants } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
 import { normalizeDocument } from "@/lib/document";
 import { isAdminEmail } from "@/lib/admin";
@@ -346,6 +346,91 @@ export function resolveOrCreatePublicLead(
   db: Prisma.TransactionClient = prisma,
 ): Promise<Lead | null> {
   return resolveOrCreateLightLead(accountId, input, "public_booking", db);
+}
+
+/**
+ * Resolve/cria um lead a partir de um número digitado pelo operador ("Nova
+ * conversa" no inbox, estilo WhatsApp Web). Difere do `createLead` interno:
+ * vincula ao chip (escolhido pelo operador ou primário conectado) e deduplica
+ * pela identidade real do contato — (whatsAppNumberId, phone) quando há chip,
+ * senão (userId, phone) — tolerando o 9º dígito BR (o operador pode colar o
+ * número com ou sem o 9). Devolve `{ lead, created }` p/ a rota saber se acabou
+ * de criar (201) ou só reabriu (200). Não cria mensagem: a 1ª fica por conta do
+ * operador no composer (`/reply` → `sendManualReply`).
+ *
+ * `consentSource: "manual_outbound"` registra que a conta iniciou o contato
+ * (LGPD). Não mexe em `attendanceStatus` (default IA): sem inbound, a IA não
+ * dispara `respondToLead`; a 1ª resposta humana chama `assumeIfNeeded`, que
+ * atribui a conversa, e o `select()` reivindica a trava ao abrir o chat.
+ */
+export async function resolveOrCreateLeadByPhone(
+  accountId: string,
+  input: { phone: string; name?: string; whatsAppNumberId?: string | null },
+): Promise<{ lead: Lead; created: boolean }> {
+  const phone = normalizePhone(input.phone);
+  if (!phone) throw new Error(`Telefone inválido: ${input.phone}`);
+  const name = input.name?.trim() || phone; // sem nome → o telefone é o rótulo inicial
+
+  // Chip: o escolhido pelo operador (se pertence à conta) ou o primário conectado.
+  let chip: { id: string } | null = null;
+  if (input.whatsAppNumberId) {
+    chip = await prisma.whatsAppNumber.findFirst({
+      where: { id: input.whatsAppNumberId, userId: accountId },
+      select: { id: true },
+    });
+    if (!chip) throw new Error("Chip não encontrado.");
+  } else {
+    chip =
+      (await prisma.whatsAppNumber.findFirst({
+        where: { userId: accountId, status: "CONNECTED" },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      })) ??
+      (await prisma.whatsAppNumber.findFirst({
+        where: { userId: accountId },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      }));
+  }
+
+  // Dedupe pela identidade do contato, tolerando o 9º dígito BR: o operador pode
+  // colar "(41) 98888-7777" enquanto o lead foi salvo "+554188887777" (sem o 9).
+  // Espelho do resolveLead (inbound) — sem isso, reabriria um chat novo à toa.
+  const variants = brPhoneVariants(phone);
+  const existing = chip
+    ? await prisma.lead.findFirst({
+        where: { whatsAppNumberId: chip.id, phone: { in: variants } },
+        select: { id: true, name: true },
+      })
+    : await prisma.lead.findFirst({
+        where: { userId: accountId, phone: { in: variants } },
+        select: { id: true, name: true },
+      });
+  if (existing) {
+    // Atualiza o nome só se antes era o placeholder (o próprio telefone).
+    if (existing.name === phone && name !== phone) {
+      const lead = await prisma.lead.update({ where: { id: existing.id }, data: { name } });
+      return { lead, created: false };
+    }
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: existing.id } });
+    return { lead, created: false };
+  }
+
+  // Novo contato: respeita o teto do plano (criação deliberada). Estourou → lança
+  // (a rota devolve 400 com a mensagem p/ o operador ver no modal).
+  await assertContactQuota(accountId);
+  const lead = await prisma.lead.create({
+    data: {
+      userId: accountId,
+      whatsAppNumberId: chip?.id ?? null,
+      phone,
+      name,
+      status: "NOVO",
+      consentSource: "manual_outbound",
+    },
+  });
+  await invalidateLeadCaches(accountId);
+  return { lead, created: true };
 }
 
 /**
