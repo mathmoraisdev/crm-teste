@@ -62,6 +62,15 @@ export const ConversationListItem = memo(function ConversationListItem({
       }
       className={cn(
         "flex w-full items-start gap-2.5 border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50",
+        // Pendente de resposta (lida, sem resposta): destaque âmbar sutil p/ saltar
+        // na lista. Suprimido se não-lida (a bolinha+negrito já é o destaque forte),
+        // se ativa (já em foco) ou em seleção em lote. Mesmo tom do badge "Na fila".
+        // SLA estourado (danger, abaixo) prevalece quando ambos se aplicam.
+        conversation.needsResponse &&
+          !conversation.unread &&
+          !active &&
+          !selectMode &&
+          "border-l-2 border-l-warning bg-warning-surface/40",
         // Seleção: no dark, brand-50 (que NÃO inverte) clareava a linha e lavava o
         // texto claro. dark:bg-brand-400/15 tinge de verde SEM clarear → contraste ok.
         active && !selectMode && "bg-brand-50/60 dark:bg-brand-400/15",

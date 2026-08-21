@@ -123,6 +123,7 @@ describe("listConversations + unread", () => {
     const rows = await listConversations("dono-1", { filter: "fila", sessionUserId: "dono-1" });
     expect(rows[0].unread).toBe(true);
     expect(rows[0].whatsAppNumber).toBe("Empresa");
+    expect(rows[0].needsResponse).toBe(true); // FILA precisa de resposta
   });
 
   it("'todas' inclui as conversas em IA (monitorar/assumir)", async () => {
@@ -146,6 +147,46 @@ describe("listConversations + unread", () => {
     await listConversations("dono-1", { filter: "ia", sessionUserId: "dono-1" });
     const where = (prisma.lead.findMany as any).mock.calls[0][0].where;
     expect(where.attendanceStatus).toBe("IA");
+  });
+
+  it("'nao-respondidas' filtra FILA e ATENDENDO (precisa de resposta)", async () => {
+    const { prisma } = await import("@/server/db/client");
+    (prisma.lead.findMany as any).mockResolvedValue([]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    const { listConversations } = await import("./inbox.service");
+    await listConversations("dono-1", { filter: "nao-respondidas", sessionUserId: "dono-1" });
+    const where = (prisma.lead.findMany as any).mock.calls[0][0].where;
+    expect(where.attendanceStatus.in).toEqual(["FILA", "ATENDENDO"]);
+  });
+
+  it("needsResponse true só em FILA/ATENDENDO", async () => {
+    const { prisma } = await import("@/server/db/client");
+    const baseLead = (id: string, status: string) => ({
+      id,
+      name: id,
+      phone: "+5511",
+      attendanceStatus: status,
+      status: "NEW",
+      assignedTo: null,
+      whatsAppNumber: null,
+      lastReadAt: null,
+      queuedAt: null,
+      firstResponseAt: null,
+      attendingUserId: null,
+      attendingTo: null,
+      optOut: false,
+      messages: [],
+    });
+    (prisma.lead.findMany as any).mockResolvedValue([
+      baseLead("lead-fila", "FILA"),
+      baseLead("lead-aguardando", "AGUARDANDO"),
+      baseLead("lead-atendendo", "ATENDENDO"),
+    ]);
+    (prisma.message.groupBy as any).mockResolvedValue([]);
+    const { listConversations } = await import("./inbox.service");
+    const rows = await listConversations("dono-1", { filter: "todas", sessionUserId: "dono-1" });
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r.needsResponse]));
+    expect(byId).toEqual({ "lead-fila": true, "lead-aguardando": false, "lead-atendendo": true });
   });
 
   it("marca SLA breached e ordena a fila por mais antigo primeiro", async () => {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { ConversationListItem } from "@/components/inbox/ConversationListItem";
+import { ConversationLegend } from "@/components/inbox/ConversationLegend";
 import type {
   InboxFilter,
   InboxConversation,
@@ -16,6 +17,7 @@ import type {
 
 const TABS: { key: InboxFilter; label: string }[] = [
   { key: "fila", label: "Fila" },
+  { key: "nao-respondidas", label: "Não respondidas" },
   { key: "minhas", label: "Minhas" },
   { key: "ia", label: "IA" },
   { key: "todas", label: "Todas" },
@@ -54,6 +56,7 @@ export const ConversationList = memo(function ConversationList({
     if (key === "fila") return counts.fila;
     if (key === "minhas") return counts.minhas;
     if (key === "ia") return counts.ia;
+    if (key === "nao-respondidas") return counts.naoRespondidas;
     return null;
   }
 
@@ -175,34 +178,38 @@ export const ConversationList = memo(function ConversationList({
         </div>
       )}
 
-      <div className="scroll-tabs flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 p-2">
-        {TABS.map((t) => {
-          const n = badgeFor(t.key);
-          return (
-            <button
-              key={t.key}
-              onClick={() => onFilter(t.key)}
-              className={cn(
-                "flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
-                filter === t.key
-                  ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-ink",
-              )}
-            >
-              {t.label}
-              {n !== null && n > 0 && (
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 text-[10px]",
-                    filter === t.key ? "bg-white/25" : "bg-slate-200 text-slate-600",
-                  )}
-                >
-                  {n}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div className="flex shrink-0 items-center gap-1 border-b border-slate-100 p-2">
+        <div className="scroll-tabs flex flex-1 gap-1 overflow-x-auto">
+          {TABS.map((t) => {
+            const n = badgeFor(t.key);
+            return (
+              <button
+                key={t.key}
+                onClick={() => onFilter(t.key)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+                  filter === t.key
+                    ? "bg-brand-500 text-white dark:bg-brand-500/15 dark:text-brand-300 dark:ring-1 dark:ring-inset dark:ring-brand-500/40"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-ink",
+                )}
+              >
+                {t.label}
+                {n !== null && n > 0 && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 text-[10px]",
+                      filter === t.key ? "bg-white/25" : "bg-slate-200 text-slate-600",
+                    )}
+                  >
+                    {n}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {/* Legenda das cores da lista (abre por clique, não rouba espaço vertical). */}
+        <ConversationLegend />
       </div>
 
       {/* Barra de seleção em lote. */}

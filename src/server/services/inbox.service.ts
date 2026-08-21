@@ -5,7 +5,7 @@ import { cacheKeys, invalidateLeadCaches } from "@/server/cache/keys";
 import { slaState, type SlaState } from "@/lib/inbox/sla";
 import { recordAudit } from "@/server/audit/record";
 
-export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
+export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas" | "nao-respondidas";
 
 /** Estados "ativos" do inbox humano (fora IA e RESOLVIDA) — base de não-lidas/SLA.
  *  AI_ERROR entra aqui: a IA falhou e o lead precisa de humano, então conta como
@@ -13,6 +13,9 @@ export type InboxFilter = "fila" | "minhas" | "ia" | "todas" | "resolvidas";
 const ACTIVE: AttendanceStatus[] = ["FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR"];
 /** Tudo que não está encerrado — inclui IA, p/ a aba "Todas" monitorar e assumir. */
 const NON_RESOLVED: AttendanceStatus[] = ["IA", "FILA", "ATENDENDO", "AGUARDANDO", "AI_ERROR"];
+/** Estados que ainda precisam de resposta humana (na fila + assumido mas não respondeu).
+ *  Fonte única do filtro "Não respondidas", do contador e do destaque visual da lista. */
+const NEEDS_RESPONSE: AttendanceStatus[] = ["FILA", "ATENDENDO"];
 
 /** Teto de conversações devolvidas pelo inbox. A lista cresce sem bound ao longo
  *  da vida da conta e era reenviada a cada revalidação; carregar tudo custava
@@ -41,6 +44,9 @@ export interface InboxConversation {
   // (exceto o próprio operador). null = livre. Vem de graça na query da lista.
   attendingBy: { userId: string; name: string; since: Date | null } | null;
   optOut: boolean;
+  // True quando ainda falta resposta humana (FILA/ATENDENDO). Espelha o filtro
+  // "Não respondidas" e acende o destaque âmbar na lista (mesmo conversa já lida).
+  needsResponse: boolean;
 }
 
 export interface InboxCounts {
@@ -48,6 +54,9 @@ export interface InboxCounts {
   minhas: number;
   ia: number;
   naoLidas: number;
+  // Conversas lidas/ativas que ainda precisam de resposta (FILA/ATENDENDO) —
+  // badge da aba "Não respondidas". Distinto de naoLidas (mensagem nova, não vista).
+  naoRespondidas: number;
 }
 
 /** Número da conta para o seletor do inbox (divisão de conversas por chip). */
@@ -108,6 +117,8 @@ export async function listConversations(
           ? { userId: tenantUserId, attendanceStatus: "IA" as AttendanceStatus }
           : filter === "resolvidas"
             ? { userId: tenantUserId, attendanceStatus: "RESOLVIDA" as AttendanceStatus }
+          : filter === "nao-respondidas"
+            ? { userId: tenantUserId, attendanceStatus: { in: NEEDS_RESPONSE } }
             : { userId: tenantUserId, attendanceStatus: { in: NON_RESOLVED } };
   // Seletor de número: divide as conversas por chip (ex.: cada cartório).
   const where = {
@@ -172,12 +183,13 @@ export async function listConversations(
           ? { userId: l.attendingTo.id, name: l.attendingTo.name, since: l.attendingAt }
           : null,
       optOut: l.optOut,
+      needsResponse: NEEDS_RESPONSE.includes(l.attendanceStatus),
     };
   });
 
-  if (filter === "fila") {
-    // Na fila, prioridade é atender o mais antigo primeiro (SLA). Sem queuedAt vai
-    // pro fim. Empate desfaz por mensagem mais recente.
+  if (filter === "fila" || filter === "nao-respondidas") {
+    // Na fila/pendências, prioridade é atender o mais antigo primeiro (SLA). Sem
+    // queuedAt vai pro fim. Empate desfaz por mensagem mais recente.
     rows.sort((a, b) => {
       const qa = a.queuedAt?.getTime() ?? Infinity;
       const qb = b.queuedAt?.getTime() ?? Infinity;
@@ -302,7 +314,7 @@ async function computeInboxCounts(
   whatsAppNumberId?: string,
 ): Promise<InboxCounts> {
   const num = whatsAppNumberId ? { whatsAppNumberId } : {};
-  const [fila, minhas, ia, active] = await Promise.all([
+  const [fila, minhas, ia, active, naoRespondidas] = await Promise.all([
     prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: "FILA", ...num } }),
     prisma.lead.count({
       where: {
@@ -317,6 +329,7 @@ async function computeInboxCounts(
       where: { userId: tenantUserId, attendanceStatus: { in: ACTIVE }, ...num },
       select: { id: true, lastReadAt: true },
     }),
+    prisma.lead.count({ where: { userId: tenantUserId, attendanceStatus: { in: NEEDS_RESPONSE }, ...num } }),
   ]);
 
   let naoLidas = 0;
@@ -334,5 +347,5 @@ async function computeInboxCounts(
     }
   }
 
-  return { fila, minhas, ia, naoLidas };
+  return { fila, minhas, ia, naoLidas, naoRespondidas };
 }
