@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/app/Sidebar";
+import { UsageAlertModal } from "@/components/app/UsageAlertModal";
 import { getCurrentUserId } from "@/lib/session";
 import { getUserById } from "@/server/services/user.service";
 import { isAdminEmail } from "@/lib/admin";
@@ -45,6 +46,8 @@ export default async function AppLayout({
           {children}
         </div>
       </main>
+      {/* Alerta proativo de limites do plano (1x por sessão, só p/ o dono). */}
+      {isAccountAdmin && <UsageAlertModal />}
     </div>
   );
 }
