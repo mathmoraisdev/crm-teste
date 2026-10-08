@@ -21,6 +21,7 @@ export const STRONG_CREDIT_WEIGHT = 10;
 
 export const AI_MODELS_BY_PROVIDER: Record<AiProviderName, AiModelOption[]> = {
   OPENAI: [
+    { value: "gpt-luna-6", label: "GPT LUNA 6", tier: "strong" },
     { value: "gpt-4o", label: "GPT-4o", tier: "strong" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini", tier: "cheap" },
     { value: "gpt-4.1", label: "GPT-4.1", tier: "strong" },
