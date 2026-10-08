@@ -8,6 +8,7 @@ import { publishTenantEvent } from "@/server/events/bus";
 import { downloadMediaBuffer } from "@/server/storage/media-storage";
 import { MEDIA_TYPE_PLACEHOLDER } from "@/server/whatsapp/baileys/media";
 import type { SendMedia } from "@/server/whatsapp/baileys/pool";
+import { toVoiceNoteOgg, isOggOpus } from "@/server/media/to-voice-note";
 
 /** Metadados de um anexo de saída já no storage (o web sobe antes de enfileirar). */
 export interface OutboundMedia {
@@ -333,12 +334,23 @@ export async function dispatchManualReplyJob(jobId: string): Promise<void> {
   // chip. Falha de download → lança (retry no próximo tick, sem perder o job).
   let media: SendMedia | null = null;
   if (job.mediaPath && job.mediaType) {
-    const buffer = await downloadMediaBuffer(job.mediaPath);
+    let buffer = await downloadMediaBuffer(job.mediaPath);
     if (!buffer) throw new Error("falha ao baixar anexo do storage p/ envio");
+    let mime = job.mediaMime ?? "application/octet-stream";
+    // Nota de voz (PTT): áudio gravado/anexado vira ogg/opus antes do envio. O
+    // Chrome grava em webm/opus; a bolinha redonda do WhatsApp exige ogg/opus.
+    // Idempotente — ogg/opus de entrada (Firefox) sai intacto. Falha lança e o
+    // job retenta (nunca envia áudio quebrado). A Message persistida mantém o
+    // mime original; só o buffer enviado ao chip é convertido.
+    if (job.mediaType === "audio" && !isOggOpus(mime)) {
+      const conv = await toVoiceNoteOgg(buffer, mime);
+      buffer = conv.buffer;
+      mime = conv.mime;
+    }
     media = {
       buffer,
       mediaType: job.mediaType as SendMedia["mediaType"],
-      mime: job.mediaMime ?? "application/octet-stream",
+      mime,
       fileName: job.fileName ?? undefined,
     };
   }

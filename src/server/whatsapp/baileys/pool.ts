@@ -482,11 +482,13 @@ export interface SendMedia {
 }
 
 /** Monta o conteúdo de mídia do Baileys. `caption` = texto (legenda); áudio não
- *  suporta legenda. Documento precisa de fileName p/ o WhatsApp exibir o nome. */
+ *  suporta legenda. Documento precisa de fileName p/ o WhatsApp exibir o nome.
+ *  Áudio vai como PTT (push-to-talk) → bolinha de nota de voz redonda no WhatsApp
+ *  do destinatário (em vez de arquivo reproduzível quadrado). */
 function baileysMediaContent(media: SendMedia, caption?: string) {
   const mimetype = media.mime;
   if (media.mediaType === "image") return { image: media.buffer, mimetype, caption };
-  if (media.mediaType === "audio") return { audio: media.buffer, mimetype };
+  if (media.mediaType === "audio") return { audio: media.buffer, mimetype, ptt: true };
   return {
     document: media.buffer,
     mimetype,

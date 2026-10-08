@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Sparkles } from "lucide-react";
+import { Send, Hand, Bot, Reply, X, Paperclip, Download, FileText, Sparkles, Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatDateTime } from "@/lib/utils";
 import { MEDIA_PLACEHOLDERS } from "@/server/whatsapp/baileys/media";
@@ -9,6 +9,7 @@ import type { LeadDetail } from "@/server/services/lead.service";
 import type { QuickReplyDTO } from "@/server/services/quick-reply.service";
 import { renderSnippet } from "@/lib/inbox/render-snippet";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
+import { useVoiceRecorder } from "@/lib/use-voice-recorder";
 
 type Message = LeadDetail["messages"][number];
 
@@ -17,6 +18,13 @@ type Message = LeadDetail["messages"][number];
 // (o contador zera ao enviar ou trocar de conversa) + cooldown entre cliques.
 const MAX_SUGGESTIONS = 3;
 const SUGGEST_COOLDOWN_MS = 4000;
+
+/** Formata segundos como mm:ss (ex.: 83 → "01:23") p/ o timer de gravação. */
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 /**
  * Visão da conversa (bolhas) + caixa "responder como lead".
@@ -87,6 +95,10 @@ export function ConversationView({
   // o seletor. Compartilhadas pela conta, então cacheia no estado do componente.
   const [quickReplies, setQuickReplies] = useState<QuickReplyDTO[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Gravação de nota de voz no navegador (MediaRecorder nativo). O backend
+  // converte p/ ogg/opus + ptt:true → bolinha redonda no WhatsApp do lead.
+  const recorder = useVoiceRecorder();
+  const recording = recorder.phase === "recording" || recorder.phase === "preview";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -227,6 +239,39 @@ export function ConversationView({
       setFile(null);
       setQuoting(null);
       setSuggestCount(0); // enviou → novo turno, libera as sugestões de novo
+      onReplied();
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  // Envia a nota de voz gravada ao lead pelo MESMO endpoint do anexo (o backend
+  // converte p/ ogg/opus e envia como PTT/bolinha redonda no WhatsApp). Áudio não
+  // suporta legenda no WhatsApp, então o texto digitado é descartado (igual ao
+  // app de WhatsApp). Reusa assumeIfNeeded p/ assumir a conversa antes de mandar.
+  async function sendRecording() {
+    const recorded = recorder.blob;
+    if (!recorded) return;
+    setReplying(true);
+    setReplyError(null);
+    try {
+      await assumeIfNeeded();
+      const ext =
+        (recorded.type.split(";")[0].split("/")[1] ?? "webm")
+          .replace(/[^a-z0-9]/gi, "")
+          .toLowerCase() || "webm";
+      const fd = new FormData();
+      fd.append("file", recorded, `audio-${Date.now()}.${ext}`);
+      if (quoting?.id) fd.append("replyToMessageId", quoting.id);
+      const res = await fetch(`/api/leads/${leadId}/send-file`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Falha ao enviar áudio");
+      setReply("");
+      setQuoting(null);
+      setSuggestCount(0);
+      recorder.reset();
       onReplied();
     } catch (e) {
       setReplyError(e instanceof Error ? e.message : "Erro ao enviar");
@@ -418,6 +463,64 @@ export function ConversationView({
                     <span className="text-[11px] text-danger">{suggestError}</span>
                   )}
                 </div>
+                {/* Painel de gravação de nota de voz: aparece só durante gravação
+                    (timer + parar/cancelar) ou no preview (ouvir antes de enviar). */}
+                {recorder.phase !== "idle" && (
+                  <div className="flex items-center gap-2 rounded-xl border border-line-default bg-card p-2">
+                    {recorder.phase === "recording" ? (
+                      <>
+                        <span className="flex items-center gap-1.5 text-sm font-semibold text-danger">
+                          <span className="h-2 w-2 animate-pulse rounded-full bg-danger" />
+                          Gravando {formatDuration(recorder.seconds)}
+                        </span>
+                        <div className="flex-1" />
+                        <Button
+                          variant="ghost"
+                          onClick={recorder.cancel}
+                          aria-label="Cancelar gravação"
+                          title="Cancelar gravação"
+                          className="justify-center sm:w-auto"
+                        >
+                          <X size={16} />
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={recorder.stop}
+                          aria-label="Parar gravação"
+                          title="Parar gravação"
+                          className="justify-center sm:w-auto"
+                        >
+                          <Square size={16} /> Parar
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <audio
+                          controls
+                          src={recorder.url ?? undefined}
+                          className="h-9 max-w-full flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          onClick={recorder.cancel}
+                          aria-label="Descartar áudio"
+                          title="Descartar áudio"
+                          className="justify-center sm:w-auto"
+                        >
+                          <X size={16} />
+                        </Button>
+                        <Button
+                          onClick={sendRecording}
+                          loading={replying}
+                          disabled={!recorder.blob}
+                          className="justify-center sm:w-auto"
+                        >
+                          <Send size={16} /> Enviar áudio
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
                 <div className="relative flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                   {/* Seletor de respostas rápidas (abre ao digitar "/" no início). */}
                   {snippetOpen && (
@@ -463,13 +566,28 @@ export function ConversationView({
                   <Button
                     variant="secondary"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={replying}
+                    disabled={replying || recording}
                     className="justify-center sm:w-auto"
                     aria-label="Anexar arquivo"
                     title="Anexar arquivo"
                   >
                     <Paperclip size={16} />
                   </Button>
+                  {/* Gravar nota de voz (MediaRecorder nativo). Oculto em browsers
+                      sem suporte. Só inicia; os controles de parar/preview/enviar
+                      ficam no painel acima. */}
+                  {recorder.supported && (
+                    <Button
+                      variant="secondary"
+                      onClick={recorder.start}
+                      disabled={replying || recording}
+                      className="justify-center sm:w-auto"
+                      aria-label="Gravar áudio"
+                      title="Gravar áudio"
+                    >
+                      <Mic size={16} />
+                    </Button>
+                  )}
                   <textarea
                     ref={replyInputRef}
                     value={reply}
@@ -497,6 +615,7 @@ export function ConversationView({
                       }
                     }}
                     rows={1}
+                    disabled={recording}
                     placeholder={
                       file ? "Legenda (opcional)…" : "Responder ao lead… (digite “/” para respostas rápidas)"
                     }
@@ -505,13 +624,14 @@ export function ConversationView({
                   <Button
                     onClick={submitReply}
                     loading={replying}
-                    disabled={!reply.trim() && !file}
+                    disabled={(!reply.trim() && !file) || recording}
                     className="w-full justify-center sm:w-auto"
                   >
                     <Send size={16} /> Enviar
                   </Button>
                 </div>
                 {replyError && <p className="mt-1 text-xs text-danger">{replyError}</p>}
+                {recorder.error && <p className="mt-1 text-xs text-danger">{recorder.error}</p>}
                 <p className="mt-1 text-xs text-slate-400">
                   A mensagem (ou arquivo) vai para o lead pelo mesmo número. A IA não
                   responde enquanto você está no controle.

@@ -34,11 +34,16 @@ export async function purgeExpiredMedia(now: Date): Promise<number> {
     // createdAt asc (mais antigas primeiro) → drena monotonicamente: ao zerar o
     // mediaPath, a linha some do conjunto na próxima iteração. A branch explícita
     // de mediaType null cobre eventual legado (o `not` do Prisma exclui null).
+    //
+    // Áudio outbound do OPERADOR (nota de voz/PTT gravada ou anexada) NÃO entra na
+    // purge: não há transcrição que preserve o conteúdo (como no inbound, que vira
+    // texto) e o player do operador depende do binário. Inbound (source null/SYSTEM)
+    // continua expirando normalmente — tem a transcrição em `content` como fallback.
     const expired = await prisma.message.findMany({
       where: {
         mediaPath: { not: null },
         OR: [
-          { mediaType: "audio", createdAt: { lt: cutoffAudio } },
+          { mediaType: "audio", createdAt: { lt: cutoffAudio }, NOT: { source: "OPERATOR" } },
           { mediaType: { not: "audio" }, createdAt: { lt: cutoffDocs } },
           { mediaType: null, createdAt: { lt: cutoffDocs } },
         ],
